@@ -1,0 +1,30 @@
+{
+  "name": "agents",
+  "version": "1.0.0",
+  "description": "A multi-agent system where specialized agents collaborate to plan, develop, test, and ship code.",
+  "main": "index.js",
+  "scripts": {
+    "server": "node server/index.js",
+    "app": "cd app && npm run dev",
+    "dev": "npm run server & npm run app",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dcrjodle/agents.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/dcrjodle/agents/issues"
+  },
+  "homepage": "https://github.com/dcrjodle/agents#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "uuid": "^13.0.0",
+    "ws": "^8.20.0",
+    "xstate": "^5.29.0"
+  }
+}
