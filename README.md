@@ -93,6 +93,26 @@ Open http://localhost:5173 — create tasks, and use the simulate buttons to adv
 { "type": "SEND_EVENT", "taskId": "...", "event": { "type": "TESTS_PASSED" } }
 ```
 
+## Future Ideas
+
+### 1. Task detail view with agent message streams
+
+Replace the kanban board with a centered task list showing status icons. Clicking a task expands it to reveal columns to the left — one per agent that has been activated for that task. Each column displays the agent's live message stream (stdout from the claude terminal), so you can watch agents think and work in real time. Agents that haven't started yet don't get a column.
+
+```
+┌─────────┬──────────┬───────────┬────────────────────────┐
+│ planner │developer │  tester   │  ● Build REST API      │
+│         │          │           │  ○ Add auth middleware  │
+│ Done.   │ Writing  │ (waiting) │  ○ Fix login bug       │
+│ 3 tasks │ routes.js│           │  ○ Deploy to staging   │
+│ created │ ...      │           │                        │
+└─────────┴──────────┴───────────┴────────────────────────┘
+```
+
+### 2. Neo4j-backed agent memory
+
+Replace the flat-file `memory/` directories with a Neo4j graph database per agent. Relationships between tasks, code artifacts, decisions, and errors become first-class edges in the graph. This lets agents query their own history relationally — e.g. "what did I learn last time I worked on auth?" or "which files tend to break together?" — instead of grepping through markdown files.
+
 ## REST API
 
 | Method | Endpoint | Description |
