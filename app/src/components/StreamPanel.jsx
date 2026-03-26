@@ -177,7 +177,13 @@ export const StreamPanel = forwardRef(function StreamPanel({
                 waiting for events...
               </div>
             ) : (
-              logs.map((entry, i) => <LogLine key={i} entry={entry} />)
+              logs.map((entry, i) => (
+                <LogLine
+                  key={i}
+                  entry={entry}
+                  onViewPlan={entry.type === "plan_link" ? () => onViewPlan(task.id) : undefined}
+                />
+              ))
             )}
             <div ref={logEndRef} />
           </div>
