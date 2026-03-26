@@ -21,6 +21,7 @@ export function App() {
     pendingPlans,
     errors,
     createTask,
+    startTask,
     sendEvent,
     deleteTask,
     approveTask,
@@ -175,6 +176,7 @@ export function App() {
             selectedTaskId={selectedTaskId}
             onSelectTask={setSelectedTaskId}
             onDelete={deleteTask}
+            onStart={startTask}
           />
         </div>
 

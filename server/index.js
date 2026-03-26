@@ -289,7 +289,7 @@ app.get("/tasks", async (req, res) => {
 });
 
 app.post("/tasks", async (req, res) => {
-  const { description, projectPath } = req.body;
+  const { description, projectPath, autoStart } = req.body;
   if (!description) return res.status(400).json({ error: "description required" });
   if (!projectPath) return res.status(400).json({ error: "projectPath required" });
 
@@ -319,12 +319,28 @@ app.post("/tasks", async (req, res) => {
     createdAt: actor._createdAt,
   });
 
-  // Start the workflow
-  actor.send({ type: "START", task: description });
+  // Only start the workflow if autoStart is explicitly true
+  if (autoStart) {
+    actor.send({ type: "START", task: description });
+  }
 
   const snapshot = getTaskSnapshot(id);
   broadcast({ type: "TASK_CREATED", task: snapshot });
   res.status(201).json(snapshot);
+});
+
+app.post("/tasks/:id/start", (req, res) => {
+  const actor = actors.get(req.params.id);
+  if (!actor) return res.status(404).json({ error: "task not found" });
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+  if (sk !== "idle") {
+    return res.status(400).json({ error: `Task is in state "${sk}", can only start idle tasks` });
+  }
+
+  actor.send({ type: "START", task: actor._description });
+  res.json(getTaskSnapshot(req.params.id));
 });
 
 app.post("/tasks/:id/event", (req, res) => {
@@ -447,6 +463,12 @@ async function start() {
     actors.set(task.id, actor);
     wireActor(task.id, actor);
     actor.start();
+
+    // Idle tasks should remain idle — don't send START
+    if (sk === "idle") {
+      console.log(`Task ${task.id} is idle, keeping in todo state`);
+      continue;
+    }
 
     // Replay events to get back to the persisted state
     actor.send({ type: "START", task: task.description });

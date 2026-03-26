@@ -24,7 +24,7 @@ export const STATE_COLORS = {
 export const PIPELINE_STAGES = ["planning", "developing", "testing", "reviewing", "merging", "done"];
 
 export const STATE_LABELS = {
-  "idle": "idle",
+  "idle": "todo",
   "planning.running": "planning",
   "planning.awaitingApproval": "awaiting approval",
   "developing": "developing",

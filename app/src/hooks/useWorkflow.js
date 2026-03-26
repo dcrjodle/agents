@@ -281,6 +281,15 @@ export function useWorkflow() {
     });
   };
 
+  const startTask = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to start task: ${res.statusText}`);
+    return res.json();
+  };
+
   const clearErrors = (taskId) => {
     setErrors((prev) => {
       const next = { ...prev };
@@ -289,7 +298,7 @@ export function useWorkflow() {
     });
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
+  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
 }
 
 export { stateKey };

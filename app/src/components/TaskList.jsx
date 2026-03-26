@@ -2,7 +2,7 @@ import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS, STATE_COLORS } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 
-export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete }) {
+export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete, onStart }) {
   if (tasks.length === 0) {
     return (
       <div style={{
@@ -25,6 +25,7 @@ export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete }) {
         const isSelected = task.id === selectedTaskId;
         const isDone = sk === "done";
         const isFailed = sk === "failed";
+        const isIdle = sk === "idle";
 
         return (
           <div
@@ -64,6 +65,27 @@ export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete }) {
             }}>
               {label}
             </span>
+
+            {isIdle && onStart && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onStart(task.id); }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--accent)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  padding: "2px 4px",
+                  opacity: 0.6,
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => e.target.style.opacity = 1}
+                onMouseLeave={(e) => e.target.style.opacity = 0.6}
+                title="start task"
+              >
+                ▶
+              </button>
+            )}
 
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
