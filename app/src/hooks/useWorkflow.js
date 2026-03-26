@@ -199,6 +199,11 @@ export function useWorkflow() {
                   projectPath: msg.plan.projectPath,
                 },
               }));
+              // Add a clickable plan link entry to the stream
+              appendLog(msg.taskId, {
+                type: "plan_link",
+                data: "plan ready \u2014 click to review",
+              });
             }
             break;
 

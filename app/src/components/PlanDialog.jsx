@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { MarkdownContent } from "./MarkdownContent.jsx";
 
 export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose }) {
   const contentRef = useRef(null);
@@ -100,17 +101,7 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
             padding: "16px 18px",
           }}
         >
-          <pre style={{
-            margin: 0,
-            fontFamily: "var(--font-mono)",
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: "var(--text)",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}>
-            {plan.markdown}
-          </pre>
+          <MarkdownContent markdown={plan.markdown} />
           {plan.projectPath && (
             <div style={{
               color: "var(--text-dim)",

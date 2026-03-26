@@ -57,15 +57,6 @@ export function App() {
       .catch((err) => console.error("Failed to load config:", err));
   }, []);
 
-  useEffect(() => {
-    for (const taskId of Object.keys(pendingPlans)) {
-      if (!viewingPlanTaskId) {
-        setViewingPlanTaskId(taskId);
-        break;
-      }
-    }
-  }, [pendingPlans, viewingPlanTaskId]);
-
   const handleCreateTask = (description) => {
     if (!selectedProject) return;
     createTask(description, selectedProject.path);
