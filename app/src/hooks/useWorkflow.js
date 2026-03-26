@@ -335,7 +335,12 @@ export function useWorkflow() {
     });
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
+  const startAllTasks = async (taskIds) => {
+    const results = await Promise.allSettled(taskIds.map((id) => startTask(id)));
+    return results;
+  };
+
+  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
 }
 
 export { stateKey };

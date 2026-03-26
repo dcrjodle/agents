@@ -43,6 +43,12 @@
   color: var(--text);
 }
 
+.app-header-settings-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 .app-connection-status {
   font-size: 10px;
   display: flex;
