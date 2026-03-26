@@ -40,6 +40,36 @@
         --col-manager: #f5f5f0;
       }
 
+      [data-theme="dark"] {
+        --bg: #0e0e0e;
+        --bg-surface: #181818;
+        --bg-muted: #1e1e1e;
+        --bg-hover: #252525;
+        --border: #2d2d2d;
+        --border-light: #232323;
+        --text: #d4d4d4;
+        --text-muted: #777;
+        --text-dim: #555;
+        --accent: #888;
+        --dot-idle: #555;
+        --dot-planning: #a78bfa;
+        --dot-developing: #60a5fa;
+        --dot-testing: #fbbf24;
+        --dot-reviewing: #f472b6;
+        --dot-merging: #2dd4bf;
+        --dot-done: #4ade80;
+        --dot-failed: #f87171;
+        --dot-awaiting: #fbbf24;
+        --line-color: #3a3a3a;
+        --stream-bg: #141414;
+        --col-planner: #1a1528;
+        --col-developer: #151a28;
+        --col-tester: #1e1a10;
+        --col-reviewer: #1e1018;
+        --col-githubber: #101e1c;
+        --col-manager: #1a1a15;
+      }
+
       body {
         margin: 0;
         background: var(--bg);
@@ -70,6 +100,17 @@
         to { width: 40px; }
       }
 
+      @keyframes draw-path {
+        from {
+          stroke-dashoffset: 1000;
+          opacity: 0;
+        }
+        to {
+          stroke-dashoffset: 0;
+          opacity: 1;
+        }
+      }
+
       ::-webkit-scrollbar { width: 5px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -79,6 +120,10 @@
 
       ::selection {
         background: #e0ddd8;
+      }
+
+      [data-theme="dark"] ::selection {
+        background: #3a3a3a;
       }
     </style>
   </head>

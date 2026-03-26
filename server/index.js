@@ -274,6 +274,60 @@ app.get("/config", async (req, res) => {
   res.json(config);
 });
 
+app.post("/config/projects", async (req, res) => {
+  const { name, path } = req.body;
+  if (!name || !path) return res.status(400).json({ error: "name and path required" });
+  const db = await getDb();
+  const exists = db.data.config.projects.some((p) => p.path === path);
+  if (exists) return res.status(409).json({ error: "project already exists" });
+  db.data.config.projects.push({ name, path });
+  await db.write();
+  res.status(201).json(db.data.config);
+});
+
+app.delete("/config/projects", async (req, res) => {
+  const { path } = req.body;
+  if (!path) return res.status(400).json({ error: "path required" });
+  const db = await getDb();
+  const idx = db.data.config.projects.findIndex((p) => p.path === path);
+  if (idx === -1) return res.status(404).json({ error: "project not found" });
+  db.data.config.projects.splice(idx, 1);
+  await db.write();
+  res.json(db.data.config);
+});
+
+app.post("/config/browse", async (req, res) => {
+  try {
+    const { execFile } = await import("child_process");
+    await new Promise((resolve, reject) => {
+      execFile(
+        "osascript",
+        ["-e", 'POSIX path of (choose folder with prompt "Select project folder")'],
+        { timeout: 120000 },
+        (err, stdout) => {
+          if (err) {
+            // User cancelled or osascript error
+            res.status(204).end();
+            resolve();
+            return;
+          }
+          const result = (stdout || "").trim();
+          if (result) {
+            const path = result.endsWith("/") ? result.slice(0, -1) : result;
+            const name = path.split("/").pop();
+            res.json({ path, name });
+          } else {
+            res.status(204).end();
+          }
+          resolve();
+        }
+      );
+    });
+  } catch {
+    res.status(204).end();
+  }
+});
+
 app.get("/tasks", async (req, res) => {
   // Return live snapshots for active actors, db records for completed/failed
   const dbTasks = await dbGetAllTasks();

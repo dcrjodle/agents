@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
-import { STATE_LABELS, STATE_AGENTS, STATE_COLORS, NEXT_EVENTS, AGENT_COLUMN_COLORS } from "../constants.js";
+import { STATE_LABELS, NEXT_EVENTS, AGENT_COLUMN_COLORS } from "../constants.js";
 import { LogLine } from "./LogLine.jsx";
 import { PipelineBar } from "./PipelineBar.jsx";
 
-export function StreamPanel({
+export const StreamPanel = forwardRef(function StreamPanel({
   task,
   logs,
   errors,
@@ -12,14 +12,16 @@ export function StreamPanel({
   onSendEvent,
   onApprove,
   onViewPlan,
-}) {
-  const [columnsMode, setColumnsMode] = useState(false);
+  columnsMode,
+  onToggleColumns,
+  columnRefsCallback,
+}, ref) {
   const logEndRef = useRef(null);
+  const columnRefs = useRef({});
 
   const sk = task.stateKey || stateKey(task.state);
   const events = NEXT_EVENTS[sk] || [];
   const label = STATE_LABELS[sk] || sk;
-  const isAwaitingApproval = sk === "planning.awaitingApproval" || sk === "merging.awaitingApproval";
 
   useEffect(() => {
     if (logEndRef.current) {
@@ -39,8 +41,15 @@ export function StreamPanel({
 
   const activeAgents = Object.keys(agentLogs).filter((a) => a !== "_system");
 
+  // Report column header refs to parent
+  useEffect(() => {
+    if (columnRefsCallback) {
+      columnRefsCallback(columnRefs.current);
+    }
+  });
+
   return (
-    <div style={{
+    <div ref={ref} style={{
       flex: 1,
       display: "flex",
       flexDirection: "column",
@@ -82,9 +91,8 @@ export function StreamPanel({
           </span>
         </div>
 
-        {/* Columns toggle */}
         <button
-          onClick={() => setColumnsMode(!columnsMode)}
+          onClick={onToggleColumns}
           style={{
             background: columnsMode ? "var(--bg-muted)" : "transparent",
             border: "1px solid var(--border)",
@@ -111,8 +119,8 @@ export function StreamPanel({
       {((sk === "failed" && task.context?.error) || (errors && errors.length > 0)) && (
         <div style={{
           padding: "6px 14px",
-          background: "#fef2f2",
-          borderBottom: "1px solid #fecaca",
+          background: "color-mix(in srgb, var(--dot-failed) 8%, var(--bg-surface))",
+          borderBottom: "1px solid color-mix(in srgb, var(--dot-failed) 20%, var(--border-light))",
           flexShrink: 0,
         }}>
           {sk === "failed" && task.context?.error && (
@@ -132,16 +140,18 @@ export function StreamPanel({
       <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
         {columnsMode ? (
           <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-            {/* System column always shown if there are system logs */}
             {agentLogs["_system"] && agentLogs["_system"].length > 0 && (
-              <div style={{
-                flex: 1,
-                overflowY: "auto",
-                padding: "8px 10px",
-                borderRight: "1px solid var(--border-light)",
-                background: "var(--bg-muted)",
-                minWidth: 0,
-              }}>
+              <div
+                ref={(el) => { columnRefs.current["_system"] = el; }}
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  padding: "8px 10px",
+                  borderRight: "1px solid var(--border-light)",
+                  background: "var(--bg-muted)",
+                  minWidth: 0,
+                }}
+              >
                 <div style={{
                   fontSize: 9,
                   color: "var(--text-dim)",
@@ -160,6 +170,7 @@ export function StreamPanel({
             {activeAgents.map((agent) => (
               <div
                 key={agent}
+                ref={(el) => { columnRefs.current[agent] = el; }}
                 style={{
                   flex: 1,
                   overflowY: "auto",
@@ -271,4 +282,4 @@ export function StreamPanel({
       </div>
     </div>
   );
-}
+});

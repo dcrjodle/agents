@@ -1,8 +1,19 @@
+import { useRef, useEffect } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
-import { STATE_LABELS, STATE_COLORS } from "../constants.js";
+import { STATE_LABELS } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 
-export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete, onStart }) {
+export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete, onStart, rowRefsCallback }) {
+  const rowRefs = useRef({});
+
+  // Report row refs to parent whenever tasks or selection changes
+  useEffect(() => {
+    if (rowRefsCallback) {
+      rowRefsCallback(rowRefs.current);
+    }
+  });
+
+
   if (tasks.length === 0) {
     return (
       <div style={{
@@ -30,6 +41,7 @@ export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete, onStar
         return (
           <div
             key={task.id}
+            ref={(el) => { rowRefs.current[task.id] = el; }}
             onClick={() => onSelectTask(isSelected ? null : task.id)}
             style={{
               display: "flex",
