@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useWorkflow } from "./hooks/useWorkflow.js";
+import { useWorkflow, stateKey } from "./hooks/useWorkflow.js";
 import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
 import { ProjectTabs } from "./components/ProjectTabs.jsx";
@@ -30,6 +30,7 @@ export function App() {
     errors,
     createTask,
     startTask,
+    startAllTasks,
     restartTask,
     sendEvent,
     deleteTask,
@@ -134,6 +135,16 @@ export function App() {
     }
   }, [filteredTasks, selectedTaskId]);
 
+  const idleTasks = filteredTasks.filter((t) => {
+    const sk = t.stateKey || stateKey(t.state);
+    return sk === "idle";
+  });
+
+  const handleStartAll = () => {
+    if (idleTasks.length === 0) return;
+    startAllTasks(idleTasks.map((t) => t.id));
+  };
+
   const viewingTask = viewingPlanTaskId ? tasks.find((t) => t.id === viewingPlanTaskId) : null;
   const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;
 
@@ -143,6 +154,16 @@ export function App() {
       <header className="app-header">
         <div className="app-header-left">
           <h1 className="app-header-title">agent workflows</h1>
+          <button
+            className="app-header-settings-btn app-header-start-all-btn"
+            onClick={handleStartAll}
+            disabled={idleTasks.length === 0}
+            title={idleTasks.length > 0 ? `Start all ${idleTasks.length} idle tasks` : "No idle tasks"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+          </button>
           <button
             className="app-header-settings-btn"
             onClick={() => setShowSettings(true)}
