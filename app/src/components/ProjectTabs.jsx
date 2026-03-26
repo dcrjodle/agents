@@ -1,4 +1,50 @@
-export function ProjectTabs({ projects, selected, onSelect }) {
+import { useState, useRef } from "react";
+
+export function ProjectTabs({ projects, selected, onSelect, onReorder }) {
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const dragNode = useRef(null);
+
+  const handleDragStart = (e, index) => {
+    setDragIndex(index);
+    dragNode.current = e.target;
+    e.dataTransfer.effectAllowed = "move";
+    // Delay to allow the browser to capture the drag image before styling
+    setTimeout(() => {
+      dragNode.current?.classList.add("dragging");
+    }, 0);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragIndex === null || index === dragIndex) {
+      setDragOverIndex(null);
+      return;
+    }
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (e, index) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) return;
+    const reordered = [...projects];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(index, 0, moved);
+    if (onReorder) onReorder(reordered);
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    if (dragNode.current) {
+      dragNode.current.classList.remove("dragging");
+    }
+    dragNode.current = null;
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div style={{
       display: "flex",
@@ -6,12 +52,22 @@ export function ProjectTabs({ projects, selected, onSelect }) {
       borderBottom: "1px solid var(--border)",
       marginBottom: 16,
     }}>
-      {projects.map((project) => {
+      {projects.map((project, index) => {
         const isActive = project.path === selected.path;
+        const isDragging = dragIndex === index;
+        const isDragOver = dragOverIndex === index;
         return (
           <button
             key={project.path}
+            draggable
             onClick={() => onSelect(project)}
+            onDragStart={(e) => handleDragStart(e, index)}
+            onDragOver={(e) => handleDragOver(e, index)}
+            onDrop={(e) => handleDrop(e, index)}
+            onDragEnd={handleDragEnd}
+            onDragLeave={() => {
+              if (dragOverIndex === index) setDragOverIndex(null);
+            }}
             style={{
               padding: "7px 16px",
               fontSize: 12,
@@ -20,10 +76,12 @@ export function ProjectTabs({ projects, selected, onSelect }) {
               background: isActive ? "var(--bg-surface)" : "transparent",
               border: "none",
               borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
-              cursor: "pointer",
+              borderLeft: isDragOver ? "2px solid var(--accent)" : "2px solid transparent",
+              cursor: isDragging ? "grabbing" : "grab",
               fontFamily: "var(--font-mono)",
               transition: "all 0.15s",
               letterSpacing: "0.01em",
+              opacity: isDragging ? 0.4 : 1,
             }}
           >
             {project.name}

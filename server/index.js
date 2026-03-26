@@ -25,7 +25,7 @@ const wss = new WebSocketServer({ server });
 app.use(express.json());
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -337,6 +337,26 @@ app.post("/config/projects", async (req, res) => {
   db.data.config.projects.push({ name, path });
   await db.write();
   res.status(201).json(db.data.config);
+});
+
+app.put("/config/projects/reorder", async (req, res) => {
+  const { projects } = req.body;
+  if (!Array.isArray(projects)) return res.status(400).json({ error: "projects array required" });
+  const db = await getDb();
+  const existing = db.data.config.projects;
+  // Validate same set of projects (no additions/removals)
+  if (projects.length !== existing.length) {
+    return res.status(400).json({ error: "reorder must contain the same projects" });
+  }
+  const existingPaths = new Set(existing.map((p) => p.path));
+  for (const p of projects) {
+    if (!p.path || !existingPaths.has(p.path)) {
+      return res.status(400).json({ error: `unknown project path: ${p.path}` });
+    }
+  }
+  db.data.config.projects = projects;
+  await db.write();
+  res.json(db.data.config);
 });
 
 app.delete("/config/projects", async (req, res) => {
