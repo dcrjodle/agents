@@ -156,7 +156,7 @@ export function App() {
 
   return (
     <div style={{
-      maxWidth: 1100,
+      maxWidth: columnsMode && selectedTask ? "none" : 1100,
       margin: "0 auto",
       padding: "24px 24px",
       fontFamily: "var(--font-mono)",
@@ -240,6 +240,7 @@ export function App() {
           alignItems: "stretch",
           minHeight: 400,
           position: "relative",
+          overflowX: columnsMode && selectedTask ? "auto" : "visible",
         }}
       >
         {/* SVG connection lines overlay */}
@@ -258,6 +259,10 @@ export function App() {
           maxWidth: selectedTask ? 320 : 600,
           transition: "width 0.3s ease, max-width 0.3s ease",
           flexShrink: 0,
+          position: columnsMode && selectedTask ? "sticky" : "static",
+          left: 0,
+          zIndex: columnsMode && selectedTask ? 2 : "auto",
+          background: "var(--bg)",
         }}>
           <TaskList
             tasks={filteredTasks}

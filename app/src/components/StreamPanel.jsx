@@ -3,6 +3,7 @@ import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS, NEXT_EVENTS, AGENT_COLUMN_COLORS } from "../constants.js";
 import { LogLine } from "./LogLine.jsx";
 import { PipelineBar } from "./PipelineBar.jsx";
+import { StreamColumn } from "./StreamColumn.jsx";
 
 export const StreamPanel = forwardRef(function StreamPanel({
   task,
@@ -139,61 +140,30 @@ export const StreamPanel = forwardRef(function StreamPanel({
       {/* Log area */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
         {columnsMode ? (
-          <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+          <div style={{
+            display: "flex",
+            flex: 1,
+            overflowX: "auto",
+            overflowY: "hidden",
+          }}>
             {agentLogs["_system"] && agentLogs["_system"].length > 0 && (
-              <div
+              <StreamColumn
                 ref={(el) => { columnRefs.current["_system"] = el; }}
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "8px 10px",
-                  borderRight: "1px solid var(--border-light)",
-                  background: "var(--bg-muted)",
-                  minWidth: 0,
-                }}
-              >
-                <div style={{
-                  fontSize: 9,
-                  color: "var(--text-dim)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: 6,
-                  fontWeight: 600,
-                }}>
-                  system
-                </div>
-                {agentLogs["_system"].map((entry, i) => (
-                  <LogLine key={i} entry={entry} />
-                ))}
-              </div>
+                variant="system"
+                agent="_system"
+                logs={agentLogs["_system"]}
+                isLast={activeAgents.length === 0}
+              />
             )}
-            {activeAgents.map((agent) => (
-              <div
+            {activeAgents.map((agent, idx) => (
+              <StreamColumn
                 key={agent}
                 ref={(el) => { columnRefs.current[agent] = el; }}
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "8px 10px",
-                  borderRight: "1px solid var(--border-light)",
-                  background: AGENT_COLUMN_COLORS[agent] || "var(--bg-surface)",
-                  minWidth: 0,
-                }}
-              >
-                <div style={{
-                  fontSize: 9,
-                  color: "var(--text-dim)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: 6,
-                  fontWeight: 600,
-                }}>
-                  {agent}
-                </div>
-                {agentLogs[agent].map((entry, i) => (
-                  <LogLine key={i} entry={entry} />
-                ))}
-              </div>
+                variant="agent"
+                agent={agent}
+                logs={agentLogs[agent]}
+                isLast={idx === activeAgents.length - 1}
+              />
             ))}
           </div>
         ) : (
