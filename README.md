@@ -109,7 +109,15 @@ Replace the kanban board with a centered task list showing status icons. Clickin
 └─────────┴──────────┴───────────┴────────────────────────┘
 ```
 
-### 2. Neo4j-backed agent memory
+### 2. Clickable agent labels to open Claude Code terminal
+
+Clicking an agent name label ("planner", "developer", etc.) in the task card should open that agent's Claude Code terminal in a new window/tab, so you can see the full live output and interact with the agent directly. This would give visibility into what Claude is thinking and doing beyond the streamed stderr lines.
+
+### 3. PR preview with concise descriptions
+
+PRs created by the githubber agent should have concise, well-structured descriptions that explain what was implemented and why (derived from the plan and developer summary). Before approving a PR in the `merging.awaitingApproval` state, the UI should show a preview of the PR description, diff summary, and branch details — so the user can review what will be submitted before it goes to GitHub.
+
+### 4. Neo4j-backed agent memory
 
 Replace the flat-file `memory/` directories with a Neo4j graph database per agent. Relationships between tasks, code artifacts, decisions, and errors become first-class edges in the graph. This lets agents query their own history relationally — e.g. "what did I learn last time I worked on auth?" or "which files tend to break together?" — instead of grepping through markdown files.
 

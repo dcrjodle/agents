@@ -4,41 +4,59 @@ import { WebSocketServer } from "ws";
 import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { workflowMachine } from "../machine.js";
+import { spawnAgent, stateKey, STATE_TO_ROLE, RESULT_TO_EVENT, getMapperKey } from "./spawner.js";
 import {
-  createMailbox,
-  writeMessage,
-  readMessages,
-  watchOutbox,
-  watchStatus,
-  updateStatus,
-  getMailboxPath,
-  readOutbox,
-} from "./mailbox.js";
-import { spawnAgent, STATE_TO_ROLE, RESULT_TO_EVENT } from "./spawner.js";
+  getAllTasks as dbGetAllTasks,
+  getTask as dbGetTask,
+  createTask as dbCreateTask,
+  updateTask as dbUpdateTask,
+  deleteTask as dbDeleteTask,
+  getConfig,
+  getDb,
+} from "./db.js";
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 app.use(express.json());
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 
-// One XState actor per task — supports parallel workflows
-const tasks = new Map();
+// In-memory XState actors keyed by task id
+const actors = new Map();
 
-// Track active agent processes and watchers per task
-const activeAgents = new Map(); // taskId -> { handle, stopOutboxWatch, stopStatusWatch }
+// Track active agent processes per task
+const activeAgents = new Map(); // taskId -> { handle, timeoutTimer, staleTimer }
 
-// State label mapping
-const stateLabels = {
-  idle: "todo",
-  planning: "planned",
-  developing: "in_progress",
-  testing: "testing",
-  reviewing: "reviewing",
-  merging: "published",
-  done: "published",
-  failed: "failed",
-};
+// Agent timeout: kill agents that run too long (default 10 minutes)
+const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
+// Stale check: warn if no output for 2 minutes
+const AGENT_STALE_MS = 2 * 60 * 1000;
+
+// State label mapping — handles both flat and compound states
+function stateLabel(stateValue) {
+  const sk = stateKey(stateValue);
+  const labels = {
+    "idle": "todo",
+    "planning.running": "planning",
+    "planning.awaitingApproval": "awaiting_approval",
+    "developing": "in_progress",
+    "testing": "testing",
+    "reviewing": "reviewing",
+    "merging.running": "merging",
+    "merging.awaitingApproval": "awaiting_approval",
+    "merging.creatingPr": "creating_pr",
+    "done": "published",
+    "failed": "failed",
+  };
+  return labels[sk] || sk;
+}
 
 function broadcast(message) {
   const data = JSON.stringify(message);
@@ -48,16 +66,19 @@ function broadcast(message) {
 }
 
 function getTaskSnapshot(id) {
-  const entry = tasks.get(id);
-  if (!entry) return null;
-  const snap = entry.actor.getSnapshot();
+  const actor = actors.get(id);
+  if (!actor) return null;
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
   return {
     id,
-    description: entry.description,
+    description: actor._description,
+    projectPath: actor._projectPath,
     state: snap.value,
-    label: stateLabels[snap.value] || snap.value,
+    stateKey: sk,
+    label: stateLabel(snap.value),
     context: snap.context,
-    createdAt: entry.createdAt,
+    createdAt: actor._createdAt,
   };
 }
 
@@ -67,199 +88,238 @@ function getTaskSnapshot(id) {
 function cleanupAgent(taskId) {
   const agent = activeAgents.get(taskId);
   if (!agent) return;
-  if (agent.stopOutboxWatch) agent.stopOutboxWatch();
-  if (agent.stopStatusWatch) agent.stopStatusWatch();
+  if (agent.timeoutTimer) clearTimeout(agent.timeoutTimer);
+  if (agent.staleTimer) clearInterval(agent.staleTimer);
   if (agent.handle) agent.handle.kill();
   activeAgents.delete(taskId);
 }
 
 /**
  * When XState transitions to a state that has an agent, spawn it.
- * The coordinator:
- *  1. Creates the agent's mailbox
- *  2. Writes a handoff message to the inbox
- *  3. Spawns the Claude CLI process
- *  4. Watches the outbox for results
- *  5. Maps results to XState events
  */
-async function onStateTransition(taskId, state, context) {
-  const role = STATE_TO_ROLE[state];
-  if (!role) return; // No agent for this state (idle, done, failed)
+function onStateTransition(taskId, stateValue, context) {
+  const sk = stateKey(stateValue);
+  const role = STATE_TO_ROLE[sk];
+  if (!role) return;
 
-  // Clean up previous agent if any
   cleanupAgent(taskId);
 
-  const entry = tasks.get(taskId);
-  if (!entry) return;
+  const actor = actors.get(taskId);
+  if (!actor) return;
 
-  // 1. Create mailbox
-  const mailboxPath = await createMailbox(taskId, role);
-
-  // 2. Write handoff message
   const handoff = {
-    from: "coordinator",
-    to: role,
-    type: "handoff",
-    payload: {
-      instruction: entry.description,
-      context: {
-        task: context.task,
-        plan: context.plan,
-        result: context.result,
-        error: context.error,
-        retries: context.retries,
-      },
+    instruction: actor._description,
+    projectPath: actor._projectPath,
+    context: {
+      task: context.task,
+      plan: context.plan,
+      result: context.result,
+      error: context.error,
+      retries: context.retries,
     },
   };
-  await writeMessage(taskId, role, "inbox", handoff);
 
-  // 3. Update status to spawning
-  await updateStatus(taskId, role, { state: "spawning", startedAt: new Date().toISOString() });
+  let lastActivity = Date.now();
+  const resetStaleTimer = () => { lastActivity = Date.now(); };
 
-  // 4. Spawn the agent
-  const handle = spawnAgent(role, taskId, entry.description, mailboxPath, {
+  const mapperKey = getMapperKey(sk);
+
+  // Track result locally — the activeAgents entry may be replaced by the next agent
+  // before onExit fires (because onResult triggers an XState transition which spawns
+  // the next agent synchronously, replacing this entry in activeAgents).
+  let gotResult = false;
+
+  const handle = spawnAgent(sk, taskId, actor._description, handoff, {
+    projectPath: actor._projectPath,
     onStdout(data) {
-      broadcast({
-        type: "AGENT_OUTPUT",
-        taskId,
-        agent: role,
-        stream: "stdout",
-        data,
-      });
+      resetStaleTimer();
+      broadcast({ type: "AGENT_OUTPUT", taskId, agent: role, stream: "stdout", data });
     },
     onStderr(data) {
-      broadcast({
-        type: "AGENT_OUTPUT",
-        taskId,
-        agent: role,
-        stream: "stderr",
-        data,
-      });
+      resetStaleTimer();
+      broadcast({ type: "AGENT_OUTPUT", taskId, agent: role, stream: "stderr", data });
     },
-    async onExit(code) {
-      broadcast({
-        type: "AGENT_EXITED",
-        taskId,
-        agent: role,
-        exitCode: code,
-      });
-
-      const agentEntry = activeAgents.get(taskId);
-      if (agentEntry && !agentEntry.resultReceived) {
-        // Fallback: poll the outbox for results the watcher may have missed
-        try {
-          const messages = await readOutbox(taskId, role);
-          const resultMsg = messages.find((m) => m.type === "result" || m.type === "error" || m.type === "feedback");
-          if (resultMsg) {
-            agentEntry.resultReceived = true;
-            broadcast({ type: "MESSAGE_SENT", taskId, message: resultMsg });
-            const mapper = RESULT_TO_EVENT[role];
-            if (mapper) {
-              const event = mapper(resultMsg.payload);
-              const taskEntry = tasks.get(taskId);
-              if (taskEntry) taskEntry.actor.send(event);
-            }
-          } else if (code !== 0) {
-            // Agent failed without writing a result
-            const mapper = RESULT_TO_EVENT[role];
-            if (mapper) {
-              const event = mapper({ status: "failed", error: `Agent exited with code ${code}` });
-              const taskEntry = tasks.get(taskId);
-              if (taskEntry) taskEntry.actor.send(event);
-            }
-          } else {
-            // Agent exited 0 but no result — still treat as success for stub agents
-            console.warn(`Agent ${role} exited 0 with no outbox result for task ${taskId}`);
-          }
-        } catch (err) {
-          console.error(`Failed to read outbox on exit for ${role}:`, err);
-        }
-      }
-      cleanupAgent(taskId);
+    onStatus(status) {
+      resetStaleTimer();
+      broadcast({ type: "AGENT_STATUS", taskId, agent: role, status });
     },
-  });
-
-  broadcast({
-    type: "AGENT_SPAWNED",
-    taskId,
-    agent: role,
-    pid: handle.pid,
-  });
-
-  // 5. Watch outbox for results
-  const stopOutboxWatch = watchOutbox(taskId, role, (message) => {
-    if (message.type === "result" || message.type === "error" || message.type === "feedback") {
+    onResult(result) {
+      resetStaleTimer();
+      gotResult = true;
       const agentEntry = activeAgents.get(taskId);
       if (agentEntry) agentEntry.resultReceived = true;
 
-      broadcast({ type: "MESSAGE_SENT", taskId, message });
+      broadcast({ type: "AGENT_RESULT", taskId, agent: role, result });
 
-      // Map to XState event
-      const mapper = RESULT_TO_EVENT[role];
+      const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
       if (mapper) {
-        const event = mapper(message.payload);
-        const taskEntry = tasks.get(taskId);
-        if (taskEntry) taskEntry.actor.send(event);
+        const event = mapper(result);
+        if (actors.has(taskId)) actors.get(taskId).send(event);
       }
+    },
+    onExit(code) {
+      resetStaleTimer();
+      broadcast({ type: "AGENT_EXITED", taskId, agent: role, exitCode: code });
+
+      if (!gotResult) {
+        // Agent exited without producing a result
+        const error = code !== 0
+          ? `Agent ${role} crashed with exit code ${code}`
+          : `Agent ${role} exited without producing a result`;
+        console.error(error);
+        broadcast({ type: "AGENT_ERROR", taskId, agent: role, error });
+
+        const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
+        if (mapper) {
+          const event = mapper({ status: "failed", error });
+          if (actors.has(taskId)) actors.get(taskId).send(event);
+        }
+      }
+    },
+  });
+
+  if (!handle.pid) {
+    const error = `Failed to spawn ${role} agent — process did not start`;
+    console.error(error);
+    broadcast({ type: "AGENT_ERROR", taskId, agent: role, error });
+    const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
+    if (mapper) {
+      const event = mapper({ status: "failed", error });
+      if (actors.has(taskId)) actors.get(taskId).send(event);
     }
-  });
+    return;
+  }
 
-  // 6. Watch status for UI updates
-  const stopStatusWatch = watchStatus(taskId, role, (status) => {
-    broadcast({ type: "AGENT_STATUS", taskId, agent: role, status });
-  });
+  broadcast({ type: "AGENT_SPAWNED", taskId, agent: role, pid: handle.pid });
 
-  activeAgents.set(taskId, {
-    handle,
-    stopOutboxWatch,
-    stopStatusWatch,
-    resultReceived: false,
+  // Timeout: kill agent if it runs too long
+  const timeoutTimer = setTimeout(() => {
+    const agentEntry = activeAgents.get(taskId);
+    if (agentEntry && !agentEntry.resultReceived) {
+      const error = `Agent ${role} timed out after ${AGENT_TIMEOUT_MS / 60000} minutes`;
+      console.error(error);
+      broadcast({ type: "AGENT_ERROR", taskId, agent: role, error });
+      broadcast({ type: "AGENT_STATUS", taskId, agent: role, status: { state: "timeout", currentStep: error } });
+      handle.kill();
+    }
+  }, AGENT_TIMEOUT_MS);
+
+  // Stale detection: warn if no output for a while
+  const staleTimer = setInterval(() => {
+    const agentEntry = activeAgents.get(taskId);
+    if (!agentEntry || agentEntry.resultReceived) {
+      clearInterval(staleTimer);
+      return;
+    }
+    const elapsed = Date.now() - lastActivity;
+    if (elapsed >= AGENT_STALE_MS) {
+      broadcast({ type: "AGENT_STATUS", taskId, agent: role, status: {
+        state: "stale",
+        currentStep: `No activity for ${Math.round(elapsed / 60000)} minutes — agent may be stuck`,
+      }});
+    }
+  }, 30_000);
+
+  activeAgents.set(taskId, { handle, resultReceived: false, timeoutTimer, staleTimer });
+}
+
+/**
+ * Wire up an XState actor for a task: subscribe to state changes,
+ * persist to db, and trigger agent spawning.
+ */
+function wireActor(id, actor) {
+  let prevStateKey = null;
+
+  actor.subscribe((snapshot) => {
+    const sk = stateKey(snapshot.value);
+    if (sk === prevStateKey) return;
+    prevStateKey = sk;
+
+    const label = stateLabel(snapshot.value);
+
+    // Persist state to db
+    dbUpdateTask(id, { state: snapshot.value, stateKey: sk, label, context: snapshot.context }).catch((err) => {
+      console.error(`Failed to persist state for ${id}:`, err);
+    });
+
+    broadcast({
+      type: "STATE_UPDATE",
+      taskId: id,
+      state: snapshot.value,
+      stateKey: sk,
+      label,
+      context: snapshot.context,
+    });
+
+    // Spawn agent if state has one
+    if (STATE_TO_ROLE[sk]) {
+      onStateTransition(id, snapshot.value, snapshot.context);
+    }
+
+    // Broadcast PLAN_READY event when entering awaitingApproval in planning
+    if (sk === "planning.awaitingApproval" && snapshot.context.plan) {
+      broadcast({
+        type: "PLAN_READY",
+        taskId: id,
+        plan: snapshot.context.plan,
+      });
+    }
   });
 }
 
 // --- REST API ---
 
-app.get("/tasks", (req, res) => {
-  const list = [];
-  for (const id of tasks.keys()) {
-    list.push(getTaskSnapshot(id));
-  }
+app.get("/config", async (req, res) => {
+  const config = await getConfig();
+  res.json(config);
+});
+
+app.get("/tasks", async (req, res) => {
+  // Return live snapshots for active actors, db records for completed/failed
+  const dbTasks = await dbGetAllTasks();
+  const list = dbTasks.map((t) => {
+    const actor = actors.get(t.id);
+    if (actor) {
+      return getTaskSnapshot(t.id);
+    }
+    // No live actor — return persisted state
+    return t;
+  });
   res.json(list);
 });
 
-app.post("/tasks", (req, res) => {
-  const { description } = req.body;
+app.post("/tasks", async (req, res) => {
+  const { description, projectPath } = req.body;
   if (!description) return res.status(400).json({ error: "description required" });
+  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
 
   const id = uuid();
   const actor = createActor(workflowMachine);
+  // Stash metadata on the actor for easy access
+  actor._description = description;
+  actor._projectPath = projectPath;
+  actor._createdAt = new Date().toISOString();
 
-  let prevState = "idle";
+  actors.set(id, actor);
 
-  actor.subscribe((snapshot) => {
-    const newState = snapshot.value;
-
-    broadcast({
-      type: "STATE_UPDATE",
-      taskId: id,
-      state: newState,
-      label: stateLabels[newState] || newState,
-      context: snapshot.context,
-    });
-
-    // Trigger agent spawning on state transitions
-    if (newState !== prevState) {
-      prevState = newState;
-      onStateTransition(id, newState, snapshot.context).catch((err) => {
-        console.error(`Failed to handle transition to ${newState}:`, err);
-      });
-    }
-  });
+  wireActor(id, actor);
 
   actor.start();
-  tasks.set(id, { actor, description, createdAt: new Date().toISOString() });
 
-  // Immediately start the workflow
+  // Persist initial record
+  const snap = actor.getSnapshot();
+  await dbCreateTask({
+    id,
+    description,
+    projectPath,
+    state: snap.value,
+    stateKey: stateKey(snap.value),
+    label: stateLabel(snap.value),
+    context: snap.context,
+    createdAt: actor._createdAt,
+  });
+
+  // Start the workflow
   actor.send({ type: "START", task: description });
 
   const snapshot = getTaskSnapshot(id);
@@ -268,41 +328,81 @@ app.post("/tasks", (req, res) => {
 });
 
 app.post("/tasks/:id/event", (req, res) => {
-  const entry = tasks.get(req.params.id);
-  if (!entry) return res.status(404).json({ error: "task not found" });
+  const actor = actors.get(req.params.id);
+  if (!actor) return res.status(404).json({ error: "task not found" });
 
   const { event } = req.body;
   if (!event?.type) return res.status(400).json({ error: "event.type required" });
 
-  entry.actor.send(event);
+  actor.send(event);
   res.json(getTaskSnapshot(req.params.id));
 });
 
-app.delete("/tasks/:id", (req, res) => {
-  const entry = tasks.get(req.params.id);
-  if (!entry) return res.status(404).json({ error: "task not found" });
+app.get("/tasks/:id/plan", (req, res) => {
+  const actor = actors.get(req.params.id);
+  if (!actor) return res.json(null);
 
-  cleanupAgent(req.params.id);
-  entry.actor.stop();
-  tasks.delete(req.params.id);
+  const snap = actor.getSnapshot();
+  if (snap.context.plan?.markdown) {
+    return res.json({
+      markdown: snap.context.plan.markdown,
+      projectPath: snap.context.plan.projectPath,
+    });
+  }
+  res.json(null);
+});
+
+app.post("/tasks/:id/approve", (req, res) => {
+  const actor = actors.get(req.params.id);
+  if (!actor) return res.status(404).json({ error: "task not found" });
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+
+  if (sk === "planning.awaitingApproval") {
+    actor.send({ type: "PLAN_APPROVED" });
+    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || "Approved" });
+    return res.json({ ok: true });
+  }
+
+  if (sk === "merging.awaitingApproval") {
+    actor.send({ type: "PR_APPROVED" });
+    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Approved" });
+    return res.json({ ok: true });
+  }
+
+  return res.status(400).json({ error: `Current state ${sk} is not an approval gate` });
+});
+
+app.delete("/tasks/:id", async (req, res) => {
+  const actor = actors.get(req.params.id);
+  if (actor) {
+    cleanupAgent(req.params.id);
+    actor.stop();
+    actors.delete(req.params.id);
+  }
+  await dbDeleteTask(req.params.id);
   broadcast({ type: "TASK_DELETED", taskId: req.params.id });
   res.json({ ok: true });
 });
 
 // --- WebSocket ---
 
-wss.on("connection", (ws) => {
+wss.on("connection", async (ws) => {
   // Send current state of all tasks on connect
-  const list = [];
-  for (const id of tasks.keys()) list.push(getTaskSnapshot(id));
+  const dbTasks = await dbGetAllTasks();
+  const list = dbTasks.map((t) => {
+    const actor = actors.get(t.id);
+    return actor ? getTaskSnapshot(t.id) : t;
+  });
   ws.send(JSON.stringify({ type: "INIT", tasks: list }));
 
   ws.on("message", (raw) => {
     try {
       const msg = JSON.parse(raw);
       if (msg.type === "SEND_EVENT" && msg.taskId && msg.event) {
-        const entry = tasks.get(msg.taskId);
-        if (entry) entry.actor.send(msg.event);
+        const actor = actors.get(msg.taskId);
+        if (actor) actor.send(msg.event);
       }
     } catch {}
   });
@@ -310,8 +410,118 @@ wss.on("connection", (ws) => {
 
 // --- Start ---
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`WebSocket on ws://localhost:${PORT}`);
+async function start() {
+  // Initialize db
+  const db = await getDb();
+
+  // Seed config from config.json if db config is empty
+  if (!db.data.config.projects || db.data.config.projects.length === 0) {
+    try {
+      const { readFileSync } = await import("fs");
+      const { join, dirname } = await import("path");
+      const { fileURLToPath } = await import("url");
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      const configFile = JSON.parse(readFileSync(join(__dirname, "..", "config.json"), "utf-8"));
+      db.data.config = configFile;
+      await db.write();
+      console.log("Seeded config from config.json");
+    } catch {
+      console.warn("No config.json found, starting with empty config");
+    }
+  }
+
+  // Rehydrate active tasks (non-terminal states) as XState actors
+  const dbTasks = await dbGetAllTasks();
+  for (const task of dbTasks) {
+    if (task.state === "done" || task.state === "failed") continue;
+
+    // Handle legacy flat state values
+    const sk = typeof task.state === "string" ? task.state : stateKey(task.state);
+
+    console.log(`Rehydrating task ${task.id} (state: ${sk})`);
+    const actor = createActor(workflowMachine);
+    actor._description = task.description;
+    actor._projectPath = task.projectPath;
+    actor._createdAt = task.createdAt;
+
+    actors.set(task.id, actor);
+    wireActor(task.id, actor);
+    actor.start();
+
+    // Replay events to get back to the persisted state
+    actor.send({ type: "START", task: task.description });
+
+    const replayEvents = {
+      "planning.running": [],
+      "planning.awaitingApproval": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+      ],
+      "developing": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+      ],
+      "testing": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
+      ],
+      "reviewing": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
+        { type: "TESTS_PASSED" },
+      ],
+      "merging.running": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
+        { type: "TESTS_PASSED" },
+        { type: "REVIEW_APPROVED" },
+      ],
+      "merging.awaitingApproval": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
+        { type: "TESTS_PASSED" },
+        { type: "REVIEW_APPROVED" },
+        { type: "BRANCH_PUSHED", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" },
+      ],
+      "merging.creatingPr": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
+        { type: "TESTS_PASSED" },
+        { type: "REVIEW_APPROVED" },
+        { type: "BRANCH_PUSHED", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" },
+        { type: "PR_APPROVED" },
+      ],
+      // Legacy flat state names for backwards compat
+      "planning": [],
+      "merging": [
+        { type: "PLAN_READY", plan: task.context?.plan },
+        { type: "PLAN_APPROVED" },
+        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
+        { type: "TESTS_PASSED" },
+        { type: "REVIEW_APPROVED" },
+      ],
+    };
+
+    const events = replayEvents[sk];
+    if (events) {
+      for (const event of events) {
+        actor.send(event);
+      }
+    }
+  }
+
+  const PORT = process.env.PORT || 3001;
+  server.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`WebSocket on ws://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
 });

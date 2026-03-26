@@ -2,3 +2,4 @@ node_modules
 dist
 agents/*/memory/runs/
 agents/mailbox/
+db.json

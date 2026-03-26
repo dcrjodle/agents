@@ -32,7 +32,7 @@ EOF
 )"
 fi
 
-exec claude --print \
+exec ${CLAUDE_CLI:-claude} --print \
   --system-prompt "$(cat "$AGENT_DIR/program.md")" \
   --append-system-prompt "Available tools: $(ls "$AGENT_DIR/tools/")" \
   --append-system-prompt "Workspace: $WORKSPACE" \

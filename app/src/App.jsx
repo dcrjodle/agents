@@ -1,9 +1,70 @@
+import { useState, useEffect, useCallback } from "react";
 import { useWorkflow } from "./hooks/useWorkflow.js";
 import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
+import { ProjectTabs } from "./components/ProjectTabs.jsx";
+import { PlanDialog } from "./components/PlanDialog.jsx";
+
+const API_BASE = "/api";
 
 export function App() {
-  const { tasks, connected, agentLogs, createTask, sendEvent, deleteTask } = useWorkflow();
+  const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
+  const { tasks, connected, agentLogs, pendingPlans, errors, createTask, sendEvent, deleteTask, approveTask, clearPendingPlan } = useWorkflow();
+
+  useEffect(() => {
+    fetch(`${API_BASE}/config`)
+      .then((res) => res.json())
+      .then((config) => {
+        const list = config.projects || [];
+        setProjects(list);
+        if (list.length > 0) setSelectedProject(list[0]);
+      })
+      .catch((err) => console.error("Failed to load config:", err));
+  }, []);
+
+  // Auto-open plan dialog when a pending plan arrives
+  useEffect(() => {
+    for (const taskId of Object.keys(pendingPlans)) {
+      if (!viewingPlanTaskId) {
+        setViewingPlanTaskId(taskId);
+        break;
+      }
+    }
+  }, [pendingPlans, viewingPlanTaskId]);
+
+  const handleCreateTask = (description) => {
+    if (!selectedProject) return;
+    createTask(description, selectedProject.path);
+  };
+
+  const handleViewPlan = useCallback((taskId) => {
+    setViewingPlanTaskId(taskId);
+  }, []);
+
+  const handleApprovePlan = useCallback(() => {
+    if (viewingPlanTaskId) {
+      approveTask(viewingPlanTaskId, "User approved plan");
+      clearPendingPlan(viewingPlanTaskId);
+      setViewingPlanTaskId(null);
+    }
+  }, [viewingPlanTaskId, approveTask, clearPendingPlan]);
+
+  const handleRejectPlan = useCallback(() => {
+    if (viewingPlanTaskId) {
+      sendEvent(viewingPlanTaskId, { type: "PLAN_REJECTED" });
+      clearPendingPlan(viewingPlanTaskId);
+      setViewingPlanTaskId(null);
+    }
+  }, [viewingPlanTaskId, sendEvent, clearPendingPlan]);
+
+  const handleClosePlan = useCallback(() => {
+    setViewingPlanTaskId(null);
+  }, []);
+
+  const viewingTask = viewingPlanTaskId ? tasks.find((t) => t.id === viewingPlanTaskId) : null;
+  const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", padding: 24, fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -31,8 +92,34 @@ export function App() {
         </span>
       </header>
 
-      <CreateTask onCreate={createTask} />
-      <TaskList tasks={tasks} agentLogs={agentLogs} onSendEvent={sendEvent} onDelete={deleteTask} />
+      {projects.length > 0 && selectedProject ? (
+        <>
+          <ProjectTabs projects={projects} selected={selectedProject} onSelect={setSelectedProject} />
+          <CreateTask onCreate={handleCreateTask} />
+        </>
+      ) : (
+        <p style={{ color: "#888" }}>Loading projects...</p>
+      )}
+      <TaskList
+        tasks={tasks}
+        agentLogs={agentLogs}
+        pendingPlans={pendingPlans}
+        errors={errors}
+        onSendEvent={sendEvent}
+        onDelete={deleteTask}
+        onApprove={approveTask}
+        onViewPlan={handleViewPlan}
+      />
+
+      {viewingPlan && (
+        <PlanDialog
+          plan={viewingPlan}
+          taskDescription={viewingTask?.description || ""}
+          onApprove={handleApprovePlan}
+          onReject={handleRejectPlan}
+          onClose={handleClosePlan}
+        />
+      )}
     </div>
   );
 }

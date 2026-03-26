@@ -2,74 +2,68 @@
 set -euo pipefail
 
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TASK="${1:-}"
-TASK_ID="${2:-}"
-MAILBOX="${MAILBOX_DIR:-}"
+source "$AGENT_DIR/../lib.sh"
+
+# Read handoff from stdin
+HANDOFF=$(parse_handoff)
+
+TASK=$(json_field "$HANDOFF" "instruction")
+TASK_ID="${TASK_ID:-}"
+PROJECT=$(json_field "$HANDOFF" "projectPath")
+
+if [ -z "$TASK" ] || [ "$TASK" = "undefined" ]; then
+  TASK="${TASK_DESCRIPTION:-}"
+fi
 
 if [ -z "$TASK" ]; then
-  echo "Usage: ./start.sh \"<task description>\" [task_id]"
+  echo "Usage: echo '{...}' | ./start.sh"
   exit 1
 fi
 
-echo "=== Planner Agent ==="
-echo "Task: $TASK"
-echo "Mailbox: $MAILBOX"
-
-# Read inbox
-if [ -n "$MAILBOX" ] && [ -d "$MAILBOX/inbox" ]; then
-  echo "[planner] Reading inbox..."
-  for f in "$MAILBOX/inbox"/*.json; do
-    [ -f "$f" ] && echo "[planner] Got message: $(basename "$f")" || true
-  done
+if [ -z "$PROJECT" ] || [ "$PROJECT" = "undefined" ]; then
+  echo "[planner] ERROR: No project path provided"
+  exit 1
 fi
 
-# Update status
-if [ -n "$MAILBOX" ]; then
-  cat > "$MAILBOX/status.json" <<STATUSEOF
-{"agent":"planner","taskId":"$TASK_ID","state":"working","currentStep":"Analyzing requirements","startedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
-STATUSEOF
-fi
+emit_status "Analyzing project at $PROJECT"
 
-echo "[planner] Analyzing task: $TASK"
-sleep 1
+echo "[planner] Analyzing project at: $PROJECT" >&2
 
-# Update status mid-work
-if [ -n "$MAILBOX" ]; then
-  cat > "$MAILBOX/status.json" <<STATUSEOF
-{"agent":"planner","taskId":"$TASK_ID","state":"working","currentStep":"Creating implementation plan","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
-STATUSEOF
-fi
+# Read the plan template
+PLAN_TEMPLATE=$(cat "$AGENT_DIR/templates/plan.md")
 
-echo "[planner] Creating plan..."
-sleep 1
+# Build the prompt for claude
+PROMPT="You are a planner agent. Your job is to create an implementation plan.
 
-echo "[planner] Plan complete."
+Task: $TASK
+Project path: $PROJECT
 
-# Write result to outbox
-if [ -n "$MAILBOX" ]; then
-  mkdir -p "$MAILBOX/outbox"
-  cat > "$MAILBOX/outbox/001-result.json" <<RESULTEOF
-{
-  "from": "planner",
-  "to": "coordinator",
-  "type": "result",
-  "payload": {
-    "status": "complete",
-    "summary": "Created implementation plan for: $TASK",
-    "plan": {
-      "steps": [
-        {"name": "Implement core logic", "complexity": "medium"},
-        {"name": "Add error handling", "complexity": "low"},
-        {"name": "Write tests", "complexity": "low"}
-      ]
-    }
-  }
-}
-RESULTEOF
+First, explore the project directory to understand its structure, framework, and conventions.
+Then write a plan following this template:
 
-  cat > "$MAILBOX/status.json" <<STATUSEOF
-{"agent":"planner","taskId":"$TASK_ID","state":"done","currentStep":"Plan delivered","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
-STATUSEOF
-fi
+$PLAN_TEMPLATE
 
-echo "[planner] Done."
+IMPORTANT: Output ONLY the plan in markdown format. Do not include any other text.
+If the project uses the Ivy Framework (.NET/C# with Ivy), use the ask-ivy-questions tool to look up relevant documentation.
+"
+
+emit_status "Creating implementation plan"
+
+echo "[planner] Creating plan with Claude..." >&2
+
+# Run claude to generate the plan (stderr goes to our stderr for UI streaming)
+PLAN_OUTPUT=$(echo "$PROMPT" | ${CLAUDE_CLI:-claude} --print \
+  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
+  --allowedTools "Bash(read-only:true),Read,Glob,Grep" \
+  2>&2) || true
+
+echo "[planner] Plan generated." >&2
+
+# Escape the plan for JSON
+PLAN_JSON=$(echo "$PLAN_OUTPUT" | json_escape)
+PROJECT_JSON=$(json_escape_str "$PROJECT")
+
+# Emit the result — planner exits and server holds XState in awaitingApproval
+emit_result "{\"status\":\"plan_ready\",\"plan\":{\"markdown\":$PLAN_JSON,\"projectPath\":$PROJECT_JSON}}"
+
+echo "[planner] Done." >&2

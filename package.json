@@ -22,8 +22,8 @@
   },
   "homepage": "https://github.com/dcrjodle/agents#readme",
   "dependencies": {
-    "chokidar": "^5.0.0",
     "express": "^5.2.1",
+    "lowdb": "^7.0.1",
     "uuid": "^13.0.0",
     "ws": "^8.20.0",
     "xstate": "^5.29.0"
