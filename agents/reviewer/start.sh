@@ -4,43 +4,65 @@ set -euo pipefail
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TARGET="${1:-}"
 TASK_ID="${2:-}"
+MAILBOX="${MAILBOX_DIR:-}"
 
 if [ -z "$TARGET" ]; then
   echo "Usage: ./start.sh \"<what to review>\" [task_id]"
   exit 1
 fi
 
-WORKSPACE="$AGENT_DIR/memory/runs/${TASK_ID:-$(date +%s)}"
-mkdir -p "$WORKSPACE"
-
-MAILBOX="${MAILBOX_DIR:-}"
-
 echo "=== Reviewer Agent ==="
 echo "Target: $TARGET"
-echo "Workspace: $WORKSPACE"
-[ -n "$MAILBOX" ] && echo "Mailbox: $MAILBOX"
+echo "Mailbox: $MAILBOX"
 
-MAILBOX_PROMPT=""
-if [ -n "$MAILBOX" ]; then
-  MAILBOX_PROMPT="$(cat <<EOF
-## Mailbox Communication
-Your mailbox directory: $MAILBOX
-- Read your task details from: $MAILBOX/inbox/
-- Write your results to: $MAILBOX/outbox/ as a JSON file (e.g. 001-result.json)
-- Update your status at: $MAILBOX/status.json
-
-When you approve, write a result file to your outbox:
-{"from":"reviewer","to":"coordinator","type":"result","payload":{"status":"complete","verdict":"approved","summary":"Code looks good"}}
-
-When requesting changes:
-{"from":"reviewer","to":"coordinator","type":"feedback","payload":{"verdict":"changes_requested","comments":["..."],"severity":"minor"}}
-EOF
-)"
+# Read inbox
+if [ -n "$MAILBOX" ] && [ -d "$MAILBOX/inbox" ]; then
+  echo "[reviewer] Reading inbox..."
+  for f in "$MAILBOX/inbox"/*.json; do
+    [ -f "$f" ] && echo "[reviewer] Got message: $(basename "$f")" || true
+  done
 fi
 
-exec claude --print \
-  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
-  --append-system-prompt "Available tools: $(ls "$AGENT_DIR/tools/")" \
-  --append-system-prompt "Workspace: $WORKSPACE" \
-  ${MAILBOX:+--append-system-prompt "$MAILBOX_PROMPT"} \
-  "$TARGET"
+if [ -n "$MAILBOX" ]; then
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"reviewer","taskId":"$TASK_ID","state":"working","currentStep":"Reading code changes","startedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[reviewer] Reviewing code changes..."
+sleep 1
+
+if [ -n "$MAILBOX" ]; then
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"reviewer","taskId":"$TASK_ID","state":"working","currentStep":"Checking security and quality","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[reviewer] Checking security and code quality..."
+sleep 1
+
+echo "[reviewer] Code approved."
+
+# Write result to outbox
+if [ -n "$MAILBOX" ]; then
+  mkdir -p "$MAILBOX/outbox"
+  cat > "$MAILBOX/outbox/001-result.json" <<RESULTEOF
+{
+  "from": "reviewer",
+  "to": "coordinator",
+  "type": "result",
+  "payload": {
+    "status": "complete",
+    "verdict": "approved",
+    "summary": "Code review passed. No issues found.",
+    "comments": []
+  }
+}
+RESULTEOF
+
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"reviewer","taskId":"$TASK_ID","state":"done","currentStep":"Review complete","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[reviewer] Done."

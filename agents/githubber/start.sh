@@ -4,43 +4,64 @@ set -euo pipefail
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ACTION="${1:-}"
 TASK_ID="${2:-}"
+MAILBOX="${MAILBOX_DIR:-}"
 
 if [ -z "$ACTION" ]; then
   echo "Usage: ./start.sh \"<action description>\" [task_id]"
   exit 1
 fi
 
-WORKSPACE="$AGENT_DIR/memory/runs/${TASK_ID:-$(date +%s)}"
-mkdir -p "$WORKSPACE"
-
-MAILBOX="${MAILBOX_DIR:-}"
-
 echo "=== Githubber Agent ==="
 echo "Action: $ACTION"
-echo "Workspace: $WORKSPACE"
-[ -n "$MAILBOX" ] && echo "Mailbox: $MAILBOX"
+echo "Mailbox: $MAILBOX"
 
-MAILBOX_PROMPT=""
-if [ -n "$MAILBOX" ]; then
-  MAILBOX_PROMPT="$(cat <<EOF
-## Mailbox Communication
-Your mailbox directory: $MAILBOX
-- Read your task details from: $MAILBOX/inbox/
-- Write your results to: $MAILBOX/outbox/ as a JSON file (e.g. 001-result.json)
-- Update your status at: $MAILBOX/status.json
-
-When you finish, write a result file to your outbox:
-{"from":"githubber","to":"coordinator","type":"result","payload":{"status":"complete","summary":"PR merged","prUrl":"..."}}
-
-If the PR fails:
-{"from":"githubber","to":"coordinator","type":"error","payload":{"message":"...","details":"...","recoverable":true}}
-EOF
-)"
+# Read inbox
+if [ -n "$MAILBOX" ] && [ -d "$MAILBOX/inbox" ]; then
+  echo "[githubber] Reading inbox..."
+  for f in "$MAILBOX/inbox"/*.json; do
+    [ -f "$f" ] && echo "[githubber] Got message: $(basename "$f")" || true
+  done
 fi
 
-exec claude --print \
-  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
-  --append-system-prompt "Available tools: $(ls "$AGENT_DIR/tools/")" \
-  --append-system-prompt "Workspace: $WORKSPACE" \
-  ${MAILBOX:+--append-system-prompt "$MAILBOX_PROMPT"} \
-  "$ACTION"
+if [ -n "$MAILBOX" ]; then
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"githubber","taskId":"$TASK_ID","state":"working","currentStep":"Creating PR","startedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[githubber] Creating pull request..."
+sleep 1
+
+if [ -n "$MAILBOX" ]; then
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"githubber","taskId":"$TASK_ID","state":"working","currentStep":"Merging PR","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[githubber] Merging PR..."
+sleep 1
+
+echo "[githubber] PR merged successfully."
+
+# Write result to outbox
+if [ -n "$MAILBOX" ]; then
+  mkdir -p "$MAILBOX/outbox"
+  cat > "$MAILBOX/outbox/001-result.json" <<RESULTEOF
+{
+  "from": "githubber",
+  "to": "coordinator",
+  "type": "result",
+  "payload": {
+    "status": "complete",
+    "summary": "PR created and merged for: $ACTION",
+    "prUrl": "https://github.com/example/repo/pull/42"
+  }
+}
+RESULTEOF
+
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"githubber","taskId":"$TASK_ID","state":"done","currentStep":"PR merged","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[githubber] Done."

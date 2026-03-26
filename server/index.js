@@ -12,6 +12,7 @@ import {
   watchStatus,
   updateStatus,
   getMailboxPath,
+  readOutbox,
 } from "./mailbox.js";
 import { spawnAgent, STATE_TO_ROLE, RESULT_TO_EVENT } from "./spawner.js";
 
@@ -135,7 +136,7 @@ async function onStateTransition(taskId, state, context) {
         data,
       });
     },
-    onExit(code) {
+    async onExit(code) {
       broadcast({
         type: "AGENT_EXITED",
         taskId,
@@ -143,14 +144,35 @@ async function onStateTransition(taskId, state, context) {
         exitCode: code,
       });
 
-      // If the agent exited without writing a result, treat as failure
       const agentEntry = activeAgents.get(taskId);
       if (agentEntry && !agentEntry.resultReceived) {
-        const mapper = RESULT_TO_EVENT[role];
-        if (mapper && code !== 0) {
-          const event = mapper({ status: "failed", error: `Agent exited with code ${code}` });
-          const taskEntry = tasks.get(taskId);
-          if (taskEntry) taskEntry.actor.send(event);
+        // Fallback: poll the outbox for results the watcher may have missed
+        try {
+          const messages = await readOutbox(taskId, role);
+          const resultMsg = messages.find((m) => m.type === "result" || m.type === "error" || m.type === "feedback");
+          if (resultMsg) {
+            agentEntry.resultReceived = true;
+            broadcast({ type: "MESSAGE_SENT", taskId, message: resultMsg });
+            const mapper = RESULT_TO_EVENT[role];
+            if (mapper) {
+              const event = mapper(resultMsg.payload);
+              const taskEntry = tasks.get(taskId);
+              if (taskEntry) taskEntry.actor.send(event);
+            }
+          } else if (code !== 0) {
+            // Agent failed without writing a result
+            const mapper = RESULT_TO_EVENT[role];
+            if (mapper) {
+              const event = mapper({ status: "failed", error: `Agent exited with code ${code}` });
+              const taskEntry = tasks.get(taskId);
+              if (taskEntry) taskEntry.actor.send(event);
+            }
+          } else {
+            // Agent exited 0 but no result — still treat as success for stub agents
+            console.warn(`Agent ${role} exited 0 with no outbox result for task ${taskId}`);
+          }
+        } catch (err) {
+          console.error(`Failed to read outbox on exit for ${role}:`, err);
         }
       }
       cleanupAgent(taskId);
@@ -166,7 +188,7 @@ async function onStateTransition(taskId, state, context) {
 
   // 5. Watch outbox for results
   const stopOutboxWatch = watchOutbox(taskId, role, (message) => {
-    if (message.type === "result" || message.type === "error") {
+    if (message.type === "result" || message.type === "error" || message.type === "feedback") {
       const agentEntry = activeAgents.get(taskId);
       if (agentEntry) agentEntry.resultReceived = true;
 

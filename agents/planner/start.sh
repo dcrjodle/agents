@@ -4,43 +4,72 @@ set -euo pipefail
 AGENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TASK="${1:-}"
 TASK_ID="${2:-}"
+MAILBOX="${MAILBOX_DIR:-}"
 
 if [ -z "$TASK" ]; then
   echo "Usage: ./start.sh \"<task description>\" [task_id]"
   exit 1
 fi
 
-WORKSPACE="$AGENT_DIR/memory/runs/${TASK_ID:-$(date +%s)}"
-mkdir -p "$WORKSPACE"
-
-MAILBOX="${MAILBOX_DIR:-}"
-
 echo "=== Planner Agent ==="
 echo "Task: $TASK"
-echo "Workspace: $WORKSPACE"
-[ -n "$MAILBOX" ] && echo "Mailbox: $MAILBOX"
+echo "Mailbox: $MAILBOX"
 
-MAILBOX_PROMPT=""
-if [ -n "$MAILBOX" ]; then
-  MAILBOX_PROMPT="$(cat <<EOF
-## Mailbox Communication
-Your mailbox directory: $MAILBOX
-- Read your task details from: $MAILBOX/inbox/
-- Write your results to: $MAILBOX/outbox/ as a JSON file (e.g. 001-result.json)
-- Update your status at: $MAILBOX/status.json
-
-When you finish, write a result file to your outbox with this format:
-{"from":"planner","to":"coordinator","type":"result","payload":{"status":"complete","summary":"...","plan":{"steps":[...]}}}
-
-If you encounter an error you cannot recover from:
-{"from":"planner","to":"coordinator","type":"error","payload":{"message":"...","details":"...","recoverable":false}}
-EOF
-)"
+# Read inbox
+if [ -n "$MAILBOX" ] && [ -d "$MAILBOX/inbox" ]; then
+  echo "[planner] Reading inbox..."
+  for f in "$MAILBOX/inbox"/*.json; do
+    [ -f "$f" ] && echo "[planner] Got message: $(basename "$f")" || true
+  done
 fi
 
-exec claude --print \
-  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
-  --append-system-prompt "Available tools: $(ls "$AGENT_DIR/tools/")" \
-  --append-system-prompt "Workspace: $WORKSPACE" \
-  ${MAILBOX:+--append-system-prompt "$MAILBOX_PROMPT"} \
-  "$TASK"
+# Update status
+if [ -n "$MAILBOX" ]; then
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"planner","taskId":"$TASK_ID","state":"working","currentStep":"Analyzing requirements","startedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[planner] Analyzing task: $TASK"
+sleep 1
+
+# Update status mid-work
+if [ -n "$MAILBOX" ]; then
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"planner","taskId":"$TASK_ID","state":"working","currentStep":"Creating implementation plan","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[planner] Creating plan..."
+sleep 1
+
+echo "[planner] Plan complete."
+
+# Write result to outbox
+if [ -n "$MAILBOX" ]; then
+  mkdir -p "$MAILBOX/outbox"
+  cat > "$MAILBOX/outbox/001-result.json" <<RESULTEOF
+{
+  "from": "planner",
+  "to": "coordinator",
+  "type": "result",
+  "payload": {
+    "status": "complete",
+    "summary": "Created implementation plan for: $TASK",
+    "plan": {
+      "steps": [
+        {"name": "Implement core logic", "complexity": "medium"},
+        {"name": "Add error handling", "complexity": "low"},
+        {"name": "Write tests", "complexity": "low"}
+      ]
+    }
+  }
+}
+RESULTEOF
+
+  cat > "$MAILBOX/status.json" <<STATUSEOF
+{"agent":"planner","taskId":"$TASK_ID","state":"done","currentStep":"Plan delivered","lastActivity":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+STATUSEOF
+fi
+
+echo "[planner] Done."

@@ -157,4 +157,12 @@ export function watchStatus(taskId, agentRole, onStatus) {
   return () => watcher.close();
 }
 
+/**
+ * Read the latest result from an agent's outbox (non-watching).
+ * Useful as a fallback when file watching misses the event.
+ */
+export async function readOutbox(taskId, agentRole) {
+  return readMessages(taskId, agentRole, "outbox");
+}
+
 export { MAILBOX_ROOT };
