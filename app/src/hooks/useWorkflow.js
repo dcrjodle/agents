@@ -9,6 +9,7 @@ export function useWorkflow() {
   const [agentLogs, setAgentLogs] = useState({});
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const mountedRef = useRef(false);
 
   const appendLog = useCallback((taskId, entry) => {
     setAgentLogs((prev) => ({
@@ -17,111 +18,120 @@ export function useWorkflow() {
     }));
   }, []);
 
-  const connect = useCallback(() => {
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setConnected(true);
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-    };
-
-    ws.onclose = () => {
-      setConnected(false);
-      reconnectTimer.current = setTimeout(connect, 2000);
-    };
-
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-
-      switch (msg.type) {
-        case "INIT":
-          setTasks(msg.tasks);
-          break;
-
-        case "TASK_CREATED":
-          setTasks((prev) => [...prev, msg.task]);
-          appendLog(msg.task.id, {
-            type: "system",
-            data: `Task created: ${msg.task.description}`,
-          });
-          break;
-
-        case "STATE_UPDATE":
-          setTasks((prev) =>
-            prev.map((t) =>
-              t.id === msg.taskId
-                ? { ...t, state: msg.state, label: msg.label, context: msg.context }
-                : t
-            )
-          );
-          appendLog(msg.taskId, {
-            type: "state",
-            data: `State: ${msg.state}`,
-            state: msg.state,
-            label: msg.label,
-          });
-          break;
-
-        case "TASK_DELETED":
-          setTasks((prev) => prev.filter((t) => t.id !== msg.taskId));
-          break;
-
-        case "AGENT_SPAWNED":
-          appendLog(msg.taskId, {
-            type: "spawned",
-            agent: msg.agent,
-            data: `Agent ${msg.agent} spawned (pid: ${msg.pid})`,
-            pid: msg.pid,
-          });
-          break;
-
-        case "AGENT_OUTPUT":
-          appendLog(msg.taskId, {
-            type: "output",
-            agent: msg.agent,
-            stream: msg.stream,
-            data: msg.data,
-          });
-          break;
-
-        case "AGENT_STATUS":
-          appendLog(msg.taskId, {
-            type: "status",
-            agent: msg.agent,
-            data: `[${msg.agent}] ${msg.status.currentStep || msg.status.state}`,
-            status: msg.status,
-          });
-          break;
-
-        case "AGENT_EXITED":
-          appendLog(msg.taskId, {
-            type: "exited",
-            agent: msg.agent,
-            data: `Agent ${msg.agent} exited (code: ${msg.exitCode})`,
-            exitCode: msg.exitCode,
-          });
-          break;
-
-        case "MESSAGE_SENT":
-          appendLog(msg.taskId, {
-            type: "message",
-            agent: msg.message?.from,
-            data: `[${msg.message?.from}] ${msg.message?.type}: ${msg.message?.payload?.summary || msg.message?.payload?.message || ""}`,
-            message: msg.message,
-          });
-          break;
-      }
-    };
-  }, [appendLog]);
-
   useEffect(() => {
+    // Prevent double-connect from React StrictMode
+    if (mountedRef.current) return;
+    mountedRef.current = true;
+
+    function connect() {
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        // Only reconnect if still mounted
+        if (mountedRef.current) {
+          reconnectTimer.current = setTimeout(connect, 2000);
+        }
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+
+        switch (msg.type) {
+          case "INIT":
+            setTasks(msg.tasks);
+            break;
+
+          case "TASK_CREATED":
+            setTasks((prev) => [...prev, msg.task]);
+            appendLog(msg.task.id, {
+              type: "system",
+              data: `Task created: ${msg.task.description}`,
+            });
+            break;
+
+          case "STATE_UPDATE":
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === msg.taskId
+                  ? { ...t, state: msg.state, label: msg.label, context: msg.context }
+                  : t
+              )
+            );
+            appendLog(msg.taskId, {
+              type: "state",
+              data: `State: ${msg.state}`,
+              state: msg.state,
+              label: msg.label,
+            });
+            break;
+
+          case "TASK_DELETED":
+            setTasks((prev) => prev.filter((t) => t.id !== msg.taskId));
+            break;
+
+          case "AGENT_SPAWNED":
+            appendLog(msg.taskId, {
+              type: "spawned",
+              agent: msg.agent,
+              data: `Agent ${msg.agent} spawned (pid: ${msg.pid})`,
+              pid: msg.pid,
+            });
+            break;
+
+          case "AGENT_OUTPUT":
+            appendLog(msg.taskId, {
+              type: "output",
+              agent: msg.agent,
+              stream: msg.stream,
+              data: msg.data,
+            });
+            break;
+
+          case "AGENT_STATUS":
+            appendLog(msg.taskId, {
+              type: "status",
+              agent: msg.agent,
+              data: `[${msg.agent}] ${msg.status.currentStep || msg.status.state}`,
+              status: msg.status,
+            });
+            break;
+
+          case "AGENT_EXITED":
+            appendLog(msg.taskId, {
+              type: "exited",
+              agent: msg.agent,
+              data: `Agent ${msg.agent} exited (code: ${msg.exitCode})`,
+              exitCode: msg.exitCode,
+            });
+            break;
+
+          case "MESSAGE_SENT":
+            appendLog(msg.taskId, {
+              type: "message",
+              agent: msg.message?.from,
+              data: `[${msg.message?.from}] ${msg.message?.type}: ${msg.message?.payload?.summary || msg.message?.payload?.message || ""}`,
+              message: msg.message,
+            });
+            break;
+        }
+      };
+    }
+
     connect();
+
     return () => {
+      mountedRef.current = false;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [connect]);
+  }, [appendLog]);
 
   const createTask = async (description) => {
     const res = await fetch("/tasks", {
