@@ -7,6 +7,7 @@ import { homedir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = join(__dirname, "..", "agents");
+const SCRIPTS_DIR = join(__dirname, "..", "scripts");
 
 // Resolve the claude CLI path — it may not be on PATH in non-interactive shells
 function findClaudeCli() {
@@ -79,14 +80,14 @@ const STATE_TO_ROLE = {
   "developing": "developer",
   "testing": "tester",
   "reviewing": "reviewer",
-  "merging.running": "githubber",
   "merging.creatingPr": "githubber",
 };
 
-// Extra env vars per state
-const STATE_ENV = {
-  "merging.running": { AGENT_MODE: "push" },
-  "merging.creatingPr": { AGENT_MODE: "create-pr" },
+// Map XState states to deterministic scripts (no Claude)
+const STATE_TO_SCRIPT = {
+  "branching": "create-worktree.sh",
+  "committing": "commit-changes.sh",
+  "pushing": "push-branch.sh",
 };
 
 // Map agent result types to XState events
@@ -99,9 +100,7 @@ const RESULT_TO_EVENT = {
   },
   developer: (payload) => ({
     type: payload.status === "complete" ? "CODE_COMPLETE" : "CODE_FAILED",
-    files: payload.filesChanged,
-    worktreePath: payload.worktreePath,
-    branchName: payload.branchName,
+    files: payload.filesChanged || [],
     error: payload.error,
   }),
   tester: (payload) => ({
@@ -114,17 +113,30 @@ const RESULT_TO_EVENT = {
     }
     return { type: "CHANGES_REQUESTED", feedback: payload.comments?.join("\n") || payload.message };
   },
-  "githubber:push": (payload) => {
-    if (payload.status === "complete") {
-      return { type: "BRANCH_PUSHED", branchName: payload.branchName, diffSummary: payload.diffSummary };
-    }
-    return { type: "PR_FAILED", error: payload.error };
-  },
-  "githubber:create-pr": (payload) => {
+  githubber: (payload) => {
     if (payload.status === "complete") {
       return { type: "MERGED", url: payload.prUrl };
     }
     return { type: "PR_FAILED", error: payload.error };
+  },
+  // Deterministic script result mappers
+  "script:branching": (payload) => {
+    if (payload.status === "complete") {
+      return { type: "BRANCH_READY", worktreePath: payload.worktreePath, branchName: payload.branchName };
+    }
+    return { type: "BRANCH_FAILED", error: payload.error };
+  },
+  "script:committing": (payload) => {
+    if (payload.status === "complete") {
+      return { type: "COMMIT_COMPLETE", files: payload.files || [] };
+    }
+    return { type: "COMMIT_FAILED", error: payload.error };
+  },
+  "script:pushing": (payload) => {
+    if (payload.status === "complete") {
+      return { type: "PUSH_COMPLETE", branchName: payload.branchName, diffSummary: payload.diffSummary };
+    }
+    return { type: "PUSH_FAILED", error: payload.error };
   },
 };
 
@@ -132,50 +144,32 @@ const RESULT_TO_EVENT = {
  * Get the result-to-event mapper key for a given state key.
  */
 function getMapperKey(sk) {
+  if (STATE_TO_SCRIPT[sk]) return `script:${sk}`;
   const role = STATE_TO_ROLE[sk];
   if (!role) return null;
-  if (role === "githubber") {
-    const mode = STATE_ENV[sk]?.AGENT_MODE || "push";
-    return `githubber:${mode}`;
-  }
   return role;
 }
 
 /**
- * Spawn an agent process for a given state.
- *
- * @param {string} sk - State key (dot-notation)
- * @param {string} taskId - The task ID
- * @param {string} taskDescription - Human-readable task description
- * @param {object} handoffContext - JSON object written to child's stdin
- * @param {object} options - Callbacks
- * @param {function} options.onStdout - Called with non-marker stdout data
- * @param {function} options.onStderr - Called with non-status stderr data
- * @param {function} options.onStatus - Called with parsed status objects
- * @param {function} options.onResult - Called with parsed result JSON
- * @param {function} options.onExit - Called with exit code when process ends
- * @param {string} options.projectPath - Path to the project directory
- * @returns {{ pid: number, kill: function }}
+ * Spawn a deterministic script (no Claude) for a given state.
+ * Uses the same stdio protocol as agents (:::STATUS:::, :::RESULT_START:::).
  */
-export function spawnAgent(sk, taskId, taskDescription, handoffContext, options = {}) {
-  const role = STATE_TO_ROLE[sk];
-  if (!role) {
-    console.error(`No agent role for state: ${sk}`);
+export function spawnScript(sk, taskId, handoffContext, options = {}) {
+  const scriptName = STATE_TO_SCRIPT[sk];
+  if (!scriptName) {
+    console.error(`No script for state: ${sk}`);
     return { pid: null, kill: () => {} };
   }
 
-  const scriptPath = join(AGENTS_DIR, role, "start.sh");
-  const extraEnv = STATE_ENV[sk] || {};
+  const scriptPath = join(SCRIPTS_DIR, scriptName);
 
   const child = spawn("bash", [scriptPath], {
-    cwd: join(AGENTS_DIR, role),
+    cwd: SCRIPTS_DIR,
     env: {
       ...process.env,
       TASK_ID: taskId,
-      TASK_DESCRIPTION: taskDescription,
+      TASK_DESCRIPTION: options.taskDescription || "",
       PROJECT_PATH: options.projectPath || "",
-      CLAUDE_CLI: CLAUDE_CLI,
-      ...extraEnv,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -185,6 +179,50 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
     child.stdin.write(JSON.stringify(handoffContext));
   }
   child.stdin.end();
+
+  // Reuse the same stdio parsing as spawnAgent
+  return _wireChildProcess(child, sk, taskId, `script:${sk}`, options);
+}
+
+/**
+ * Spawn an agent process for a given state.
+ */
+export function spawnAgent(sk, taskId, taskDescription, handoffContext, options = {}) {
+  const role = STATE_TO_ROLE[sk];
+  if (!role) {
+    console.error(`No agent role for state: ${sk}`);
+    return { pid: null, kill: () => {} };
+  }
+
+  const scriptPath = join(AGENTS_DIR, role, "start.sh");
+
+  const child = spawn("bash", [scriptPath], {
+    cwd: join(AGENTS_DIR, role),
+    env: {
+      ...process.env,
+      TASK_ID: taskId,
+      TASK_DESCRIPTION: taskDescription,
+      PROJECT_PATH: options.projectPath || "",
+      CLAUDE_CLI: CLAUDE_CLI,
+    },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  // Write handoff JSON to stdin, then close
+  if (handoffContext) {
+    child.stdin.write(JSON.stringify(handoffContext));
+  }
+  child.stdin.end();
+
+  return _wireChildProcess(child, sk, taskId, role, options);
+}
+
+/**
+ * Wire up stdio parsing for a child process (shared by agents and scripts).
+ */
+function _wireChildProcess(child, sk, taskId, label, options) {
+  const mapperKey = getMapperKey(sk);
+  let gotResult = false;
 
   // Parse stderr: lines starting with :::STATUS::: are status updates
   let stderrBuffer = "";
@@ -210,16 +248,10 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
 
   // Buffer stdout — extract result between markers on close
   let stdoutBuffer = "";
-  let stdoutEnded = false;
   child.stdout.on("data", (chunk) => {
     stdoutBuffer += chunk.toString();
   });
-  child.stdout.on("end", () => {
-    stdoutEnded = true;
-  });
 
-  // Use 'close' instead of 'exit' — 'close' fires after all stdio streams have ended,
-  // ensuring stdoutBuffer is fully populated before we parse it.
   child.on("close", (code) => {
     // Flush remaining stderr
     if (stderrBuffer.length > 0) {
@@ -250,9 +282,10 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
       const resultJson = stdoutBuffer.substring(startIdx + startMarker.length, endIdx).trim();
       try {
         const result = JSON.parse(resultJson);
+        gotResult = true;
         if (options.onResult) options.onResult(result);
       } catch (err) {
-        console.error("Failed to parse agent result:", err, resultJson.substring(0, 200));
+        console.error("Failed to parse result:", err, resultJson.substring(0, 200));
         if (options.onResult) {
           options.onResult({ status: "failed", error: `Failed to parse result: ${err.message}` });
         }
@@ -263,14 +296,15 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
   });
 
   child.on("error", (err) => {
-    console.error(`Failed to spawn ${role} agent:`, err);
+    console.error(`Failed to spawn ${label}:`, err);
     if (options.onExit) options.onExit(1);
   });
 
   return {
     pid: child.pid,
     kill: () => child.kill("SIGTERM"),
+    gotResult: () => gotResult,
   };
 }
 
-export { STATE_TO_ROLE, RESULT_TO_EVENT, getMapperKey };
+export { STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey };

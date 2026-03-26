@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
 
-// Map state keys to agent roles
+// Map state keys to agent/script roles
 const STATE_AGENTS = {
   "planning.running": "planner",
+  "branching": "script",
   "developing": "developer",
+  "committing": "script",
   "testing": "tester",
   "reviewing": "reviewer",
-  "merging.running": "githubber",
+  "pushing": "script",
   "merging.creatingPr": "githubber",
 };
 
@@ -15,27 +17,31 @@ const STATE_COLORS = {
   "idle": "#94a3b8",
   "planning.running": "#8b5cf6",
   "planning.awaitingApproval": "#a78bfa",
+  "branching": "#6366f1",
   "developing": "#3b82f6",
+  "committing": "#2563eb",
   "testing": "#f59e0b",
   "reviewing": "#ec4899",
-  "merging.running": "#06b6d4",
+  "pushing": "#06b6d4",
   "merging.awaitingApproval": "#22d3ee",
   "merging.creatingPr": "#06b6d4",
   "done": "#22c55e",
   "failed": "#ef4444",
 };
 
-const PIPELINE_STAGES = ["planning", "developing", "testing", "reviewing", "merging", "done"];
+const PIPELINE_STAGES = ["planning", "branching", "developing", "testing", "reviewing", "merging", "done"];
 
 // State display names
 const STATE_LABELS = {
   "idle": "IDLE",
   "planning.running": "PLANNING",
   "planning.awaitingApproval": "AWAITING APPROVAL",
+  "branching": "BRANCHING",
   "developing": "DEVELOPING",
+  "committing": "COMMITTING",
   "testing": "TESTING",
   "reviewing": "REVIEWING",
-  "merging.running": "MERGING",
+  "pushing": "PUSHING",
   "merging.awaitingApproval": "AWAITING APPROVAL",
   "merging.creatingPr": "CREATING PR",
   "done": "DONE",
@@ -52,9 +58,17 @@ const NEXT_EVENTS = {
     { type: "PLAN_APPROVED" },
     { type: "PLAN_REJECTED" },
   ],
+  "branching": [
+    { type: "BRANCH_READY", worktreePath: "/tmp/worktree", branchName: "task/test" },
+    { type: "BRANCH_FAILED", error: "Worktree creation failed" },
+  ],
   "developing": [
     { type: "CODE_COMPLETE", files: ["src/index.js"] },
     { type: "CODE_FAILED", error: "Build error" },
+  ],
+  "committing": [
+    { type: "COMMIT_COMPLETE", files: ["src/index.js"] },
+    { type: "COMMIT_FAILED", error: "Commit failed" },
   ],
   "testing": [
     { type: "TESTS_PASSED" },
@@ -64,9 +78,9 @@ const NEXT_EVENTS = {
     { type: "REVIEW_APPROVED" },
     { type: "CHANGES_REQUESTED", feedback: "Needs refactor" },
   ],
-  "merging.running": [
-    { type: "BRANCH_PUSHED", branchName: "task/test", diffSummary: "1 file changed" },
-    { type: "PR_FAILED", error: "Push failed" },
+  "pushing": [
+    { type: "PUSH_COMPLETE", branchName: "task/test", diffSummary: "1 file changed" },
+    { type: "PUSH_FAILED", error: "Push failed" },
   ],
   "merging.awaitingApproval": [
     { type: "PR_APPROVED" },
@@ -82,8 +96,14 @@ const NEXT_EVENTS = {
  * Get the parent stage name from a state key for pipeline bar matching.
  */
 function parentStage(sk) {
+  // Map sub-states to their pipeline stage
+  const stageMap = {
+    "committing": "developing",
+    "pushing": "merging",
+  };
   const dot = sk.indexOf(".");
-  return dot >= 0 ? sk.substring(0, dot) : sk;
+  const base = dot >= 0 ? sk.substring(0, dot) : sk;
+  return stageMap[base] || base;
 }
 
 function PipelineBar({ sk }) {

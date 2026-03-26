@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { workflowMachine } from "../machine.js";
-import { spawnAgent, stateKey, STATE_TO_ROLE, RESULT_TO_EVENT, getMapperKey } from "./spawner.js";
+import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey } from "./spawner.js";
 import {
   getAllTasks as dbGetAllTasks,
   getTask as dbGetTask,
@@ -46,10 +46,12 @@ function stateLabel(stateValue) {
     "idle": "todo",
     "planning.running": "planning",
     "planning.awaitingApproval": "awaiting_approval",
+    "branching": "branching",
     "developing": "in_progress",
+    "committing": "committing",
     "testing": "testing",
     "reviewing": "reviewing",
-    "merging.running": "merging",
+    "pushing": "pushing",
     "merging.awaitingApproval": "awaiting_approval",
     "merging.creatingPr": "creating_pr",
     "done": "published",
@@ -99,13 +101,16 @@ function cleanupAgent(taskId) {
  */
 function onStateTransition(taskId, stateValue, context) {
   const sk = stateKey(stateValue);
-  const role = STATE_TO_ROLE[sk];
-  if (!role) return;
+  const isAgent = !!STATE_TO_ROLE[sk];
+  const isScript = !!STATE_TO_SCRIPT[sk];
+  if (!isAgent && !isScript) return;
 
   cleanupAgent(taskId);
 
   const actor = actors.get(taskId);
   if (!actor) return;
+
+  const label = isAgent ? STATE_TO_ROLE[sk] : `script:${sk}`;
 
   const handoff = {
     instruction: actor._description,
@@ -124,24 +129,22 @@ function onStateTransition(taskId, stateValue, context) {
 
   const mapperKey = getMapperKey(sk);
 
-  // Track result locally — the activeAgents entry may be replaced by the next agent
-  // before onExit fires (because onResult triggers an XState transition which spawns
-  // the next agent synchronously, replacing this entry in activeAgents).
   let gotResult = false;
 
-  const handle = spawnAgent(sk, taskId, actor._description, handoff, {
+  const callbacks = {
     projectPath: actor._projectPath,
+    taskDescription: actor._description,
     onStdout(data) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_OUTPUT", taskId, agent: role, stream: "stdout", data });
+      broadcast({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stdout", data });
     },
     onStderr(data) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_OUTPUT", taskId, agent: role, stream: "stderr", data });
+      broadcast({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data });
     },
     onStatus(status) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_STATUS", taskId, agent: role, status });
+      broadcast({ type: "AGENT_STATUS", taskId, agent: label, status });
     },
     onResult(result) {
       resetStaleTimer();
@@ -149,7 +152,7 @@ function onStateTransition(taskId, stateValue, context) {
       const agentEntry = activeAgents.get(taskId);
       if (agentEntry) agentEntry.resultReceived = true;
 
-      broadcast({ type: "AGENT_RESULT", taskId, agent: role, result });
+      broadcast({ type: "AGENT_RESULT", taskId, agent: label, result });
 
       const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
       if (mapper) {
@@ -159,15 +162,14 @@ function onStateTransition(taskId, stateValue, context) {
     },
     onExit(code) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_EXITED", taskId, agent: role, exitCode: code });
+      broadcast({ type: "AGENT_EXITED", taskId, agent: label, exitCode: code });
 
       if (!gotResult) {
-        // Agent exited without producing a result
         const error = code !== 0
-          ? `Agent ${role} crashed with exit code ${code}`
-          : `Agent ${role} exited without producing a result`;
+          ? `${label} crashed with exit code ${code}`
+          : `${label} exited without producing a result`;
         console.error(error);
-        broadcast({ type: "AGENT_ERROR", taskId, agent: role, error });
+        broadcast({ type: "AGENT_ERROR", taskId, agent: label, error });
 
         const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
         if (mapper) {
@@ -176,12 +178,17 @@ function onStateTransition(taskId, stateValue, context) {
         }
       }
     },
-  });
+  };
+
+  // Spawn script or agent
+  const handle = isScript
+    ? spawnScript(sk, taskId, handoff, callbacks)
+    : spawnAgent(sk, taskId, actor._description, handoff, callbacks);
 
   if (!handle.pid) {
-    const error = `Failed to spawn ${role} agent — process did not start`;
+    const error = `Failed to spawn ${label} — process did not start`;
     console.error(error);
-    broadcast({ type: "AGENT_ERROR", taskId, agent: role, error });
+    broadcast({ type: "AGENT_ERROR", taskId, agent: label, error });
     const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
     if (mapper) {
       const event = mapper({ status: "failed", error });
@@ -190,35 +197,40 @@ function onStateTransition(taskId, stateValue, context) {
     return;
   }
 
-  broadcast({ type: "AGENT_SPAWNED", taskId, agent: role, pid: handle.pid });
+  broadcast({ type: "AGENT_SPAWNED", taskId, agent: label, pid: handle.pid });
 
-  // Timeout: kill agent if it runs too long
+  // Scripts get a shorter timeout (60s) vs agents (10 minutes)
+  const timeoutMs = isScript ? 60_000 : AGENT_TIMEOUT_MS;
+
   const timeoutTimer = setTimeout(() => {
     const agentEntry = activeAgents.get(taskId);
     if (agentEntry && !agentEntry.resultReceived) {
-      const error = `Agent ${role} timed out after ${AGENT_TIMEOUT_MS / 60000} minutes`;
+      const error = `${label} timed out after ${timeoutMs / 1000} seconds`;
       console.error(error);
-      broadcast({ type: "AGENT_ERROR", taskId, agent: role, error });
-      broadcast({ type: "AGENT_STATUS", taskId, agent: role, status: { state: "timeout", currentStep: error } });
+      broadcast({ type: "AGENT_ERROR", taskId, agent: label, error });
+      broadcast({ type: "AGENT_STATUS", taskId, agent: label, status: { state: "timeout", currentStep: error } });
       handle.kill();
     }
-  }, AGENT_TIMEOUT_MS);
+  }, timeoutMs);
 
-  // Stale detection: warn if no output for a while
-  const staleTimer = setInterval(() => {
-    const agentEntry = activeAgents.get(taskId);
-    if (!agentEntry || agentEntry.resultReceived) {
-      clearInterval(staleTimer);
-      return;
-    }
-    const elapsed = Date.now() - lastActivity;
-    if (elapsed >= AGENT_STALE_MS) {
-      broadcast({ type: "AGENT_STATUS", taskId, agent: role, status: {
-        state: "stale",
-        currentStep: `No activity for ${Math.round(elapsed / 60000)} minutes — agent may be stuck`,
-      }});
-    }
-  }, 30_000);
+  // Stale detection: only for agents (scripts are fast)
+  let staleTimer = null;
+  if (isAgent) {
+    staleTimer = setInterval(() => {
+      const agentEntry = activeAgents.get(taskId);
+      if (!agentEntry || agentEntry.resultReceived) {
+        clearInterval(staleTimer);
+        return;
+      }
+      const elapsed = Date.now() - lastActivity;
+      if (elapsed >= AGENT_STALE_MS) {
+        broadcast({ type: "AGENT_STATUS", taskId, agent: label, status: {
+          state: "stale",
+          currentStep: `No activity for ${Math.round(elapsed / 60000)} minutes — agent may be stuck`,
+        }});
+      }
+    }, 30_000);
+  }
 
   activeAgents.set(taskId, { handle, resultReceived: false, timeoutTimer, staleTimer });
 }
@@ -251,8 +263,8 @@ function wireActor(id, actor) {
       context: snapshot.context,
     });
 
-    // Spawn agent if state has one
-    if (STATE_TO_ROLE[sk]) {
+    // Spawn agent or script if state has one
+    if (STATE_TO_ROLE[sk] || STATE_TO_SCRIPT[sk]) {
       onStateTransition(id, snapshot.value, snapshot.context);
     }
 
@@ -444,6 +456,53 @@ app.post("/tasks/:id/approve", (req, res) => {
   return res.status(400).json({ error: `Current state ${sk} is not an approval gate` });
 });
 
+app.post("/tasks/:id/restart", async (req, res) => {
+  const id = req.params.id;
+
+  // Get task metadata from live actor or db
+  let description, projectPath, createdAt;
+  const existingActor = actors.get(id);
+  if (existingActor) {
+    description = existingActor._description;
+    projectPath = existingActor._projectPath;
+    createdAt = existingActor._createdAt;
+    // Kill any running agent and stop actor
+    cleanupAgent(id);
+    existingActor.stop();
+    actors.delete(id);
+  } else {
+    // Task is in a terminal state (done/failed) — no live actor, load from db
+    const dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+    description = dbTask.description;
+    projectPath = dbTask.projectPath;
+    createdAt = dbTask.createdAt;
+  }
+
+  // Create a fresh actor with the same description and project
+  const newActor = createActor(workflowMachine);
+  newActor._description = description;
+  newActor._projectPath = projectPath;
+  newActor._createdAt = createdAt;
+
+  actors.set(id, newActor);
+  wireActor(id, newActor);
+  newActor.start();
+
+  // Persist the reset state
+  const snap = newActor.getSnapshot();
+  await dbUpdateTask(id, {
+    state: snap.value,
+    stateKey: stateKey(snap.value),
+    label: stateLabel(snap.value),
+    context: snap.context,
+  });
+
+  broadcast({ type: "TASK_RESTARTED", taskId: id });
+
+  res.json(getTaskSnapshot(id));
+});
+
 app.delete("/tasks/:id", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (actor) {
@@ -527,59 +586,32 @@ async function start() {
     // Replay events to get back to the persisted state
     actor.send({ type: "START", task: task.description });
 
+    // Helper: build cumulative replay sequences
+    const planReady = { type: "PLAN_READY", plan: task.context?.plan };
+    const planApproved = { type: "PLAN_APPROVED" };
+    const branchReady = { type: "BRANCH_READY", worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName };
+    const codeComplete = { type: "CODE_COMPLETE", files: task.context?.result?.files || [] };
+    const commitComplete = { type: "COMMIT_COMPLETE", files: task.context?.result?.files || [] };
+    const testsPassed = { type: "TESTS_PASSED" };
+    const reviewApproved = { type: "REVIEW_APPROVED" };
+    const pushComplete = { type: "PUSH_COMPLETE", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
+    const prApproved = { type: "PR_APPROVED" };
+
     const replayEvents = {
       "planning.running": [],
-      "planning.awaitingApproval": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-      ],
-      "developing": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-      ],
-      "testing": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
-      ],
-      "reviewing": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
-        { type: "TESTS_PASSED" },
-      ],
-      "merging.running": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
-        { type: "TESTS_PASSED" },
-        { type: "REVIEW_APPROVED" },
-      ],
-      "merging.awaitingApproval": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
-        { type: "TESTS_PASSED" },
-        { type: "REVIEW_APPROVED" },
-        { type: "BRANCH_PUSHED", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" },
-      ],
-      "merging.creatingPr": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
-        { type: "TESTS_PASSED" },
-        { type: "REVIEW_APPROVED" },
-        { type: "BRANCH_PUSHED", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" },
-        { type: "PR_APPROVED" },
-      ],
+      "planning.awaitingApproval": [planReady],
+      "branching": [planReady, planApproved],
+      "developing": [planReady, planApproved, branchReady],
+      "committing": [planReady, planApproved, branchReady, codeComplete],
+      "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
+      "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
+      "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
+      "merging.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete],
+      "merging.creatingPr": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete, prApproved],
       // Legacy flat state names for backwards compat
       "planning": [],
-      "merging": [
-        { type: "PLAN_READY", plan: task.context?.plan },
-        { type: "PLAN_APPROVED" },
-        { type: "CODE_COMPLETE", files: task.context?.result?.files, worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName },
-        { type: "TESTS_PASSED" },
-        { type: "REVIEW_APPROVED" },
-      ],
+      "merging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
+      "merging.running": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
     };
 
     const events = replayEvents[sk];

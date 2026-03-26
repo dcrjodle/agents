@@ -35,6 +35,7 @@ export function App() {
     errors,
     createTask,
     startTask,
+    restartTask,
     sendEvent,
     deleteTask,
     approveTask,
@@ -270,6 +271,7 @@ export function App() {
             onSelectTask={setSelectedTaskId}
             onDelete={deleteTask}
             onStart={startTask}
+            onRestart={restartTask}
             rowRefsCallback={handleRowRefs}
           />
         </div>

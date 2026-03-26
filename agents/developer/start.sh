@@ -12,31 +12,17 @@ TASK_ID="${TASK_ID:-}"
 PROJECT=$(json_field "$HANDOFF" "projectPath")
 PLAN_MARKDOWN=$(json_field "$HANDOFF" "context.plan.markdown")
 REVIEW_FEEDBACK=$(json_field "$HANDOFF" "context.error" "")
-EXISTING_WORKTREE=$(json_field "$HANDOFF" "context.result.worktreePath" "")
-EXISTING_BRANCH=$(json_field "$HANDOFF" "context.result.branchName" "")
+WORKTREE_PATH=$(json_field "$HANDOFF" "context.result.worktreePath" "")
 RETRY_COUNT=$(json_field "$HANDOFF" "context.retries" "0")
 
 if [ -z "$TASK" ] || [ "$TASK" = "undefined" ]; then
   TASK="${TASK_DESCRIPTION:-}"
 fi
 
-if [ -z "$PROJECT" ] || [ "$PROJECT" = "undefined" ]; then
-  echo "[developer] ERROR: No project path provided" >&2
+if [ -z "$WORKTREE_PATH" ] || [ "$WORKTREE_PATH" = "undefined" ] || [ ! -d "$WORKTREE_PATH" ]; then
+  echo "[developer] ERROR: No valid worktree path provided" >&2
+  emit_result '{"status":"failed","error":"No valid worktree path — branching script must run first"}'
   exit 1
-fi
-
-emit_status "Creating worktree"
-
-# Create or reuse worktree for isolated work
-BRANCH_NAME="${EXISTING_BRANCH:-task/${TASK_ID}}"
-
-if [ -n "$EXISTING_WORKTREE" ] && [ "$EXISTING_WORKTREE" != "undefined" ] && [ -d "$EXISTING_WORKTREE" ]; then
-  echo "[developer] Reusing existing worktree: $EXISTING_WORKTREE" >&2
-  WORKTREE_PATH="$EXISTING_WORKTREE"
-else
-  echo "[developer] Creating worktree: $BRANCH_NAME" >&2
-  source "$AGENT_DIR/tools/create-worktree.sh"
-  WORKTREE_PATH=$(create_worktree "$PROJECT" "$BRANCH_NAME" 2>&1 | tail -1)
 fi
 
 echo "[developer] Working in: $WORKTREE_PATH" >&2
@@ -72,7 +58,7 @@ IMPORTANT:
 - Implement all changes described in the plan
 - Do NOT delete or remove any existing routes, imports, or functionality not mentioned in the plan
 - Read existing files BEFORE modifying them to understand current structure
-- Commit your changes with a descriptive message
+- Do NOT run any git commands (no git add, commit, push, etc.) — git is handled separately
 - Output a summary of all files you changed
 "
 
@@ -86,19 +72,8 @@ DEV_OUTPUT=$(echo "$PROMPT" | ${CLAUDE_CLI:-claude} --print \
 
 echo "[developer] Implementation complete." >&2
 
-# Get list of changed files in the worktree
-FILES_CHANGED="[]"
-if [ -d "$WORKTREE_PATH" ]; then
-  FILES_CHANGED=$(cd "$WORKTREE_PATH" && git diff --name-only main...HEAD 2>/dev/null | node -e "
-const lines = require('fs').readFileSync('/dev/stdin','utf8').trim().split('\n').filter(Boolean);
-console.log(JSON.stringify(lines));
-" 2>/dev/null || echo "[]")
-fi
-
 SUMMARY_JSON=$(echo "$DEV_OUTPUT" | json_escape)
-WORKTREE_JSON=$(json_escape_str "$WORKTREE_PATH")
-BRANCH_JSON=$(json_escape_str "$BRANCH_NAME")
 
-emit_result "{\"status\":\"complete\",\"summary\":$SUMMARY_JSON,\"filesChanged\":$FILES_CHANGED,\"worktreePath\":$WORKTREE_JSON,\"branchName\":$BRANCH_JSON}"
+emit_result "{\"status\":\"complete\",\"summary\":$SUMMARY_JSON}"
 
 echo "[developer] Done." >&2

@@ -290,6 +290,19 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const restartTask = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/restart`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to restart task: ${res.statusText}`);
+    // Clear logs and errors for this task
+    setAgentLogs((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+    setErrors((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+    setPendingPlans((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+    return res.json();
+  };
+
   const clearErrors = (taskId) => {
     setErrors((prev) => {
       const next = { ...prev };
@@ -298,7 +311,7 @@ export function useWorkflow() {
     });
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
+  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
 }
 
 export { stateKey };
