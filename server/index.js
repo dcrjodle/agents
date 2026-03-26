@@ -13,6 +13,9 @@ import {
   deleteTask as dbDeleteTask,
   getConfig,
   getDb,
+  appendTaskLog,
+  getTaskLogs,
+  clearTaskLogs,
 } from "./db.js";
 
 const app = express();
@@ -65,6 +68,45 @@ function broadcast(message) {
   for (const client of wss.clients) {
     if (client.readyState === 1) client.send(data);
   }
+}
+
+/**
+ * Broadcast an agent-related message and persist it as a log entry.
+ * The log entry format matches what the frontend's appendLog() expects.
+ */
+function broadcastAndLog(message) {
+  broadcast(message);
+
+  const { type, taskId, agent, stream, data, status, exitCode, pid, result, error: msgError } = message;
+  if (!taskId) return;
+
+  let logEntry;
+  const time = new Date().toISOString();
+
+  switch (type) {
+    case "AGENT_SPAWNED":
+      logEntry = { time, type: "spawned", agent, data: `Agent ${agent} spawned (pid: ${pid})`, pid };
+      break;
+    case "AGENT_OUTPUT":
+      logEntry = { time, type: "output", agent, stream, data };
+      break;
+    case "AGENT_STATUS":
+      logEntry = { time, type: "status", agent, data: `[${agent}] ${status?.currentStep || status?.state}`, status };
+      break;
+    case "AGENT_EXITED":
+      logEntry = { time, type: "exited", agent, data: `Agent ${agent} exited (code: ${exitCode})`, exitCode };
+      break;
+    case "AGENT_ERROR":
+      logEntry = { time, type: "error", agent, data: `ERROR [${agent}]: ${msgError}`, error: msgError };
+      break;
+    case "AGENT_RESULT":
+      logEntry = { time, type: "message", agent, data: `[${agent}] result: ${result?.summary || result?.status || ""}`, result };
+      break;
+    default:
+      return; // Don't persist non-agent messages
+  }
+
+  appendTaskLog(taskId, logEntry);
 }
 
 function getTaskSnapshot(id) {
@@ -136,15 +178,15 @@ function onStateTransition(taskId, stateValue, context) {
     taskDescription: actor._description,
     onStdout(data) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stdout", data });
+      broadcastAndLog({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stdout", data });
     },
     onStderr(data) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data });
+      broadcastAndLog({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data });
     },
     onStatus(status) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_STATUS", taskId, agent: label, status });
+      broadcastAndLog({ type: "AGENT_STATUS", taskId, agent: label, status });
     },
     onResult(result) {
       resetStaleTimer();
@@ -152,7 +194,7 @@ function onStateTransition(taskId, stateValue, context) {
       const agentEntry = activeAgents.get(taskId);
       if (agentEntry) agentEntry.resultReceived = true;
 
-      broadcast({ type: "AGENT_RESULT", taskId, agent: label, result });
+      broadcastAndLog({ type: "AGENT_RESULT", taskId, agent: label, result });
 
       const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
       if (mapper) {
@@ -162,14 +204,14 @@ function onStateTransition(taskId, stateValue, context) {
     },
     onExit(code) {
       resetStaleTimer();
-      broadcast({ type: "AGENT_EXITED", taskId, agent: label, exitCode: code });
+      broadcastAndLog({ type: "AGENT_EXITED", taskId, agent: label, exitCode: code });
 
       if (!gotResult) {
         const error = code !== 0
           ? `${label} crashed with exit code ${code}`
           : `${label} exited without producing a result`;
         console.error(error);
-        broadcast({ type: "AGENT_ERROR", taskId, agent: label, error });
+        broadcastAndLog({ type: "AGENT_ERROR", taskId, agent: label, error });
 
         const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
         if (mapper) {
@@ -188,7 +230,7 @@ function onStateTransition(taskId, stateValue, context) {
   if (!handle.pid) {
     const error = `Failed to spawn ${label} — process did not start`;
     console.error(error);
-    broadcast({ type: "AGENT_ERROR", taskId, agent: label, error });
+    broadcastAndLog({ type: "AGENT_ERROR", taskId, agent: label, error });
     const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
     if (mapper) {
       const event = mapper({ status: "failed", error });
@@ -197,7 +239,7 @@ function onStateTransition(taskId, stateValue, context) {
     return;
   }
 
-  broadcast({ type: "AGENT_SPAWNED", taskId, agent: label, pid: handle.pid });
+  broadcastAndLog({ type: "AGENT_SPAWNED", taskId, agent: label, pid: handle.pid });
 
   // Scripts get a shorter timeout (60s) vs agents (10 minutes)
   const timeoutMs = isScript ? 60_000 : AGENT_TIMEOUT_MS;
@@ -207,8 +249,8 @@ function onStateTransition(taskId, stateValue, context) {
     if (agentEntry && !agentEntry.resultReceived) {
       const error = `${label} timed out after ${timeoutMs / 1000} seconds`;
       console.error(error);
-      broadcast({ type: "AGENT_ERROR", taskId, agent: label, error });
-      broadcast({ type: "AGENT_STATUS", taskId, agent: label, status: { state: "timeout", currentStep: error } });
+      broadcastAndLog({ type: "AGENT_ERROR", taskId, agent: label, error });
+      broadcastAndLog({ type: "AGENT_STATUS", taskId, agent: label, status: { state: "timeout", currentStep: error } });
       handle.kill();
     }
   }, timeoutMs);
@@ -224,7 +266,7 @@ function onStateTransition(taskId, stateValue, context) {
       }
       const elapsed = Date.now() - lastActivity;
       if (elapsed >= AGENT_STALE_MS) {
-        broadcast({ type: "AGENT_STATUS", taskId, agent: label, status: {
+        broadcastAndLog({ type: "AGENT_STATUS", taskId, agent: label, status: {
           state: "stale",
           currentStep: `No activity for ${Math.round(elapsed / 60000)} minutes — agent may be stuck`,
         }});
@@ -479,6 +521,9 @@ app.post("/tasks/:id/restart", async (req, res) => {
     createdAt = dbTask.createdAt;
   }
 
+  // Clear persisted logs for this task
+  await clearTaskLogs(id);
+
   // Create a fresh actor with the same description and project
   const newActor = createActor(workflowMachine);
   newActor._description = description;
@@ -510,6 +555,7 @@ app.delete("/tasks/:id", async (req, res) => {
     actor.stop();
     actors.delete(req.params.id);
   }
+  await clearTaskLogs(req.params.id);
   await dbDeleteTask(req.params.id);
   broadcast({ type: "TASK_DELETED", taskId: req.params.id });
   res.json({ ok: true });
@@ -524,7 +570,20 @@ wss.on("connection", async (ws) => {
     const actor = actors.get(t.id);
     return actor ? getTaskSnapshot(t.id) : t;
   });
-  ws.send(JSON.stringify({ type: "INIT", tasks: list }));
+
+  // Include persisted logs for active (non-terminal) tasks
+  const logs = {};
+  for (const t of dbTasks) {
+    const sk = typeof t.state === "string" ? t.state : stateKey(t.state);
+    if (sk !== "done" && sk !== "failed") {
+      const taskLogs = await getTaskLogs(t.id);
+      if (taskLogs.length > 0) {
+        logs[t.id] = taskLogs;
+      }
+    }
+  }
+
+  ws.send(JSON.stringify({ type: "INIT", tasks: list, logs }));
 
   ws.on("message", (raw) => {
     try {
