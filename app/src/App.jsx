@@ -104,6 +104,27 @@ export function App() {
     if (!selectedProject && list.length > 0) setSelectedProject(list[0]);
   }, [selectedProject]);
 
+  const handleReorderProjects = useCallback(async (reordered) => {
+    // Optimistic update
+    setProjects(reordered);
+    try {
+      const res = await fetch(`${API_BASE}/config/projects/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projects: reordered }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        const config = await fetch(`${API_BASE}/config`).then((r) => r.json());
+        setProjects(config.projects || []);
+      }
+    } catch (err) {
+      console.error("Failed to reorder projects:", err);
+      const config = await fetch(`${API_BASE}/config`).then((r) => r.json());
+      setProjects(config.projects || []);
+    }
+  }, []);
+
   const handleRemoveProject = useCallback(async (path) => {
     const res = await fetch(`${API_BASE}/config/projects`, {
       method: "DELETE",
@@ -166,6 +187,7 @@ export function App() {
             projects={projects}
             selected={selectedProject}
             onSelect={handleSelectProject}
+            onReorder={handleReorderProjects}
           />
           <CreateTask onCreate={handleCreateTask} />
         </>
