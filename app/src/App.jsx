@@ -5,6 +5,7 @@ import { TaskList } from "./components/TaskList.jsx";
 import { ProjectTabs } from "./components/ProjectTabs.jsx";
 import { PlanDialog } from "./components/PlanDialog.jsx";
 import { StreamPanel } from "./components/StreamPanel.jsx";
+import { StreamColumn } from "./components/StreamColumn.jsx";
 import { ConnectionLines } from "./components/ConnectionLines.jsx";
 import { SettingsDialog } from "./components/SettingsDialog.jsx";
 
@@ -272,7 +273,7 @@ export function App() {
           <div style={{ width: 48, flexShrink: 0 }} />
         )}
 
-        {/* Stream panel */}
+        {/* Stream panel (full in stream mode, header-only in columns mode) */}
         {selectedTask && (
           <StreamPanel
             ref={streamPanelRef}
@@ -288,6 +289,46 @@ export function App() {
             columnRefsCallback={handleColumnRefs}
           />
         )}
+
+        {/* Independent column nodes in columns mode — latest agent first */}
+        {selectedTask && columnsMode && (() => {
+          const taskLogs = agentLogs[selectedTaskId] || [];
+          const grouped = {};
+          for (const entry of taskLogs) {
+            const agent = entry.agent || "_system";
+            if (!grouped[agent]) grouped[agent] = [];
+            grouped[agent].push(entry);
+          }
+          // Order: active agents reversed (latest first), then system at the end
+          const agents = Object.keys(grouped).filter((a) => a !== "_system");
+          const ordered = [...agents].reverse();
+          if (grouped["_system"]) ordered.push("_system");
+
+          return ordered.map((agent) => (
+            <div key={agent} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+              {/* Connector line between nodes */}
+              <div style={{
+                width: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                <div style={{
+                  width: "100%",
+                  height: 1,
+                  borderTop: "1px dashed var(--line-color)",
+                  animation: "draw-line 0.3s ease-out",
+                }} />
+              </div>
+              <StreamColumn
+                variant={agent === "_system" ? "system" : "agent"}
+                agent={agent}
+                logs={grouped[agent]}
+              />
+            </div>
+          ));
+        })()}
       </div>
 
       {viewingPlan && (

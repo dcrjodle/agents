@@ -1,9 +1,8 @@
-import { useState, useRef, useEffect, forwardRef } from "react";
+import { useRef, useEffect, forwardRef } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
-import { STATE_LABELS, NEXT_EVENTS, AGENT_COLUMN_COLORS } from "../constants.js";
+import { STATE_LABELS, NEXT_EVENTS } from "../constants.js";
 import { LogLine } from "./LogLine.jsx";
 import { PipelineBar } from "./PipelineBar.jsx";
-import { StreamColumn } from "./StreamColumn.jsx";
 
 export const StreamPanel = forwardRef(function StreamPanel({
   task,
@@ -18,40 +17,20 @@ export const StreamPanel = forwardRef(function StreamPanel({
   columnRefsCallback,
 }, ref) {
   const logEndRef = useRef(null);
-  const columnRefs = useRef({});
 
   const sk = task.stateKey || stateKey(task.state);
   const events = NEXT_EVENTS[sk] || [];
   const label = STATE_LABELS[sk] || sk;
 
   useEffect(() => {
-    if (logEndRef.current) {
+    if (!columnsMode && logEndRef.current) {
       logEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [logs.length]);
-
-  // Group logs by agent for columns view
-  const agentLogs = {};
-  if (columnsMode) {
-    for (const entry of logs) {
-      const agent = entry.agent || "_system";
-      if (!agentLogs[agent]) agentLogs[agent] = [];
-      agentLogs[agent].push(entry);
-    }
-  }
-
-  const activeAgents = Object.keys(agentLogs).filter((a) => a !== "_system");
-
-  // Report column header refs to parent
-  useEffect(() => {
-    if (columnRefsCallback) {
-      columnRefsCallback(columnRefs.current);
-    }
-  });
+  }, [logs.length, columnsMode]);
 
   return (
     <div ref={ref} style={{
-      flex: 1,
+      flex: columnsMode ? "none" : 1,
       display: "flex",
       flexDirection: "column",
       background: "var(--bg-surface)",
@@ -60,6 +39,9 @@ export const StreamPanel = forwardRef(function StreamPanel({
       overflow: "hidden",
       animation: "fade-in 0.25s ease-out",
       minHeight: 0,
+      width: columnsMode ? 320 : undefined,
+      flexShrink: 0,
+      alignSelf: columnsMode ? "flex-start" : undefined,
     }}>
       {/* Header */}
       <div style={{
@@ -137,36 +119,9 @@ export const StreamPanel = forwardRef(function StreamPanel({
         </div>
       )}
 
-      {/* Log area */}
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
-        {columnsMode ? (
-          <div style={{
-            display: "flex",
-            flex: 1,
-            overflowX: "auto",
-            overflowY: "hidden",
-          }}>
-            {agentLogs["_system"] && agentLogs["_system"].length > 0 && (
-              <StreamColumn
-                ref={(el) => { columnRefs.current["_system"] = el; }}
-                variant="system"
-                agent="_system"
-                logs={agentLogs["_system"]}
-                isLast={activeAgents.length === 0}
-              />
-            )}
-            {activeAgents.map((agent, idx) => (
-              <StreamColumn
-                key={agent}
-                ref={(el) => { columnRefs.current[agent] = el; }}
-                variant="agent"
-                agent={agent}
-                logs={agentLogs[agent]}
-                isLast={idx === activeAgents.length - 1}
-              />
-            ))}
-          </div>
-        ) : (
+      {/* Log area — only shown in stream mode; columns mode renders nodes externally */}
+      {!columnsMode && (
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
           <div style={{
             flex: 1,
             overflowY: "auto",
@@ -187,8 +142,8 @@ export const StreamPanel = forwardRef(function StreamPanel({
             )}
             <div ref={logEndRef} />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div style={{
