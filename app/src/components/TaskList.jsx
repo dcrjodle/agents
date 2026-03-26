@@ -5,6 +5,17 @@ import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
 import "../styles/task-list.css";
 
+const DONE_COLLAPSED_KEY = "taskList.doneCollapsed";
+
+function getInitialCollapsed() {
+  try {
+    const stored = localStorage.getItem(DONE_COLLAPSED_KEY);
+    return stored === null ? true : stored === "true";
+  } catch {
+    return true;
+  }
+}
+
 export function TaskList({
   tasks,
   selectedTaskId,
@@ -17,6 +28,7 @@ export function TaskList({
   pendingPlans,
 }) {
   const [contextMenu, setContextMenu] = useState(null);
+  const [doneCollapsed, setDoneCollapsed] = useState(getInitialCollapsed);
 
   const handleContextMenu = useCallback((e, task) => {
     e.preventDefault();
@@ -25,6 +37,17 @@ export function TaskList({
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
+  }, []);
+
+  const handleToggle = useCallback((e) => {
+    const isOpen = e.target.open;
+    const collapsed = !isOpen;
+    setDoneCollapsed(collapsed);
+    try {
+      localStorage.setItem(DONE_COLLAPSED_KEY, String(collapsed));
+    } catch {
+      // ignore
+    }
   }, []);
 
   if (tasks.length === 0) {
@@ -82,37 +105,78 @@ export function TaskList({
     return items;
   };
 
+  const activeTasks = [];
+  const doneTasks = [];
+
+  for (const task of tasks) {
+    const sk = task.stateKey || stateKey(task.state);
+    if (sk === "done") {
+      doneTasks.push(task);
+    } else {
+      activeTasks.push(task);
+    }
+  }
+
+  const renderTask = (task) => {
+    const sk = task.stateKey || stateKey(task.state);
+    const label = STATE_LABELS[sk] || sk;
+    const isSelected = task.id === selectedTaskId;
+    const isDone = sk === "done";
+    const isFailed = sk === "failed";
+
+    let descClass = "task-row-description-text";
+    if (isDone) descClass += " done";
+    if (isFailed) descClass += " failed";
+
+    return (
+      <div
+        key={task.id}
+        className={`task-row${isSelected ? " selected" : ""}`}
+        onClick={() => onSelectTask(isSelected ? null : task.id)}
+        onContextMenu={(e) => handleContextMenu(e, task)}
+      >
+        <div className="task-row-header">
+          <StatusIcon stateKey={sk} size={16} />
+          <span className="task-row-state-label">{label}</span>
+          <div className="task-row-spacer" />
+        </div>
+        <div className="task-row-description">
+          <span className={descClass}>{task.description}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="task-list">
-      {tasks.map((task) => {
-        const sk = task.stateKey || stateKey(task.state);
-        const label = STATE_LABELS[sk] || sk;
-        const isSelected = task.id === selectedTaskId;
-        const isDone = sk === "done";
-        const isFailed = sk === "failed";
+      {activeTasks.map(renderTask)}
 
-        let descClass = "task-row-description-text";
-        if (isDone) descClass += " done";
-        if (isFailed) descClass += " failed";
+      {doneTasks.length > 0 && (
+        <details
+          className="task-list-done-section"
+          open={!doneCollapsed}
+          onToggle={handleToggle}
+        >
+          <summary className="task-list-done-summary">
+            <span
+              className="task-list-done-triangle"
+              style={{
+                transform: doneCollapsed ? "rotate(0deg)" : "rotate(90deg)",
+              }}
+            >
+              ▶
+            </span>
+            <span>done</span>
+            <span className="task-list-done-badge">
+              {doneTasks.length}
+            </span>
+          </summary>
 
-        return (
-          <div
-            key={task.id}
-            className={`task-row${isSelected ? " selected" : ""}`}
-            onClick={() => onSelectTask(isSelected ? null : task.id)}
-            onContextMenu={(e) => handleContextMenu(e, task)}
-          >
-            <div className="task-row-header">
-              <StatusIcon stateKey={sk} size={16} />
-              <span className="task-row-state-label">{label}</span>
-              <div className="task-row-spacer" />
-            </div>
-            <div className="task-row-description">
-              <span className={descClass}>{task.description}</span>
-            </div>
+          <div className="task-list-done-items">
+            {doneTasks.map(renderTask)}
           </div>
-        );
-      })}
+        </details>
+      )}
 
       {contextMenu && (
         <ContextMenu
