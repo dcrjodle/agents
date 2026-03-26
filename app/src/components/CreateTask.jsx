@@ -11,15 +11,42 @@ export function CreateTask({ onCreate }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+    <form onSubmit={handleSubmit} style={{
+      display: "flex",
+      gap: 8,
+      marginBottom: 20,
+    }}>
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Describe a task..."
-        style={{ flex: 1, padding: "8px 12px", fontSize: 14, border: "1px solid #ccc", borderRadius: 6 }}
+        placeholder="describe a task..."
+        style={{
+          flex: 1,
+          padding: "7px 12px",
+          fontSize: 12,
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+          background: "var(--bg-surface)",
+          color: "var(--text)",
+          fontFamily: "var(--font-mono)",
+          outline: "none",
+        }}
       />
-      <button type="submit" style={{ padding: "8px 16px", fontSize: 14, borderRadius: 6, border: "none", background: "#111", color: "#fff", cursor: "pointer" }}>
-        Create
+      <button
+        type="submit"
+        style={{
+          padding: "7px 14px",
+          fontSize: 12,
+          borderRadius: 4,
+          border: "1px solid var(--border)",
+          background: "var(--text)",
+          color: "var(--bg)",
+          cursor: "pointer",
+          fontFamily: "var(--font-mono)",
+          fontWeight: 500,
+        }}
+      >
+        add
       </button>
     </form>
   );

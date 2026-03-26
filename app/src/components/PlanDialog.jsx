@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose }) {
   const contentRef = useRef(null);
 
-  // Close on Escape key
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape") onClose();
@@ -12,7 +11,6 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Scroll to top when plan changes
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [plan]);
@@ -25,76 +23,71 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0, 0, 0, 0.7)",
+        background: "rgba(0, 0, 0, 0.3)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
         padding: 24,
+        backdropFilter: "blur(2px)",
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#1a1a1a",
-          border: "1px solid #333",
-          borderRadius: 12,
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
           width: "100%",
-          maxWidth: 720,
+          maxWidth: 680,
           maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
         }}
       >
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "16px 20px",
-            borderBottom: "1px solid #2d2d2d",
-            flexShrink: 0,
-          }}
-        >
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span
-                style={{
-                  background: "#8b5cf6",
-                  color: "#fff",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "2px 8px",
-                  borderRadius: 4,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                }}
-              >
-                Plan Review
-              </span>
-              <span style={{ color: "#e5e7eb", fontSize: 14, fontWeight: 500 }}>{taskDescription}</span>
-            </div>
-            {plan.projectPath && (
-              <div style={{ color: "#6b7280", fontSize: 11, marginTop: 4, fontFamily: "monospace" }}>
-                {plan.projectPath}
-              </div>
-            )}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 18px",
+          borderBottom: "1px solid var(--border-light)",
+          flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{
+              fontSize: 10,
+              color: "var(--dot-planning)",
+              fontWeight: 600,
+              textTransform: "lowercase",
+              letterSpacing: "0.05em",
+            }}>
+              plan review
+            </span>
+            <span style={{
+              fontSize: 12,
+              color: "var(--text)",
+              fontWeight: 500,
+            }}>
+              {taskDescription}
+            </span>
           </div>
           <button
             onClick={onClose}
             style={{
               background: "none",
               border: "none",
-              color: "#6b7280",
-              fontSize: 20,
+              color: "var(--text-dim)",
+              fontSize: 16,
               cursor: "pointer",
               padding: "0 4px",
               lineHeight: 1,
+              fontFamily: "var(--font-mono)",
             }}
           >
-            x
+            ×
           </button>
         </div>
 
@@ -104,64 +97,73 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "20px 24px",
+            padding: "16px 18px",
           }}
         >
-          <pre
-            style={{
-              margin: 0,
-              fontFamily: "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace",
-              fontSize: 13,
-              lineHeight: 1.6,
-              color: "#d1d5db",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
+          <pre style={{
+            margin: 0,
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            lineHeight: 1.6,
+            color: "var(--text)",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}>
             {plan.markdown}
           </pre>
+          {plan.projectPath && (
+            <div style={{
+              color: "var(--text-dim)",
+              fontSize: 10,
+              marginTop: 12,
+              paddingTop: 8,
+              borderTop: "1px solid var(--border-light)",
+            }}>
+              {plan.projectPath}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-            padding: "12px 20px",
-            borderTop: "1px solid #2d2d2d",
-            flexShrink: 0,
-          }}
-        >
+        <div style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          padding: "10px 18px",
+          borderTop: "1px solid var(--border-light)",
+          flexShrink: 0,
+        }}>
           <button
             onClick={onReject}
             style={{
-              fontSize: 13,
-              padding: "8px 20px",
-              borderRadius: 6,
-              border: "1px solid #3d3d3d",
-              background: "#2d2d2d",
-              color: "#9ca3af",
+              fontSize: 12,
+              padding: "6px 16px",
+              borderRadius: 4,
+              border: "1px solid var(--border)",
+              background: "transparent",
+              color: "var(--text-muted)",
               cursor: "pointer",
               fontWeight: 500,
+              fontFamily: "var(--font-mono)",
             }}
           >
-            Reject
+            reject
           </button>
           <button
             onClick={onApprove}
             style={{
-              fontSize: 13,
-              padding: "8px 20px",
-              borderRadius: 6,
-              border: "1px solid #7c3aed",
-              background: "#5b21b6",
-              color: "#fff",
+              fontSize: 12,
+              padding: "6px 16px",
+              borderRadius: 4,
+              border: "1px solid var(--accent)",
+              background: "var(--text)",
+              color: "var(--bg)",
               cursor: "pointer",
               fontWeight: 600,
+              fontFamily: "var(--font-mono)",
             }}
           >
-            Approve Plan
+            approve
           </button>
         </div>
       </div>
