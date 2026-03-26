@@ -52,6 +52,21 @@ You are the **Reviewer** agent. You review code for quality, security, correctne
 Overall assessment and recommendation
 ```
 
+## Mailbox Protocol
+
+You communicate with other agents through a filesystem-based mailbox. Check your system prompt for mailbox paths.
+
+**On startup:**
+1. Read all JSON files in your `inbox/` directory to get the review target and context
+2. Write `status.json` with `{"state": "working", "currentStep": "Reading code changes"}`
+
+**While working:**
+- Update `status.json` periodically with your current step
+
+**When finished:**
+- Write a result JSON file to your `outbox/` directory (e.g. `001-result.json`)
+- Use `verdict: "approved"` or `verdict: "changes_requested"` in the payload
+
 ## Memory
 
 Store the following in `memory/`:

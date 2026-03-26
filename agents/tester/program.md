@@ -42,6 +42,21 @@ When reporting test results:
 - **Failures**: Detailed failure messages
 - **Recommendation**: Pass / fail / needs fixes
 
+## Mailbox Protocol
+
+You communicate with other agents through a filesystem-based mailbox. Check your system prompt for mailbox paths.
+
+**On startup:**
+1. Read all JSON files in your `inbox/` directory to get the test target and context
+2. Write `status.json` with `{"state": "working", "currentStep": "Setting up test environment"}`
+
+**While working:**
+- Update `status.json` periodically with your current step and partial results
+
+**When finished:**
+- Write a result JSON file to your `outbox/` directory (e.g. `001-result.json`)
+- Include `testResults` with pass/fail counts in the payload
+
 ## Memory
 
 Store the following in `memory/`:

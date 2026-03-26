@@ -10,17 +10,31 @@ if [ -z "$TASK" ]; then
   exit 1
 fi
 
-# Create isolated workspace for this run
 WORKSPACE="$AGENT_DIR/memory/runs/${TASK_ID:-$(date +%s)}"
 mkdir -p "$WORKSPACE"
+
+MAILBOX="${MAILBOX_DIR:-}"
 
 echo "=== Manager Agent ==="
 echo "Task: $TASK"
 echo "Workspace: $WORKSPACE"
+[ -n "$MAILBOX" ] && echo "Mailbox: $MAILBOX"
 
-# Run claude code in the isolated workspace with the agent's program as system prompt
+MAILBOX_PROMPT=""
+if [ -n "$MAILBOX" ]; then
+  MAILBOX_PROMPT="$(cat <<EOF
+## Mailbox Communication
+Your mailbox directory: $MAILBOX
+- Read your task details from: $MAILBOX/inbox/
+- Write your results to: $MAILBOX/outbox/ as a JSON file (e.g. 001-result.json)
+- Update your status at: $MAILBOX/status.json
+EOF
+)"
+fi
+
 exec claude --print \
   --system-prompt "$(cat "$AGENT_DIR/program.md")" \
   --append-system-prompt "Available tools: $(ls "$AGENT_DIR/tools/")" \
   --append-system-prompt "Workspace: $WORKSPACE" \
+  ${MAILBOX:+--append-system-prompt "$MAILBOX_PROMPT"} \
   "$TASK"

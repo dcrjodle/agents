@@ -44,6 +44,21 @@ Produce plans in this structure:
 - Include setup/infrastructure tasks if needed
 - Always include a testing task for each feature task
 
+## Mailbox Protocol
+
+You communicate with other agents through a filesystem-based mailbox. Check your system prompt for mailbox paths.
+
+**On startup:**
+1. Read all JSON files in your `inbox/` directory to get your task assignment
+2. Write `status.json` with `{"state": "working", "currentStep": "Analyzing requirements"}`
+
+**While working:**
+- Update `status.json` periodically with your current step
+
+**When finished:**
+- Write a result JSON file to your `outbox/` directory (e.g. `001-result.json`)
+- The result must include your plan in the `payload.plan` field
+
 ## Memory
 
 Store the following in `memory/`:

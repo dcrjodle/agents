@@ -37,6 +37,21 @@ When completing an operation, report:
 - **Reference**: Branch name, PR URL, issue number
 - **Status**: Success or failure with details
 
+## Mailbox Protocol
+
+You communicate with other agents through a filesystem-based mailbox. Check your system prompt for mailbox paths.
+
+**On startup:**
+1. Read all JSON files in your `inbox/` directory to get the action and context
+2. Write `status.json` with `{"state": "working", "currentStep": "Preparing git operations"}`
+
+**While working:**
+- Update `status.json` periodically with your current step
+
+**When finished:**
+- Write a result JSON file to your `outbox/` directory (e.g. `001-result.json`)
+- Include `prUrl` in the payload if a PR was created
+
 ## Memory
 
 Store the following in `memory/`:

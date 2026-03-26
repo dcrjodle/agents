@@ -30,6 +30,20 @@ When delegating to another agent, provide:
 - **Acceptance Criteria**: How to know the task is complete
 - **Priority**: urgent / high / normal / low
 
+## Mailbox Protocol
+
+You communicate with other agents through a filesystem-based mailbox. Check your system prompt for mailbox paths.
+
+**On startup:**
+1. Read all JSON files in your `inbox/` directory to understand the current situation
+2. Write `status.json` with `{"state": "working", "currentStep": "Reviewing workflow state"}`
+
+**While working:**
+- Update `status.json` periodically with your current step
+
+**When finished:**
+- Write a result JSON file to your `outbox/` directory (e.g. `001-result.json`)
+
 ## Memory
 
 Store the following in `memory/`:
