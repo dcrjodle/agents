@@ -96,6 +96,25 @@ export function useWorkflow() {
         switch (msg.type) {
           case "INIT":
             setTasks(msg.tasks);
+            // Hydrate persisted logs from server
+            if (msg.logs && typeof msg.logs === "object") {
+              setAgentLogs(msg.logs);
+              // Restore errors from persisted log entries
+              const restoredErrors = {};
+              for (const [taskId, entries] of Object.entries(msg.logs)) {
+                const errorEntries = entries.filter((e) => e.type === "error");
+                if (errorEntries.length > 0) {
+                  restoredErrors[taskId] = errorEntries.map((e) => ({
+                    time: e.time,
+                    agent: e.agent,
+                    error: e.error || e.data,
+                  }));
+                }
+              }
+              if (Object.keys(restoredErrors).length > 0) {
+                setErrors(restoredErrors);
+              }
+            }
             // Check for any tasks already in awaitingApproval with plans
             for (const task of msg.tasks) {
               const sk = task.stateKey || stateKey(task.state);

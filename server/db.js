@@ -7,6 +7,7 @@ const DB_PATH = join(__dirname, "..", "db.json");
 
 const defaultData = {
   tasks: [],
+  logs: {},
   config: {
     projects: [],
   },
@@ -57,6 +58,44 @@ export async function deleteTask(id) {
   db.data.tasks.splice(idx, 1);
   await db.write();
   return true;
+}
+
+// Log helpers
+
+// Debounced write to avoid I/O bottleneck with high-frequency log appends
+let writeTimeout = null;
+async function debouncedWrite() {
+  if (writeTimeout) return;
+  writeTimeout = setTimeout(async () => {
+    writeTimeout = null;
+    try {
+      const db = await getDb();
+      await db.write();
+    } catch (err) {
+      console.error("Failed to flush logs to disk:", err);
+    }
+  }, 500);
+}
+
+export async function appendTaskLog(taskId, entry) {
+  const db = await getDb();
+  if (!db.data.logs) db.data.logs = {};
+  if (!db.data.logs[taskId]) db.data.logs[taskId] = [];
+  db.data.logs[taskId].push(entry);
+  debouncedWrite();
+}
+
+export async function getTaskLogs(taskId) {
+  const db = await getDb();
+  if (!db.data.logs) db.data.logs = {};
+  return db.data.logs[taskId] || [];
+}
+
+export async function clearTaskLogs(taskId) {
+  const db = await getDb();
+  if (!db.data.logs) db.data.logs = {};
+  delete db.data.logs[taskId];
+  await db.write();
 }
 
 // Config helpers
