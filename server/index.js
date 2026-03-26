@@ -502,12 +502,15 @@ app.post("/tasks/:id/restart", async (req, res) => {
   const id = req.params.id;
 
   // Get task metadata from live actor or db
-  let description, projectPath, createdAt;
+  let description, projectPath, createdAt, worktreePath, branchName;
   const existingActor = actors.get(id);
   if (existingActor) {
     description = existingActor._description;
     projectPath = existingActor._projectPath;
     createdAt = existingActor._createdAt;
+    const snap = existingActor.getSnapshot();
+    worktreePath = snap.context?.result?.worktreePath;
+    branchName = snap.context?.result?.branchName;
     // Kill any running agent and stop actor
     cleanupAgent(id);
     existingActor.stop();
@@ -519,6 +522,36 @@ app.post("/tasks/:id/restart", async (req, res) => {
     description = dbTask.description;
     projectPath = dbTask.projectPath;
     createdAt = dbTask.createdAt;
+    worktreePath = dbTask.context?.result?.worktreePath;
+    branchName = dbTask.context?.result?.branchName;
+  }
+
+  // Clean up the worktree for this task
+  if (projectPath) {
+    try {
+      const { spawnSync } = await import("child_process");
+      const { join, dirname } = await import("path");
+      const { fileURLToPath } = await import("url");
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      const cleanupScript = join(__dirname, "..", "scripts", "cleanup-worktree.sh");
+      const handoff = JSON.stringify({
+        projectPath,
+        context: { result: { worktreePath: worktreePath || "", branchName: branchName || "" } },
+      });
+      const result = spawnSync("bash", [cleanupScript], {
+        input: handoff,
+        env: { ...process.env, TASK_ID: id },
+        timeout: 15000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      if (result.status === 0) {
+        console.log(`Cleaned up worktree for restarted task ${id}`);
+      } else {
+        console.warn(`Worktree cleanup exited with code ${result.status} for task ${id}`);
+      }
+    } catch (err) {
+      console.warn(`Worktree cleanup failed for task ${id} (non-fatal):`, err.message);
+    }
   }
 
   // Clear persisted logs for this task

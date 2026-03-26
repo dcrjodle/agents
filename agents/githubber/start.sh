@@ -66,6 +66,16 @@ fi
 PR_URL_JSON=$(json_escape_str "$PR_URL")
 BRANCH_JSON=$(json_escape_str "$BRANCH_NAME")
 
+# Clean up worktree after PR is published
+if [ -n "$PR_URL" ]; then
+  echo "[githubber] Cleaning up worktree after PR creation..." >&2
+  CLEANUP_SCRIPT="$AGENT_DIR/../../scripts/cleanup-worktree.sh"
+  if [ -f "$CLEANUP_SCRIPT" ]; then
+    echo "{\"projectPath\":\"$PROJECT\",\"context\":{\"result\":{\"worktreePath\":\"$WORKTREE_PATH\",\"branchName\":\"$BRANCH_NAME\"}}}" \
+      | TASK_ID="$TASK_ID" bash "$CLEANUP_SCRIPT" >/dev/null 2>&2 || echo "[githubber] Worktree cleanup failed (non-fatal)" >&2
+  fi
+fi
+
 emit_result "{\"status\":\"complete\",\"prUrl\":$PR_URL_JSON,\"branchName\":$BRANCH_JSON}"
 
 echo "[githubber] Done." >&2

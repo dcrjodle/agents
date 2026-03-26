@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useWorkflow } from "./hooks/useWorkflow.js";
 import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
 import { ProjectTabs } from "./components/ProjectTabs.jsx";
 import { PlanDialog } from "./components/PlanDialog.jsx";
-import { StreamPanel } from "./components/StreamPanel.jsx";
-import { StreamColumn } from "./components/StreamColumn.jsx";
-import { ConnectionLines } from "./components/ConnectionLines.jsx";
+import { DetailPanel } from "./components/DetailPanel.jsx";
 import { SettingsDialog } from "./components/SettingsDialog.jsx";
+import "./styles/layout.css";
 
 const API_BASE = "/api";
 
@@ -16,17 +15,12 @@ export function App() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
-  const [columnsMode, setColumnsMode] = useState(false);
-  const [taskRowRefs, setTaskRowRefs] = useState({});
-  const [columnRefs, setColumnRefs] = useState({});
+  const [viewMode, setViewMode] = useState("nodes");
   const [showSettings, setShowSettings] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved === "dark";
   });
-
-  const mainAreaRef = useRef(null);
-  const streamPanelRef = useRef(null);
 
   const {
     tasks,
@@ -93,6 +87,10 @@ export function App() {
     setViewingPlanTaskId(null);
   }, []);
 
+  const handleCloseDetail = useCallback(() => {
+    setSelectedTaskId(null);
+  }, []);
+
   const handleAddProject = useCallback(async (name, path) => {
     const res = await fetch(`${API_BASE}/config/projects`, {
       method: "POST",
@@ -122,14 +120,6 @@ export function App() {
     }
   }, [selectedProject]);
 
-  const handleRowRefs = useCallback((refs) => {
-    setTaskRowRefs(refs);
-  }, []);
-
-  const handleColumnRefs = useCallback((refs) => {
-    setColumnRefs(refs);
-  }, []);
-
   const filteredTasks = selectedProject
     ? tasks.filter((t) => t.projectPath === selectedProject.path)
     : tasks;
@@ -148,45 +138,15 @@ export function App() {
   const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;
 
   return (
-    <div style={{
-      maxWidth: columnsMode && selectedTask ? "none" : 1100,
-      margin: "0 auto",
-      padding: "24px 24px",
-      fontFamily: "var(--font-mono)",
-      minHeight: "100vh",
-    }}>
+    <div className="app-root">
       {/* Header */}
-      <header style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h1 style={{
-            margin: 0,
-            fontSize: 14,
-            fontWeight: 600,
-            letterSpacing: "0.02em",
-            color: "var(--text)",
-          }}>
-            agent workflows
-          </h1>
+      <header className="app-header">
+        <div className="app-header-left">
+          <h1 className="app-header-title">agent workflows</h1>
           <button
+            className="app-header-settings-btn"
             onClick={() => setShowSettings(true)}
             title="settings"
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 4,
-              display: "flex",
-              alignItems: "center",
-              color: "var(--text-dim)",
-              transition: "color 0.15s",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = "var(--text)"}
-            onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-dim)"}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -194,20 +154,8 @@ export function App() {
             </svg>
           </button>
         </div>
-        <span style={{
-          fontSize: 10,
-          color: connected ? "var(--dot-done)" : "var(--dot-failed)",
-          display: "flex",
-          alignItems: "center",
-          gap: 5,
-        }}>
-          <span style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: connected ? "var(--dot-done)" : "var(--dot-failed)",
-            display: "inline-block",
-          }} />
+        <span className={`app-connection-status ${connected ? "connected" : "disconnected"}`}>
+          <span className={`app-connection-dot ${connected ? "connected" : "disconnected"}`} />
           {connected ? "connected" : "disconnected"}
         </span>
       </header>
@@ -222,41 +170,13 @@ export function App() {
           <CreateTask onCreate={handleCreateTask} />
         </>
       ) : (
-        <p style={{ color: "var(--text-dim)", fontSize: 12 }}>loading projects...</p>
+        <p className="loading-text">loading projects...</p>
       )}
 
-      {/* Main content: task list + connection lines + stream panel */}
-      <div
-        ref={mainAreaRef}
-        style={{
-          display: "flex",
-          alignItems: "stretch",
-          minHeight: 400,
-          position: "relative",
-          overflowX: columnsMode && selectedTask ? "auto" : "visible",
-        }}
-      >
-        {/* SVG connection lines overlay */}
-        <ConnectionLines
-          containerRef={mainAreaRef}
-          selectedTaskId={selectedTaskId}
-          taskRowRefs={taskRowRefs}
-          streamPanelRef={streamPanelRef}
-          columnRefs={columnRefs}
-          columnsMode={columnsMode}
-        />
-
-        {/* Task list */}
-        <div style={{
-          width: selectedTask ? 320 : "100%",
-          maxWidth: selectedTask ? 320 : 600,
-          transition: "width 0.3s ease, max-width 0.3s ease",
-          flexShrink: 0,
-          position: columnsMode && selectedTask ? "sticky" : "static",
-          left: 0,
-          zIndex: columnsMode && selectedTask ? 2 : "auto",
-          background: "var(--bg)",
-        }}>
+      {/* Main content: task list + detail panel */}
+      <div className="main-content">
+        {/* Task list - centered when no selection, slides left when detail open */}
+        <div className={`task-list-container${selectedTask ? " shifted" : ""}`}>
           <TaskList
             tasks={filteredTasks}
             selectedTaskId={selectedTaskId}
@@ -264,71 +184,29 @@ export function App() {
             onDelete={deleteTask}
             onStart={startTask}
             onRestart={restartTask}
-            rowRefsCallback={handleRowRefs}
+            onViewPlan={handleViewPlan}
+            onApprove={approveTask}
+            pendingPlans={pendingPlans}
           />
         </div>
 
-        {/* Gap for the line to cross */}
+        {/* Detail panel - appears when a task is selected */}
         {selectedTask && (
-          <div style={{ width: 48, flexShrink: 0 }} />
+          <div className="detail-panel-container">
+            <DetailPanel
+              task={selectedTask}
+              logs={agentLogs[selectedTaskId] || []}
+              errors={errors[selectedTaskId] || []}
+              pendingPlan={pendingPlans[selectedTaskId]}
+              onSendEvent={sendEvent}
+              onApprove={approveTask}
+              onViewPlan={handleViewPlan}
+              onClose={handleCloseDetail}
+              viewMode={viewMode}
+              onToggleViewMode={setViewMode}
+            />
+          </div>
         )}
-
-        {/* Stream panel (full in stream mode, header-only in columns mode) */}
-        {selectedTask && (
-          <StreamPanel
-            ref={streamPanelRef}
-            task={selectedTask}
-            logs={agentLogs[selectedTaskId] || []}
-            errors={errors[selectedTaskId] || []}
-            pendingPlan={pendingPlans[selectedTaskId]}
-            onSendEvent={sendEvent}
-            onApprove={approveTask}
-            onViewPlan={handleViewPlan}
-            columnsMode={columnsMode}
-            onToggleColumns={() => setColumnsMode((v) => !v)}
-            columnRefsCallback={handleColumnRefs}
-          />
-        )}
-
-        {/* Independent column nodes in columns mode — latest agent first */}
-        {selectedTask && columnsMode && (() => {
-          const taskLogs = agentLogs[selectedTaskId] || [];
-          const grouped = {};
-          for (const entry of taskLogs) {
-            const agent = entry.agent || "_system";
-            if (!grouped[agent]) grouped[agent] = [];
-            grouped[agent].push(entry);
-          }
-          // Order: active agents reversed (latest first), then system at the end
-          const agents = Object.keys(grouped).filter((a) => a !== "_system");
-          const ordered = [...agents].reverse();
-          if (grouped["_system"]) ordered.push("_system");
-
-          return ordered.map((agent) => (
-            <div key={agent} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-              {/* Connector line between nodes */}
-              <div style={{
-                width: 32,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}>
-                <div style={{
-                  width: "100%",
-                  height: 1,
-                  borderTop: "1px dashed var(--line-color)",
-                  animation: "draw-line 0.3s ease-out",
-                }} />
-              </div>
-              <StreamColumn
-                variant={agent === "_system" ? "system" : "agent"}
-                agent={agent}
-                logs={grouped[agent]}
-              />
-            </div>
-          ));
-        })()}
       </div>
 
       {viewingPlan && (

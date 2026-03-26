@@ -1,166 +1,127 @@
-import { useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
+import { ContextMenu } from "./ContextMenu.jsx";
+import "../styles/task-list.css";
 
-export function TaskList({ tasks, selectedTaskId, onSelectTask, onDelete, onStart, onRestart, rowRefsCallback }) {
-  const rowRefs = useRef({});
+export function TaskList({
+  tasks,
+  selectedTaskId,
+  onSelectTask,
+  onDelete,
+  onStart,
+  onRestart,
+  onViewPlan,
+  onApprove,
+  pendingPlans,
+}) {
+  const [contextMenu, setContextMenu] = useState(null);
 
-  // Report row refs to parent whenever tasks or selection changes
-  useEffect(() => {
-    if (rowRefsCallback) {
-      rowRefsCallback(rowRefs.current);
-    }
-  });
+  const handleContextMenu = useCallback((e, task) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, task });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
 
   if (tasks.length === 0) {
-    return (
-      <div style={{
-        textAlign: "center",
-        color: "var(--text-dim)",
-        padding: "48px 0",
-        fontSize: 12,
-        letterSpacing: "0.02em",
-      }}>
-        no tasks yet
-      </div>
-    );
+    return <div className="task-list-empty">no tasks yet</div>;
   }
 
+  const buildMenuItems = (task) => {
+    const sk = task.stateKey || stateKey(task.state);
+    const isIdle = sk === "idle";
+    const items = [];
+
+    if (isIdle && onStart) {
+      items.push({
+        label: "start",
+        icon: "\u25B6",
+        action: () => onStart(task.id),
+      });
+    }
+
+    if (!isIdle && onRestart) {
+      items.push({
+        label: "restart",
+        icon: "\u21BA",
+        action: () => onRestart(task.id),
+      });
+    }
+
+    if (sk === "planning.awaitingApproval" && pendingPlans?.[task.id] && onViewPlan) {
+      items.push({
+        label: "view plan",
+        icon: "\uD83D\uDCCB",
+        action: () => onViewPlan(task.id),
+      });
+    }
+
+    if (sk === "merging.awaitingApproval" && onApprove) {
+      items.push({
+        label: "approve pr",
+        icon: "\u2714",
+        action: () => onApprove(task.id),
+      });
+    }
+
+    if (items.length > 0) {
+      items.push({ separator: true });
+    }
+
+    items.push({
+      label: "delete",
+      icon: "\u00D7",
+      danger: true,
+      action: () => onDelete(task.id),
+    });
+
+    return items;
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+    <div className="task-list">
       {tasks.map((task) => {
         const sk = task.stateKey || stateKey(task.state);
         const label = STATE_LABELS[sk] || sk;
         const isSelected = task.id === selectedTaskId;
         const isDone = sk === "done";
         const isFailed = sk === "failed";
-        const isIdle = sk === "idle";
-        const isTerminal = isDone || isFailed;
+
+        let descClass = "task-row-description-text";
+        if (isDone) descClass += " done";
+        if (isFailed) descClass += " failed";
 
         return (
           <div
             key={task.id}
-            ref={(el) => { rowRefs.current[task.id] = el; }}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              borderRadius: 4,
-              background: isSelected ? "var(--bg-hover)" : "transparent",
-              borderLeft: isSelected ? "2px solid var(--accent)" : "2px solid transparent",
-              transition: "all 0.15s ease",
-              position: "relative",
-            }}
+            className={`task-row${isSelected ? " selected" : ""}`}
+            onClick={() => onSelectTask(isSelected ? null : task.id)}
+            onContextMenu={(e) => handleContextMenu(e, task)}
           >
-            {/* Header bar with status + action buttons */}
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 12px 2px 12px",
-            }}>
+            <div className="task-row-header">
               <StatusIcon stateKey={sk} size={16} />
-
-              <span style={{
-                fontSize: 10,
-                color: "var(--text-muted)",
-                textTransform: "lowercase",
-                letterSpacing: "0.03em",
-              }}>
-                {label}
-              </span>
-
-              <div style={{ flex: 1 }} />
-
-              {/* Start button — only for idle tasks */}
-              {isIdle && onStart && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onStart(task.id); }}
-                  style={{
-                    background: "none",
-                    border: "1px solid var(--accent)",
-                    color: "var(--accent)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    padding: "2px 8px",
-                    borderRadius: 3,
-                    opacity: 0.7,
-                    transition: "opacity 0.15s",
-                  }}
-                  onMouseEnter={(e) => e.target.style.opacity = 1}
-                  onMouseLeave={(e) => e.target.style.opacity = 0.7}
-                  title="Start task"
-                >
-                  ▶
-                </button>
-              )}
-
-              {/* Restart button — available for non-idle tasks */}
-              {!isIdle && onRestart && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onRestart(task.id); }}
-                  style={{
-                    background: "none",
-                    border: "1px solid var(--text-dim)",
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    padding: "2px 8px",
-                    borderRadius: 3,
-                    opacity: 0.6,
-                    transition: "opacity 0.15s",
-                  }}
-                  onMouseEnter={(e) => e.target.style.opacity = 1}
-                  onMouseLeave={(e) => e.target.style.opacity = 0.6}
-                  title="Restart task (reset to idle)"
-                >
-                  ↺
-                </button>
-              )}
-
-              {/* Delete button */}
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
-                style={{
-                  background: "none",
-                  border: "1px solid var(--text-dim)",
-                  color: "var(--text-dim)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: "2px 8px",
-                  borderRadius: 3,
-                  opacity: 0.4,
-                  transition: "opacity 0.15s",
-                }}
-                onMouseEnter={(e) => e.target.style.opacity = 1}
-                onMouseLeave={(e) => e.target.style.opacity = 0.4}
-                title="Delete task"
-              >
-                ×
-              </button>
+              <span className="task-row-state-label">{label}</span>
+              <div className="task-row-spacer" />
             </div>
-
-            {/* Task description row */}
-            <div
-              onClick={() => onSelectTask(isSelected ? null : task.id)}
-              style={{
-                padding: "2px 12px 8px 12px",
-                paddingLeft: 36,
-                cursor: "pointer",
-              }}
-            >
-              <span style={{
-                fontSize: 13,
-                color: isDone ? "var(--text-dim)" : "var(--text)",
-                textDecoration: isDone ? "line-through" : "none",
-                opacity: isFailed ? 0.6 : 1,
-              }}>
-                {task.description}
-              </span>
+            <div className="task-row-description">
+              <span className={descClass}>{task.description}</span>
             </div>
           </div>
         );
       })}
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={buildMenuItems(contextMenu.task)}
+          onClose={closeContextMenu}
+        />
+      )}
     </div>
   );
 }
