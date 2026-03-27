@@ -307,6 +307,7 @@ export function App() {
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             onSelectTask={setSelectedTaskId}
+            onRemoveProject={handleRemoveProject}
           />
         </>
       ) : (
