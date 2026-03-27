@@ -22,6 +22,7 @@ export const workflowMachine = setup({
       | { type: "REVIEW_APPROVED" }
       | { type: "CHANGES_REQUESTED", feedback: string }
       | { type: "PUSH_COMPLETE", branchName: string, diffSummary: string }
+      | { type: "PUSH_COMPLETE_NO_PR", branchName: string, diffSummary: string }
       | { type: "PUSH_FAILED", error: string }
       | { type: "PR_APPROVED" }
       | { type: "MERGED", url: string }
@@ -210,6 +211,16 @@ export const workflowMachine = setup({
       on: {
         PUSH_COMPLETE: {
           target: "merging",
+          actions: assign({
+            result: ({ context, event }) => ({
+              ...context.result,
+              branchName: event.branchName,
+              diffSummary: event.diffSummary,
+            }),
+          }),
+        },
+        PUSH_COMPLETE_NO_PR: {
+          target: "done",
           actions: assign({
             result: ({ context, event }) => ({
               ...context.result,

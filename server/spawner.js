@@ -111,7 +111,7 @@ const RESULT_TO_EVENT = {
     if (payload.verdict === "approved") {
       return { type: "REVIEW_APPROVED" };
     }
-    return { type: "CHANGES_REQUESTED", feedback: payload.comments?.join("\n") || payload.message };
+    return { type: "CHANGES_REQUESTED", feedback: payload.summary || payload.comments?.join("\n") || payload.message };
   },
   githubber: (payload) => {
     if (payload.status === "complete") {

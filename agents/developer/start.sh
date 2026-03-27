@@ -34,13 +34,16 @@ RETRY_SECTION=""
 if [ -n "$REVIEW_FEEDBACK" ] && [ "$REVIEW_FEEDBACK" != "null" ] && [ "$REVIEW_FEEDBACK" != "undefined" ]; then
   RETRY_SECTION="
 ## REVIEWER FEEDBACK (RETRY $RETRY_COUNT)
-The reviewer rejected your previous changes. You MUST address ALL of these issues:
+The reviewer rejected your previous changes. You MUST address ALL of the issues listed below.
 
 $REVIEW_FEEDBACK
 
-CRITICAL: Do NOT delete or remove any existing code, routes, imports, or functionality
-that was not mentioned in the plan. Only ADD or MODIFY what the plan requires.
-Read the existing files carefully before making changes to avoid regressions.
+RETRY INSTRUCTIONS:
+1. Read each file mentioned in the feedback to see its CURRENT state in the worktree
+2. Identify the SPECIFIC lines/sections the reviewer flagged
+3. Use the Edit tool to make ONLY the fixes requested — do not rewrite files
+4. If the reviewer says something is missing (e.g. an import, prop, or function), add it back surgically
+5. Do NOT claim 'no changes needed' unless you have verified every issue is resolved by reading the files
 "
 fi
 
@@ -53,22 +56,21 @@ Worktree path: $WORKTREE_PATH
 Plan from planner:
 $PLAN_MARKDOWN
 $RETRY_SECTION
-IMPORTANT:
+IMPORTANT RULES:
 - Work ONLY within the worktree at: $WORKTREE_PATH
-- Implement all changes described in the plan
-- Do NOT delete or remove any existing routes, imports, or functionality not mentioned in the plan
-- Read existing files BEFORE modifying them to understand current structure
+- ALWAYS read a file before modifying it — use Read to see the current contents first
+- Use the Edit tool (not Write) for existing files — Edit makes surgical replacements, Write replaces the entire file and risks losing existing code
+- Only use Write for brand-new files that don't exist yet
+- Preserve ALL existing imports, props, functions, event handlers, and patterns not mentioned in the plan
+- Follow the project's existing conventions (if the file uses CSS classes, keep CSS classes; if it uses certain patterns, match them)
 - Do NOT run any git commands (no git add, commit, push, etc.) — git is handled separately
-- Output a summary of all files you changed
+- Output a summary of all files you changed and what specifically you changed in each
 "
 
 echo "[developer] Implementing with Claude..." >&2
 
-# Run claude to implement (stderr goes to UI)
-DEV_OUTPUT=$(echo "$PROMPT" | ${CLAUDE_CLI:-claude} --print \
-  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \
-  2>&2) || true
+# Run claude to implement (with retries for transient failures)
+DEV_OUTPUT=$(run_claude "$PROMPT" "$AGENT_DIR/program.md" "Bash,Read,Write,Edit,Glob,Grep") || true
 
 echo "[developer] Implementation complete." >&2
 

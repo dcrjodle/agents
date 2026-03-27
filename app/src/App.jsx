@@ -6,6 +6,7 @@ import { ProjectTabs } from "./components/ProjectTabs.jsx";
 import { PlanDialog } from "./components/PlanDialog.jsx";
 import { DetailPanel } from "./components/DetailPanel.jsx";
 import { SettingsDialog } from "./components/SettingsDialog.jsx";
+import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import "./styles/layout.css";
 
 const API_BASE = "/api";
@@ -17,6 +18,7 @@ export function App() {
   const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
   const [viewMode, setViewMode] = useState("nodes");
   const [showSettings, setShowSettings] = useState(false);
+  const [projectSettingsTarget, setProjectSettingsTarget] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved === "dark";
@@ -142,6 +144,15 @@ export function App() {
     }
   }, [selectedProject]);
 
+  const handleProjectSettingsUpdated = useCallback((updatedProject) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.path === updatedProject.path ? updatedProject : p))
+    );
+    if (selectedProject?.path === updatedProject.path) {
+      setSelectedProject(updatedProject);
+    }
+  }, [selectedProject]);
+
   const filteredTasks = selectedProject
     ? tasks.filter((t) => t.projectPath === selectedProject.path)
     : tasks;
@@ -209,6 +220,7 @@ export function App() {
             selected={selectedProject}
             onSelect={handleSelectProject}
             onReorder={handleReorderProjects}
+            onOpenSettings={setProjectSettingsTarget}
           />
           <CreateTask onCreate={handleCreateTask} />
         </>
@@ -259,6 +271,14 @@ export function App() {
           onApprove={handleApprovePlan}
           onReject={handleRejectPlan}
           onClose={handleClosePlan}
+        />
+      )}
+
+      {projectSettingsTarget && (
+        <ProjectSettingsDialog
+          project={projectSettingsTarget}
+          onClose={() => setProjectSettingsTarget(null)}
+          onUpdated={handleProjectSettingsUpdated}
         />
       )}
 

@@ -13,13 +13,9 @@ You receive via stdin (JSON):
 
 1. **Read stdin** to get the task and project path
 2. **Explore the project** at the given path to understand its structure, framework, and conventions
-3. **If the project uses Ivy Framework**, use the `ask-ivy-questions.sh` tool to look up relevant Ivy documentation
+3. **Detect the framework** from actual project files (package.json, .csproj, go.mod, Cargo.toml, etc.) — never assume a framework that isn't evidenced in the codebase
 4. **Write a plan** following the template in `templates/plan.md`
 5. **Output the plan** — the start.sh script handles communication
-
-## Tools Available
-
-- `ask-ivy-questions.sh` — Query the Ivy MCP server for framework documentation. Use this when the project uses the Ivy Framework to understand widgets, APIs, and patterns.
 
 ## Plan Output Format
 
@@ -33,7 +29,7 @@ Your plan must follow this structure:
 
 ### Project
 - **Path**: <project path>
-- **Framework**: <detected framework — e.g., Ivy, React, .NET, etc.>
+- **Framework**: <detected framework based on actual project files>
 
 ### Tasks
 1. **Task Name** — Description
@@ -54,11 +50,13 @@ Your plan must follow this structure:
 
 ## Guidelines
 
+- **Detect, don't assume** — determine the framework and conventions from the project's actual files, not from global configuration or prior knowledge. If the project is a Node.js app, plan for Node.js. If it's .NET, plan for .NET. Never mix frameworks.
 - Keep tasks small enough for a single focused coding session
 - Each task should be independently testable
 - Include specific file paths when you can identify them
-- Mention the framework and any relevant conventions the developer should follow
+- Mention the detected framework and any relevant conventions the developer should follow
 - Include a review checklist so the reviewer knows what to look for
+- Reference actual files and patterns you found in the project, not hypothetical ones
 
 ## Communication
 

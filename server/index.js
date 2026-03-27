@@ -139,6 +139,15 @@ function cleanupAgent(taskId) {
 }
 
 /**
+ * Get project settings from the config by path.
+ */
+async function getProjectSettings(projectPath) {
+  const config = await getConfig();
+  const project = config.projects.find((p) => p.path === projectPath);
+  return project?.settings || {};
+}
+
+/**
  * When XState transitions to a state that has an agent, spawn it.
  */
 function onStateTransition(taskId, stateValue, context) {
@@ -188,7 +197,7 @@ function onStateTransition(taskId, stateValue, context) {
       resetStaleTimer();
       broadcastAndLog({ type: "AGENT_STATUS", taskId, agent: label, status });
     },
-    onResult(result) {
+    async onResult(result) {
       resetStaleTimer();
       gotResult = true;
       const agentEntry = activeAgents.get(taskId);
@@ -198,7 +207,17 @@ function onStateTransition(taskId, stateValue, context) {
 
       const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
       if (mapper) {
-        const event = mapper(result);
+        let event = mapper(result);
+
+        // If push completed, check project settings to decide PR vs direct
+        if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
+          const projectSettings = await getProjectSettings(actor._projectPath);
+          if (projectSettings.createPr === false) {
+            event = { ...event, type: "PUSH_COMPLETE_NO_PR" };
+            broadcastAndLog({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data: "[pushing] Skipping PR creation (project setting)\n" });
+          }
+        }
+
         if (actors.has(taskId)) actors.get(taskId).send(event);
       }
     },
@@ -251,6 +270,8 @@ function onStateTransition(taskId, stateValue, context) {
       console.error(error);
       broadcastAndLog({ type: "AGENT_ERROR", taskId, agent: label, error });
       broadcastAndLog({ type: "AGENT_STATUS", taskId, agent: label, status: { state: "timeout", currentStep: error } });
+      // Clean up stale timer before killing to stop "no activity" messages
+      if (agentEntry.staleTimer) clearInterval(agentEntry.staleTimer);
       handle.kill();
     }
   }, timeoutMs);
@@ -357,6 +378,18 @@ app.put("/config/projects/reorder", async (req, res) => {
   db.data.config.projects = projects;
   await db.write();
   res.json(db.data.config);
+});
+
+app.patch("/config/projects/settings", async (req, res) => {
+  const { path, settings } = req.body;
+  if (!path) return res.status(400).json({ error: "path required" });
+  if (!settings || typeof settings !== "object") return res.status(400).json({ error: "settings object required" });
+  const db = await getDb();
+  const project = db.data.config.projects.find((p) => p.path === path);
+  if (!project) return res.status(404).json({ error: "project not found" });
+  project.settings = { ...project.settings, ...settings };
+  await db.write();
+  res.json(project);
 });
 
 app.delete("/config/projects", async (req, res) => {

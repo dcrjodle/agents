@@ -39,23 +39,20 @@ Task: $TASK
 Project path: $PROJECT
 
 First, explore the project directory to understand its structure, framework, and conventions.
+Detect the framework from actual project files (package.json, .csproj, go.mod, etc.) — do NOT assume any framework that isn't evidenced in the codebase.
 Then write a plan following this template:
 
 $PLAN_TEMPLATE
 
 IMPORTANT: Output ONLY the plan in markdown format. Do not include any other text.
-If the project uses the Ivy Framework (.NET/C# with Ivy), use the ask-ivy-questions tool to look up relevant documentation.
 "
 
 emit_status "Creating implementation plan"
 
 echo "[planner] Creating plan with Claude..." >&2
 
-# Run claude to generate the plan (stderr goes to our stderr for UI streaming)
-PLAN_OUTPUT=$(echo "$PROMPT" | ${CLAUDE_CLI:-claude} --print \
-  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
-  --allowedTools "Bash(read-only:true),Read,Glob,Grep" \
-  2>&2) || true
+# Run claude to generate the plan (with retries for transient failures)
+PLAN_OUTPUT=$(run_claude "$PROMPT" "$AGENT_DIR/program.md" "Bash(read-only:true),Read,Glob,Grep") || true
 
 echo "[planner] Plan generated." >&2
 

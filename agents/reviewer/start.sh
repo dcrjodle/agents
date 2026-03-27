@@ -50,6 +50,25 @@ if [ "$REVIEW_PATH" = "undefined" ]; then
   REVIEW_PATH="$PROJECT"
 fi
 
+# Generate git diff to show the reviewer exactly what changed
+GIT_DIFF=""
+if [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "undefined" ] && [ -d "$WORKTREE_PATH/.git" -o -f "$WORKTREE_PATH/.git" ]; then
+  GIT_DIFF=$(cd "$WORKTREE_PATH" && git diff HEAD~1 --no-color 2>/dev/null || git diff main --no-color 2>/dev/null || echo "(diff unavailable)")
+fi
+
+DIFF_SECTION=""
+if [ -n "$GIT_DIFF" ] && [ "$GIT_DIFF" != "(diff unavailable)" ]; then
+  DIFF_SECTION="
+## Git Diff (what was actually changed)
+Review this diff carefully. Lines starting with \`-\` were REMOVED, lines starting with \`+\` were ADDED.
+If you see important code being removed that isn't mentioned in the plan, that is a REGRESSION.
+
+\`\`\`diff
+$GIT_DIFF
+\`\`\`
+"
+fi
+
 PROMPT="You are a code reviewer. Review the code changes against the checklist below.
 
 Task: $TASK
@@ -59,14 +78,24 @@ Files changed: $FILES_CHANGED
 
 Plan:
 $PLAN_MARKDOWN
-
+$DIFF_SECTION
 ## Review Checklist
 $CHECKLIST
 
+## Regression Checklist
+In addition to the checklist above, verify that:
+- [ ] No existing imports were removed unless the plan required it
+- [ ] No existing props were dropped from component signatures
+- [ ] No existing event handlers (onClick, onContextMenu, onChange, etc.) were removed
+- [ ] No existing CSS class usage was replaced with inline styles (or vice versa)
+- [ ] No existing functions or callbacks were deleted
+- [ ] The diff only adds/modifies what the plan describes — nothing else was lost
+
 INSTRUCTIONS:
 1. Read each changed file in the review path
-2. Evaluate against EVERY item in the checklist above
-3. Output your review in this exact format:
+2. Review the git diff above to check for unintended removals or regressions
+3. Evaluate against EVERY item in both checklists above
+4. Output your review in this exact format:
 
 ## Review: <task>
 
@@ -74,7 +103,7 @@ INSTRUCTIONS:
 **Checklist**: $(basename "$CHECKLIST_FILE")
 
 ### Issues
-(list any issues found, or 'None')
+(list any issues found with severity [critical/high/medium/low], or 'None')
 
 ### Positive Notes
 - What was done well
@@ -82,15 +111,12 @@ INSTRUCTIONS:
 ### Summary
 Overall assessment
 
-4. Be thorough but practical. Approve if the code is correct and follows conventions.
+5. Be thorough but practical. Approve if the code is correct, follows conventions, and introduces no regressions.
 "
 
 echo "[reviewer] Reviewing with Claude..." >&2
 
-REVIEW_OUTPUT=$(echo "$PROMPT" | ${CLAUDE_CLI:-claude} --print \
-  --system-prompt "$(cat "$AGENT_DIR/program.md")" \
-  --allowedTools "Bash(read-only:true),Read,Glob,Grep" \
-  2>&2) || true
+REVIEW_OUTPUT=$(run_claude "$PROMPT" "$AGENT_DIR/program.md" "Bash(read-only:true),Read,Glob,Grep") || true
 
 echo "[reviewer] Review complete." >&2
 

@@ -40,6 +40,59 @@ emit_result() {
   echo ":::RESULT_END:::"
 }
 
+# Run claude with retries on transient failures (signal kills, rate limits)
+# Usage: OUTPUT=$(run_claude "$PROMPT" "$SYSTEM_PROMPT_FILE" "$ALLOWED_TOOLS")
+run_claude() {
+  local prompt="$1" system_prompt_file="$2" allowed_tools="$3"
+  local max_retries=2 attempt=0 output="" exit_code=0
+  local claude_stderr=""
+
+  while [ $attempt -le $max_retries ]; do
+    exit_code=0
+    claude_stderr=$(mktemp)
+    output=$(echo "$prompt" | ${CLAUDE_CLI:-claude} --print \
+      --system-prompt "$(cat "$system_prompt_file")" \
+      --allowedTools "$allowed_tools" \
+      2>"$claude_stderr") || exit_code=$?
+
+    # Always forward Claude stderr so parent sees it
+    if [ -s "$claude_stderr" ]; then
+      cat "$claude_stderr" >&2
+    fi
+
+    # Success or clean failure (non-signal) — return immediately
+    if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
+      rm -f "$claude_stderr"
+      echo "$output"
+      return 0
+    fi
+
+    # Log the error details from Claude
+    echo "[lib] Claude exited with code ${exit_code:-null}" >&2
+    if [ -s "$claude_stderr" ]; then
+      echo "[lib] Claude stderr:" >&2
+      head -20 "$claude_stderr" >&2
+    fi
+    if [ -n "$output" ]; then
+      echo "[lib] Claude stdout (first 500 chars): ${output:0:500}" >&2
+    else
+      echo "[lib] Claude stdout: (empty)" >&2
+    fi
+    rm -f "$claude_stderr"
+
+    attempt=$((attempt + 1))
+    if [ $attempt -le $max_retries ]; then
+      local wait=$((attempt * 5))
+      echo "[lib] Retrying in ${wait}s (attempt $((attempt))/$max_retries)..." >&2
+      sleep "$wait"
+    fi
+  done
+
+  # Return whatever we got on the last attempt
+  echo "$output"
+  return $exit_code
+}
+
 # Escape a string for safe JSON embedding (returns quoted string)
 # Usage: ESCAPED=$(echo "some text" | json_escape)
 json_escape() {
