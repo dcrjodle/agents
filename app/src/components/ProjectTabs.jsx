@@ -1,11 +1,16 @@
 import { useState, useRef } from "react";
 import { Play, Settings } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
+import { TabTaskPopover } from "./TabTaskPopover.jsx";
 
-export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount }) {
+export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onViewPlan, onApprove, onSelectTask }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const dragNode = useRef(null);
+  const [hoveredProject, setHoveredProject] = useState(null);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const hoverTimerRef = useRef(null);
+  const leaveTimerRef = useRef(null);
 
   const handleDragStart = (e, index) => {
     setDragIndex(index);
@@ -45,6 +50,36 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
     dragNode.current = null;
     setDragIndex(null);
     setDragOverIndex(null);
+    // Cancel any pending hover timers when drag ends
+    clearTimeout(hoverTimerRef.current);
+    clearTimeout(leaveTimerRef.current);
+    setHoveredProject(null);
+  };
+
+  const handleTabMouseEnter = (e, project) => {
+    clearTimeout(leaveTimerRef.current);
+    const rect = e.currentTarget.getBoundingClientRect();
+    hoverTimerRef.current = setTimeout(() => {
+      setHoveredProject(project);
+      setAnchorRect(rect);
+    }, 250);
+  };
+
+  const handleTabMouseLeave = () => {
+    clearTimeout(hoverTimerRef.current);
+    leaveTimerRef.current = setTimeout(() => {
+      setHoveredProject(null);
+    }, 150);
+  };
+
+  const handlePopoverMouseEnter = () => {
+    clearTimeout(leaveTimerRef.current);
+  };
+
+  const handlePopoverMouseLeave = () => {
+    leaveTimerRef.current = setTimeout(() => {
+      setHoveredProject(null);
+    }, 150);
   };
 
   return (
@@ -69,13 +104,20 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
             <button
               draggable
               onClick={() => onSelect(project)}
-              onDragStart={(e) => handleDragStart(e, index)}
+              onDragStart={(e) => {
+                clearTimeout(hoverTimerRef.current);
+                clearTimeout(leaveTimerRef.current);
+                setHoveredProject(null);
+                handleDragStart(e, index);
+              }}
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
               onDragLeave={() => {
                 if (dragOverIndex === index) setDragOverIndex(null);
               }}
+              onMouseEnter={(e) => handleTabMouseEnter(e, project)}
+              onMouseLeave={handleTabMouseLeave}
               style={{
                 padding: "7px 16px",
                 fontSize: 12,
@@ -129,6 +171,21 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
           </div>
         );
       })}
+      {hoveredProject && anchorRect && (
+        <TabTaskPopover
+          project={hoveredProject}
+          tasks={tasks}
+          pendingPlans={pendingPlans}
+          anchorRect={anchorRect}
+          onStart={onStart}
+          onRestart={onRestart}
+          onViewPlan={onViewPlan}
+          onApprove={onApprove}
+          onSelectTask={onSelectTask}
+          onMouseEnter={handlePopoverMouseEnter}
+          onMouseLeave={handlePopoverMouseLeave}
+        />
+      )}
     </div>
   );
 }

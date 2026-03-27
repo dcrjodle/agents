@@ -1,0 +1,87 @@
+.tab-task-popover {
+  position: fixed;
+  z-index: 1100;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 200px;
+  max-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--font-mono);
+  animation: tab-popover-in 0.12s ease-out;
+}
+
+@keyframes tab-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tab-task-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  text-align: left;
+  letter-spacing: 0.02em;
+  transition: background 0.1s;
+  min-width: 0;
+}
+
+.tab-task-popover-row:hover {
+  background: var(--bg-hover);
+}
+
+.tab-task-popover-description {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  color: var(--text);
+}
+
+.tab-task-popover-action {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  margin-left: 4px;
+}
+
+.tab-task-popover-empty {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.tab-task-popover-separator {
+  height: 1px;
+  background: var(--border-light);
+  margin: 4px 0;
+}
+
+.tab-task-popover-done-count {
+  padding: 4px 12px 5px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}

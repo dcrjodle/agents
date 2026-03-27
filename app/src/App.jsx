@@ -251,6 +251,13 @@ export function App() {
             onOpenSettings={setProjectSettingsTarget}
             onStartAll={handleStartAll}
             idleCount={idleTasks.length}
+            tasks={tasks}
+            pendingPlans={pendingPlans}
+            onStart={startTask}
+            onRestart={restartTask}
+            onViewPlan={handleViewPlan}
+            onApprove={approveTask}
+            onSelectTask={setSelectedTaskId}
           />
         </>
       ) : (
