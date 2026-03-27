@@ -64,9 +64,9 @@ export function DetailPanel({
         <div className="detail-panel-header-controls">
           <button
             className={`detail-panel-toggle-btn${viewMode === "stream" ? " active" : ""}`}
-            onClick={() => onToggleViewMode(viewMode === "nodes" ? "stream" : "nodes")}
+            onClick={() => onToggleViewMode(viewMode === "stream" ? "nodes" : viewMode === "nodes" ? "cards" : "stream")}
           >
-            {viewMode === "nodes" ? "stream" : "nodes"}
+            {viewMode === "stream" ? "nodes" : viewMode === "nodes" ? "cards" : "stream"}
           </button>
           <button className="detail-panel-close-btn" onClick={onClose}>
             close
@@ -97,6 +97,23 @@ export function DetailPanel({
       <div className="detail-panel-content">
         {viewMode === "nodes" ? (
           <div className="node-chain">
+            {ordered.length === 0 ? (
+              <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
+                waiting for agents...
+              </div>
+            ) : (
+              ordered.map((agent) => (
+                <AgentNode
+                  key={agent}
+                  agent={agent}
+                  logs={grouped[agent]}
+                  onViewPlan={() => onViewPlan(task.id)}
+                />
+              ))
+            )}
+          </div>
+        ) : viewMode === "cards" ? (
+          <div className="stream-vertical">
             {ordered.length === 0 ? (
               <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
                 waiting for agents...
