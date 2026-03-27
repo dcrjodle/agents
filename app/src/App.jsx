@@ -222,7 +222,6 @@ export function App() {
             onReorder={handleReorderProjects}
             onOpenSettings={setProjectSettingsTarget}
           />
-          <CreateTask onCreate={handleCreateTask} />
         </>
       ) : (
         <p className="loading-text">loading projects...</p>
@@ -232,6 +231,9 @@ export function App() {
       <div className="main-content">
         {/* Task list - centered when no selection, slides left when detail open */}
         <div className={`task-list-container${selectedTask ? " shifted" : ""}`}>
+          {projects.length > 0 && selectedProject && (
+            <CreateTask onCreate={handleCreateTask} />
+          )}
           <TaskList
             tasks={filteredTasks}
             selectedTaskId={selectedTaskId}
