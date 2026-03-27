@@ -7,6 +7,7 @@ const API_BASE = "/api";
 export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const settings = project.settings || {};
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
+  const [testingMode, setTestingMode] = useState(settings.testingMode || "build");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -15,7 +16,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr } }),
+        body: JSON.stringify({ path: project.path, settings: { createPr, testingMode } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -103,6 +104,38 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             {createPr ? "on" : "off"}
           </button>
         </label>
+
+        {/* Testing mode */}
+        <div style={{ marginTop: 16, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6 }}>testing mode</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {["build", "sync", "async"].map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setTestingMode(mode)}
+                style={{
+                  flex: 1,
+                  fontSize: 10,
+                  padding: "5px 8px",
+                  borderRadius: 3,
+                  border: `1px solid ${testingMode === mode ? "var(--accent)" : "var(--border)"}`,
+                  background: testingMode === mode ? "var(--bg-muted)" : "transparent",
+                  color: testingMode === mode ? "var(--text)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: testingMode === mode ? 600 : 400,
+                }}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
+            {testingMode === "build" && "run build + tests only (default)"}
+            {testingMode === "sync" && "visual test all tasks in parallel with browser screenshots"}
+            {testingMode === "async" && "queue tasks for one-at-a-time visual testing"}
+          </div>
+        </div>
 
         {/* Save */}
         <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 8 }}>

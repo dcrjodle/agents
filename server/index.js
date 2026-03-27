@@ -54,6 +54,9 @@ function stateLabel(stateValue) {
     "branching": "branching",
     "developing": "in_progress",
     "committing": "committing",
+    "visualTesting.awaitingTrigger": "queued_for_testing",
+    "visualTesting.preparing": "preparing_test",
+    "visualTesting.running": "visual_testing",
     "testing": "testing",
     "reviewing": "reviewing",
     "pushing": "pushing",
@@ -263,8 +266,9 @@ function onStateTransition(taskId, stateValue, context) {
 
   broadcastAndLog({ type: "AGENT_SPAWNED", taskId, agent: label, pid: handle.pid });
 
-  // Scripts get a shorter timeout (60s) vs agents (10 minutes)
-  const timeoutMs = isScript ? 60_000 : AGENT_TIMEOUT_MS;
+  // Scripts get a shorter timeout (60s), visual-tester gets 3 minutes, other agents get 10 minutes
+  const role = STATE_TO_ROLE[sk];
+  const timeoutMs = isScript ? 60_000 : role === "visual-tester" ? 3 * 60_000 : AGENT_TIMEOUT_MS;
 
   const timeoutTimer = setTimeout(() => {
     const agentEntry = activeAgents.get(taskId);
@@ -485,7 +489,9 @@ app.post("/tasks", async (req, res) => {
 
   // Only start the workflow if autoStart is explicitly true
   if (autoStart) {
-    actor.send({ type: "START", task: description });
+    const projectSettings = await getProjectSettings(projectPath);
+    const testingMode = projectSettings.testingMode || "build";
+    actor.send({ type: "START", task: description, testingMode });
   }
 
   const snapshot = getTaskSnapshot(id);
@@ -516,7 +522,7 @@ app.patch("/tasks/:id", async (req, res) => {
   res.json(snapshot);
 });
 
-app.post("/tasks/:id/start", (req, res) => {
+app.post("/tasks/:id/start", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (!actor) return res.status(404).json({ error: "task not found" });
 
@@ -526,7 +532,9 @@ app.post("/tasks/:id/start", (req, res) => {
     return res.status(400).json({ error: `Task is in state "${sk}", can only start idle tasks` });
   }
 
-  actor.send({ type: "START", task: actor._description });
+  const projectSettings = await getProjectSettings(actor._projectPath);
+  const testingMode = projectSettings.testingMode || "build";
+  actor.send({ type: "START", task: actor._description, testingMode });
   res.json(getTaskSnapshot(req.params.id));
 });
 
@@ -575,6 +583,20 @@ app.post("/tasks/:id/approve", (req, res) => {
   }
 
   return res.status(400).json({ error: `Current state ${sk} is not an approval gate` });
+});
+
+app.post("/tasks/:id/visual-test", (req, res) => {
+  const actor = actors.get(req.params.id);
+  if (!actor) return res.status(404).json({ error: "task not found" });
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+  if (sk !== "visualTesting.awaitingTrigger") {
+    return res.status(400).json({ error: `Task is in state "${sk}", visual test can only be triggered from awaitingTrigger` });
+  }
+
+  actor.send({ type: "VISUAL_TEST_START" });
+  res.json(getTaskSnapshot(req.params.id));
 });
 
 app.post("/tasks/:id/restart", async (req, res) => {
@@ -812,7 +834,7 @@ app.post("/internal/add-memory", async (req, res) => {
   res.json({ ok: true, entry });
 });
 
-const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "githubber", "merger"]);
+const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "githubber", "merger", "visual-tester"]);
 
 app.get("/memory/:role", async (req, res) => {
   const { role } = req.params;
@@ -931,6 +953,9 @@ async function start() {
       "branching": [planReady, planApproved],
       "developing": [planReady, planApproved, branchReady],
       "committing": [planReady, planApproved, branchReady, codeComplete],
+      "visualTesting.preparing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
+      "visualTesting.awaitingTrigger": [planReady, planApproved, branchReady, codeComplete, commitComplete],
+      "visualTesting.running": [planReady, planApproved, branchReady, codeComplete, commitComplete],
       "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
       "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
       "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],

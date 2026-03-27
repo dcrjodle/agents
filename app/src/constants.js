@@ -4,6 +4,7 @@ export const STATE_AGENTS = {
   "developing": "developer",
   "committing": "script",
   "testing": "tester",
+  "visualTesting.running": "visual-tester",
   "reviewing": "reviewer",
   "pushing": "script",
   "merging.creatingPr": "githubber",
@@ -16,6 +17,9 @@ export const STATE_COLORS = {
   "branching": "var(--dot-planning)",
   "developing": "var(--dot-developing)",
   "committing": "var(--dot-developing)",
+  "visualTesting.awaitingTrigger": "var(--dot-awaiting)",
+  "visualTesting.preparing": "var(--dot-testing)",
+  "visualTesting.running": "var(--dot-testing)",
   "testing": "var(--dot-testing)",
   "reviewing": "var(--dot-reviewing)",
   "pushing": "var(--dot-merging)",
@@ -34,6 +38,9 @@ export const STATE_LABELS = {
   "branching": "branching",
   "developing": "developing",
   "committing": "committing",
+  "visualTesting.awaitingTrigger": "queued for testing",
+  "visualTesting.preparing": "preparing test",
+  "visualTesting.running": "visual testing",
   "testing": "testing",
   "reviewing": "reviewing",
   "pushing": "pushing",
@@ -63,6 +70,13 @@ export const NEXT_EVENTS = {
   "committing": [
     { type: "COMMIT_COMPLETE", files: ["src/index.js"] },
     { type: "COMMIT_FAILED", error: "Commit failed" },
+  ],
+  "visualTesting.awaitingTrigger": [
+    { type: "VISUAL_TEST_START" },
+  ],
+  "visualTesting.running": [
+    { type: "TESTS_PASSED" },
+    { type: "TESTS_FAILED", error: "Visual test failure" },
   ],
   "testing": [
     { type: "TESTS_PASSED" },
@@ -95,6 +109,9 @@ export const STATE_PRIORITY = {
   "reviewing": 0,
   "pushing": 0,
   "merging.creatingPr": 0,
+  "visualTesting.awaitingTrigger": 1,
+  "visualTesting.preparing": 0,
+  "visualTesting.running": 0,
   "planning.awaitingApproval": 1,
   "merging.awaitingApproval": 1,
   "idle": 2,
@@ -108,5 +125,6 @@ export const AGENT_COLUMN_COLORS = {
   reviewer: "var(--col-reviewer)",
   githubber: "var(--col-githubber)",
   manager: "var(--col-manager)",
+  "visual-tester": "var(--col-tester)",
   script: "var(--col-manager)",
 };

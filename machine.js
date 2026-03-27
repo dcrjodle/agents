@@ -4,9 +4,9 @@ const MAX_RETRIES = 3;
 
 export const workflowMachine = setup({
   types: {
-    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number }} */ ({}),
+    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, testingMode: string }} */ ({}),
     events: /** @type {
-      | { type: "START", task: string }
+      | { type: "START", task: string, testingMode?: string }
       | { type: "PLAN_READY", plan: object }
       | { type: "PLAN_FAILED", error: string }
       | { type: "PLAN_APPROVED" }
@@ -19,6 +19,7 @@ export const workflowMachine = setup({
       | { type: "COMMIT_FAILED", error: string }
       | { type: "TESTS_PASSED" }
       | { type: "TESTS_FAILED", error: string }
+      | { type: "VISUAL_TEST_START" }
       | { type: "REVIEW_APPROVED" }
       | { type: "CHANGES_REQUESTED", feedback: string }
       | { type: "PUSH_COMPLETE", branchName: string, diffSummary: string }
@@ -34,6 +35,8 @@ export const workflowMachine = setup({
   },
   guards: {
     underRetryLimit: ({ context }) => context.retries < MAX_RETRIES,
+    needsVisualTest: ({ context }) => context.testingMode === "async" || context.testingMode === "sync",
+    isAsyncTesting: ({ context }) => context.testingMode === "async",
   },
 }).createMachine({
   id: "workflow",
@@ -44,6 +47,7 @@ export const workflowMachine = setup({
     result: null,
     error: null,
     retries: 0,
+    testingMode: "build",
   },
 
   states: {
@@ -53,6 +57,7 @@ export const workflowMachine = setup({
           target: "planning",
           actions: assign({
             task: ({ event }) => event.task,
+            testingMode: ({ event }) => event.testingMode || "build",
             error: () => null,
             retries: () => 0,
           }),
@@ -140,20 +145,70 @@ export const workflowMachine = setup({
     committing: {
       // Deterministic script commits changes — no Claude involved
       on: {
-        COMMIT_COMPLETE: {
-          target: "testing",
-          actions: assign({
-            result: ({ context, event }) => ({
-              ...context.result,
-              files: event.files,
+        COMMIT_COMPLETE: [
+          {
+            target: "visualTesting",
+            guard: "needsVisualTest",
+            actions: assign({
+              result: ({ context, event }) => ({
+                ...context.result,
+                files: event.files,
+              }),
             }),
-          }),
-        },
+          },
+          {
+            target: "testing",
+            actions: assign({
+              result: ({ context, event }) => ({
+                ...context.result,
+                files: event.files,
+              }),
+            }),
+          },
+        ],
         COMMIT_FAILED: {
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
           }),
+        },
+      },
+    },
+
+    visualTesting: {
+      initial: "preparing",
+      states: {
+        preparing: {
+          always: [
+            { target: "awaitingTrigger", guard: "isAsyncTesting" },
+            { target: "running" },
+          ],
+        },
+        awaitingTrigger: {
+          on: {
+            VISUAL_TEST_START: { target: "running" },
+          },
+        },
+        running: {
+          on: {
+            TESTS_PASSED: { target: "#workflow.reviewing" },
+            TESTS_FAILED: [
+              {
+                target: "#workflow.developing",
+                guard: "underRetryLimit",
+                actions: assign({
+                  error: ({ event }) => event.error,
+                  retries: ({ context }) => context.retries + 1,
+                }),
+              },
+              {
+                target: "#workflow.failed",
+                actions: assign({
+                  error: ({ event }) => event.error || "Max retries exceeded (visual test failures)",
+                }),
+              },
+            ],
+          },
         },
       },
     },
