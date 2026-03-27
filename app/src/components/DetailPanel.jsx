@@ -4,6 +4,7 @@ import { STATE_LABELS } from "../constants.js";
 import { PipelineBar } from "./PipelineBar.jsx";
 import { AgentNode } from "./AgentNode.jsx";
 import { LogLine } from "./LogLine.jsx";
+import { Button } from "./Button.jsx";
 import "../styles/detail-panel.css";
 import "../styles/agent-node.css";
 
@@ -62,15 +63,17 @@ export function DetailPanel({
           <span className="detail-panel-task-description">{task.description}</span>
         </div>
         <div className="detail-panel-header-controls">
-          <button
-            className={`detail-panel-toggle-btn${viewMode === "stream" ? " active" : ""}`}
+          <Button
+            variant="toggle"
+            active={viewMode === "stream"}
+            size="sm"
             onClick={() => onToggleViewMode(viewMode === "stream" ? "nodes" : viewMode === "nodes" ? "cards" : "stream")}
           >
             {viewMode === "stream" ? "nodes" : viewMode === "nodes" ? "cards" : "stream"}
-          </button>
-          <button className="detail-panel-close-btn" onClick={onClose}>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             close
-          </button>
+          </Button>
         </div>
       </div>
 

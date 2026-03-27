@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Play, Settings } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
+import { Button } from "./Button.jsx";
 
 export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount }) {
   const [dragIndex, setDragIndex] = useState(null);
@@ -80,7 +81,9 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
               alignItems: "center",
             }}
           >
-            <button
+            <Button
+              variant="tab"
+              active={isActive}
               draggable
               onClick={() => onSelect(project)}
               onDragStart={(e) => handleDragStart(e, index)}
@@ -90,24 +93,13 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
               onDragLeave={() => {
                 if (dragOverIndex === index) setDragOverIndex(null);
               }}
-              style={{
-                padding: "7px 16px",
-                fontSize: 12,
-                fontWeight: isActive ? 600 : 400,
-                color: isActive ? "var(--text)" : "var(--text-muted)",
-                background: isActive ? "var(--bg-surface)" : "transparent",
-                border: "none",
-                borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
-                borderLeft: isDragOver ? "2px solid var(--accent)" : "2px solid transparent",
-                cursor: isDragging ? "grabbing" : "grab",
-                fontFamily: "var(--font-mono)",
-                transition: "all 0.15s",
-                letterSpacing: "0.01em",
-                opacity: isDragging ? 0.4 : 1,
-              }}
+              className={[
+                isDragOver && "drag-over",
+                isDragging && "dragging",
+              ].filter(Boolean).join(" ")}
             >
               {project.name}
-            </button>
+            </Button>
             {isActive && onOpenSettings && (
               <IconButton
                 icon={Settings}
