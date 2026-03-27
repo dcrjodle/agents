@@ -661,8 +661,8 @@ app.post("/tasks/:id/stop", async (req, res) => {
   if (existingActor) {
     const snap = existingActor.getSnapshot();
     const sk = stateKey(snap.value);
-    if (sk === "idle") {
-      return res.status(400).json({ error: "task is already idle" });
+    if (sk === "idle" || sk === "done" || sk === "failed") {
+      return res.status(400).json({ error: `task is already in terminal/idle state: ${sk}` });
     }
     description = existingActor._description;
     projectPath = existingActor._projectPath;
