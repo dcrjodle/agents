@@ -34,6 +34,7 @@ export function App() {
     startTask,
     startAllTasks,
     restartTask,
+    stopTask,
     sendEvent,
     deleteTask,
     approveTask,
@@ -239,6 +240,7 @@ export function App() {
             onDelete={deleteTask}
             onStart={startTask}
             onRestart={restartTask}
+            onStop={stopTask}
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             pendingPlans={pendingPlans}

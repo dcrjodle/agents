@@ -23,6 +23,7 @@ export function TaskList({
   onDelete,
   onStart,
   onRestart,
+  onStop,
   onViewPlan,
   onApprove,
   pendingPlans,
@@ -57,6 +58,9 @@ export function TaskList({
   const buildMenuItems = (task) => {
     const sk = task.stateKey || stateKey(task.state);
     const isIdle = sk === "idle";
+    const isDone = sk === "done";
+    const isFailed = sk === "failed";
+    const isRunning = !isIdle && !isDone && !isFailed;
     const items = [];
 
     if (isIdle && onStart) {
@@ -72,6 +76,14 @@ export function TaskList({
         label: "restart",
         icon: "\u21BA",
         action: () => onRestart(task.id),
+      });
+    }
+
+    if (isRunning && onStop) {
+      items.push({
+        label: "stop",
+        icon: "\u23F9",
+        action: () => onStop(task.id),
       });
     }
 

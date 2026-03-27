@@ -635,16 +635,77 @@ app.post("/tasks/:id/restart", async (req, res) => {
 });
 
 app.delete("/tasks/:id", async (req, res) => {
-  const actor = actors.get(req.params.id);
-  if (actor) {
-    cleanupAgent(req.params.id);
-    actor.stop();
-    actors.delete(req.params.id);
+  const id = req.params.id;
+  const actor = actors.get(id);
+  if (!actor) {
+    const dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
   }
-  await clearTaskLogs(req.params.id);
-  await dbDeleteTask(req.params.id);
-  broadcast({ type: "TASK_DELETED", taskId: req.params.id });
+  if (actor) {
+    cleanupAgent(id);
+    actor.stop();
+    actors.delete(id);
+  }
+  await clearTaskLogs(id);
+  await dbDeleteTask(id);
+  broadcast({ type: "TASK_DELETED", taskId: id });
   res.json({ ok: true });
+});
+
+app.post("/tasks/:id/stop", async (req, res) => {
+  const id = req.params.id;
+
+  // Get task metadata from live actor or db
+  let description, projectPath, createdAt;
+  const existingActor = actors.get(id);
+  if (existingActor) {
+    const snap = existingActor.getSnapshot();
+    const sk = stateKey(snap.value);
+    if (sk === "idle") {
+      return res.status(400).json({ error: "task is already idle" });
+    }
+    description = existingActor._description;
+    projectPath = existingActor._projectPath;
+    createdAt = existingActor._createdAt;
+    // Kill any running agent and stop actor
+    cleanupAgent(id);
+    existingActor.stop();
+    actors.delete(id);
+  } else {
+    // No live actor — check db
+    const dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+    const sk = typeof dbTask.state === "string" ? dbTask.state : stateKey(dbTask.state);
+    if (sk === "idle" || sk === "done" || sk === "failed") {
+      return res.status(400).json({ error: `task is already in terminal/idle state: ${sk}` });
+    }
+    description = dbTask.description;
+    projectPath = dbTask.projectPath;
+    createdAt = dbTask.createdAt;
+  }
+
+  // Create a fresh idle actor with the same description and project
+  const newActor = createActor(workflowMachine);
+  newActor._description = description;
+  newActor._projectPath = projectPath;
+  newActor._createdAt = createdAt;
+
+  actors.set(id, newActor);
+  wireActor(id, newActor);
+  newActor.start();
+
+  // Persist the reset state
+  const snap = newActor.getSnapshot();
+  await dbUpdateTask(id, {
+    state: snap.value,
+    stateKey: stateKey(snap.value),
+    label: stateLabel(snap.value),
+    context: snap.context,
+  });
+
+  broadcast({ type: "TASK_STOPPED", taskId: id });
+
+  res.json(getTaskSnapshot(id));
 });
 
 // --- WebSocket ---

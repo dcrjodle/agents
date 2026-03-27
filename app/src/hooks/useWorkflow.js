@@ -159,6 +159,11 @@ export function useWorkflow() {
             setTasks((prev) => prev.filter((t) => t.id !== msg.taskId));
             break;
 
+          case "TASK_STOPPED":
+            setPendingPlans((prev) => { const next = { ...prev }; delete next[msg.taskId]; return next; });
+            setErrors((prev) => { const next = { ...prev }; delete next[msg.taskId]; return next; });
+            break;
+
           case "AGENT_SPAWNED":
             appendLog(msg.taskId, {
               type: "spawned",
@@ -327,6 +332,15 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const stopTask = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to stop task: ${res.statusText}`);
+    return res.json();
+  };
+
   const clearErrors = (taskId) => {
     setErrors((prev) => {
       const next = { ...prev };
@@ -340,7 +354,7 @@ export function useWorkflow() {
     return results;
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
+  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, startAllTasks, restartTask, stopTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
 }
 
 export { stateKey };
