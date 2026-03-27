@@ -86,6 +86,21 @@ export const NEXT_EVENTS = {
   "failed": [{ type: "RETRY" }],
 };
 
+export const STATE_PRIORITY = {
+  "planning.running": 0,
+  "branching": 0,
+  "developing": 0,
+  "committing": 0,
+  "testing": 0,
+  "reviewing": 0,
+  "pushing": 0,
+  "merging.creatingPr": 0,
+  "planning.awaitingApproval": 1,
+  "merging.awaitingApproval": 1,
+  "idle": 2,
+  "failed": 2,
+};
+
 export const AGENT_COLUMN_COLORS = {
   planner: "var(--col-planner)",
   developer: "var(--col-developer)",

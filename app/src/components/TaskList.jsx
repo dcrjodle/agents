@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
-import { STATE_LABELS } from "../constants.js";
+import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
 import "../styles/task-list.css";
@@ -116,6 +116,17 @@ export function TaskList({
       activeTasks.push(task);
     }
   }
+
+  activeTasks.sort((a, b) => {
+    const skA = a.stateKey || stateKey(a.state);
+    const skB = b.stateKey || stateKey(b.state);
+    const pA = STATE_PRIORITY[skA] ?? 2;
+    const pB = STATE_PRIORITY[skB] ?? 2;
+    if (pA !== pB) return pA - pB;
+    const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tB - tA;
+  });
 
   const renderTask = (task) => {
     const sk = task.stateKey || stateKey(task.state);
