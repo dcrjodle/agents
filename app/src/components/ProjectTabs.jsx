@@ -90,9 +90,38 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                 transition: "all 0.15s",
                 letterSpacing: "0.01em",
                 opacity: isDragging ? 0.4 : 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
               }}
             >
               {project.name}
+              {isActive && onOpenSettings && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  title="project settings"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSettings(project);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      onOpenSettings(project);
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    color: "var(--text-dim)",
+                    opacity: 0.6,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Settings size={11} />
+                </span>
+              )}
             </button>
             {isActive && idleCount > 0 && onStartAll && (
               <IconButton
@@ -106,22 +135,6 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                 style={{
                   color: "var(--accent)",
                   opacity: 0.8,
-                  padding: "4px",
-                }}
-              />
-            )}
-            {isActive && onOpenSettings && (
-              <IconButton
-                icon={Settings}
-                size={11}
-                title="project settings"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenSettings(project);
-                }}
-                style={{
-                  color: "var(--text-dim)",
-                  opacity: 0.6,
                   padding: "4px",
                 }}
               />
