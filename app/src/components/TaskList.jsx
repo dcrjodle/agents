@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
@@ -25,10 +25,14 @@ export function TaskList({
   onRestart,
   onViewPlan,
   onApprove,
+  onEdit,
   pendingPlans,
 }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [doneCollapsed, setDoneCollapsed] = useState(getInitialCollapsed);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef(null);
 
   const handleContextMenu = useCallback((e, task) => {
     e.preventDefault();
@@ -38,6 +42,33 @@ export function TaskList({
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
+
+  const startEditing = useCallback((task) => {
+    setEditingTaskId(task.id);
+    setEditValue(task.description);
+    // Focus the input on next render
+    setTimeout(() => {
+      if (editInputRef.current) editInputRef.current.focus();
+    }, 0);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingTaskId(null);
+    setEditValue("");
+  }, []);
+
+  const commitEditing = useCallback(async (taskId) => {
+    const trimmed = editValue.trim();
+    if (trimmed && onEdit) {
+      try {
+        await onEdit(taskId, trimmed);
+      } catch (err) {
+        console.error("Failed to update task:", err);
+      }
+    }
+    setEditingTaskId(null);
+    setEditValue("");
+  }, [editValue, onEdit]);
 
   const handleToggle = useCallback((e) => {
     const isOpen = e.target.open;
@@ -64,6 +95,14 @@ export function TaskList({
         label: "start",
         icon: "\u25B6",
         action: () => onStart(task.id),
+      });
+    }
+
+    if (isIdle && onEdit) {
+      items.push({
+        label: "edit",
+        icon: "\u270E",
+        action: () => startEditing(task),
       });
     }
 
@@ -134,6 +173,7 @@ export function TaskList({
     const isSelected = task.id === selectedTaskId;
     const isDone = sk === "done";
     const isFailed = sk === "failed";
+    const isEditing = task.id === editingTaskId;
 
     let descClass = "task-row-description-text";
     if (isDone) descClass += " done";
@@ -143,8 +183,8 @@ export function TaskList({
       <div
         key={task.id}
         className={`task-row${isSelected ? " selected" : ""}`}
-        onClick={() => onSelectTask(isSelected ? null : task.id)}
-        onContextMenu={(e) => handleContextMenu(e, task)}
+        onClick={() => !isEditing && onSelectTask(isSelected ? null : task.id)}
+        onContextMenu={(e) => !isEditing && handleContextMenu(e, task)}
       >
         <div className="task-row-header">
           <StatusIcon stateKey={sk} size={16} />
@@ -152,7 +192,27 @@ export function TaskList({
           <div className="task-row-spacer" />
         </div>
         <div className="task-row-description">
-          <span className={descClass}>{task.description}</span>
+          {isEditing ? (
+            <input
+              ref={editInputRef}
+              className="task-row-edit-input"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitEditing(task.id);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelEditing();
+                }
+              }}
+              onBlur={() => commitEditing(task.id)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className={descClass}>{task.description}</span>
+          )}
         </div>
       </div>
     );

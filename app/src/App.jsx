@@ -38,6 +38,7 @@ export function App() {
     deleteTask,
     approveTask,
     clearPendingPlan,
+    updateTask,
   } = useWorkflow();
 
   useEffect(() => {
@@ -241,6 +242,7 @@ export function App() {
             onRestart={restartTask}
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
+            onEdit={(taskId, description) => updateTask(taskId, description).catch((err) => console.error("Failed to edit task:", err))}
             pendingPlans={pendingPlans}
           />
         </div>

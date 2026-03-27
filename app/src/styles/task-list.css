@@ -70,6 +70,18 @@
   opacity: 0.6;
 }
 
+.task-row-edit-input {
+  width: 100%;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-input, var(--bg-panel, #1e1e2e));
+  border: 1px solid var(--accent, #7c6af7);
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
 /* Collapsible done section */
 .task-list-done-section {
   margin-top: 8px;

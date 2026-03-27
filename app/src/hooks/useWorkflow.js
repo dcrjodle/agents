@@ -241,6 +241,14 @@ export function useWorkflow() {
             }
             break;
 
+          case "TASK_UPDATED":
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === msg.task.id ? { ...t, ...msg.task } : t
+              )
+            );
+            break;
+
           case "MESSAGE_SENT":
             appendLog(msg.taskId, {
               type: "message",
@@ -340,7 +348,17 @@ export function useWorkflow() {
     return results;
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors };
+  const updateTask = async (taskId, description) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description }),
+    });
+    if (!res.ok) throw new Error(`Failed to update task: ${res.statusText}`);
+    return res.json();
+  };
+
+  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };

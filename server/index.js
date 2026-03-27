@@ -25,7 +25,7 @@ const wss = new WebSocketServer({ server });
 app.use(express.json());
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -488,6 +488,29 @@ app.post("/tasks", async (req, res) => {
   const snapshot = getTaskSnapshot(id);
   broadcast({ type: "TASK_CREATED", task: snapshot });
   res.status(201).json(snapshot);
+});
+
+app.patch("/tasks/:id", async (req, res) => {
+  const { description } = req.body;
+  if (!description || typeof description !== "string" || !description.trim()) {
+    return res.status(400).json({ error: "description required" });
+  }
+
+  const actor = actors.get(req.params.id);
+  if (!actor) return res.status(404).json({ error: "task not found" });
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+  if (sk !== "idle") {
+    return res.status(400).json({ error: `Task is in state "${sk}", can only edit idle tasks` });
+  }
+
+  actor._description = description.trim();
+  await dbUpdateTask(req.params.id, { description: description.trim() });
+
+  const snapshot = getTaskSnapshot(req.params.id);
+  broadcast({ type: "TASK_UPDATED", task: snapshot });
+  res.json(snapshot);
 });
 
 app.post("/tasks/:id/start", (req, res) => {
