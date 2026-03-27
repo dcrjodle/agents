@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 
-export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings }) {
+export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const dragNode = useRef(null);
@@ -52,6 +52,36 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
       borderBottom: "1px solid var(--border)",
       marginBottom: 16,
     }}>
+      {idleCount > 0 && onStartAll && (
+        <button
+          onClick={onStartAll}
+          title={`Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}`}
+          style={{
+            padding: "7px 10px",
+            fontSize: 11,
+            fontWeight: 500,
+            color: "var(--accent)",
+            background: "transparent",
+            border: "none",
+            borderBottom: "2px solid transparent",
+            cursor: "pointer",
+            fontFamily: "var(--font-mono)",
+            transition: "all 0.15s",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            opacity: 0.8,
+            alignSelf: "center",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.8"; }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          start all
+        </button>
+      )}
       {projects.map((project, index) => {
         const isActive = project.path === selected.path;
         const isDragging = dragIndex === index;
