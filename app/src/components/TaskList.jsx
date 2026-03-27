@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
+import { useContextMenu } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
@@ -28,20 +29,11 @@ export function TaskList({
   onEdit,
   pendingPlans,
 }) {
-  const [contextMenu, setContextMenu] = useState(null);
+  const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
   const [doneCollapsed, setDoneCollapsed] = useState(getInitialCollapsed);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editValue, setEditValue] = useState("");
   const editInputRef = useRef(null);
-
-  const handleContextMenu = useCallback((e, task) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, task });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(null);
-  }, []);
 
   const startEditing = useCallback((task) => {
     setEditingTaskId(task.id);
@@ -184,7 +176,7 @@ export function TaskList({
         key={task.id}
         className={`task-row${isSelected ? " selected" : ""}`}
         onClick={() => !isEditing && onSelectTask(isSelected ? null : task.id)}
-        onContextMenu={(e) => !isEditing && handleContextMenu(e, task)}
+        onContextMenu={(e) => !isEditing && openContextMenu(e, task)}
       >
         <div className="task-row-header">
           <StatusIcon stateKey={sk} size={16} />
@@ -253,7 +245,7 @@ export function TaskList({
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildMenuItems(contextMenu.task)}
+          items={buildMenuItems(contextMenu.target)}
           onClose={closeContextMenu}
         />
       )}
