@@ -171,6 +171,44 @@ export function App() {
     }
   }, [filteredTasks, selectedTaskId]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Skip when a modal/dialog is open
+      if (viewingPlanTaskId || showSettings || projectSettingsTarget) return;
+      // Skip when focus is inside an input or textarea
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      // Need at least one project
+      if (projects.length === 0) return;
+
+      // Cmd+1–9: jump to Nth tab
+      if (e.metaKey && !e.altKey && e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        if (projects.length <= 1) return;
+        const index = parseInt(e.key, 10) - 1;
+        if (index < projects.length) {
+          handleSelectProject(projects[index]);
+        }
+        return;
+      }
+
+      // Cmd+Option+ArrowLeft / Cmd+Option+ArrowRight: cycle tabs
+      if (e.metaKey && e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        if (projects.length <= 1 || !selectedProject) return;
+        const currentIndex = projects.findIndex((p) => p.path === selectedProject.path);
+        if (currentIndex === -1) return;
+        const nextIndex =
+          e.key === "ArrowRight"
+            ? (currentIndex + 1) % projects.length
+            : (currentIndex - 1 + projects.length) % projects.length;
+        handleSelectProject(projects[nextIndex]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [projects, selectedProject, showSettings, viewingPlanTaskId, projectSettingsTarget]);
+
   const idleTasks = filteredTasks.filter((t) => {
     const sk = t.stateKey || stateKey(t.state);
     return sk === "idle";
