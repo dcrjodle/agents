@@ -812,8 +812,12 @@ app.post("/internal/add-memory", async (req, res) => {
   res.json({ ok: true, entry });
 });
 
+const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "githubber", "merger"]);
+
 app.get("/memory/:role", async (req, res) => {
-  const entries = await getMemory(req.params.role);
+  const { role } = req.params;
+  if (!KNOWN_ROLES.has(role)) return res.status(400).json({ error: "Unknown role" });
+  const entries = await getMemory(role);
   res.json(entries);
 });
 

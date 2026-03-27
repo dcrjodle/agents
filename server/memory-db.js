@@ -1,13 +1,12 @@
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { mkdir } from "fs/promises";
+import { mkdir, readdir } from "fs/promises";
+import { existsSync } from "fs";
 import { JSONFilePreset } from "lowdb/node";
 import { v4 as uuid } from "uuid";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = join(__dirname, "..", "agents");
-
-const defaultData = { entries: [] };
 
 // Cache open db handles per role
 const dbCache = new Map();
@@ -19,7 +18,10 @@ async function getDb(role) {
   await mkdir(memoryDir, { recursive: true });
 
   const dbPath = join(memoryDir, "db.json");
-  const db = await JSONFilePreset(dbPath, defaultData);
+  // Pass a fresh object each time so multiple roles never share the same
+  // defaultData reference (lowdb sets db.data = defaultData when the file
+  // doesn't yet exist, so a shared object would cause cross-role pollution).
+  const db = await JSONFilePreset(dbPath, { entries: [] });
   dbCache.set(role, db);
   return db;
 }
@@ -61,9 +63,6 @@ export async function getMemory(role) {
  * @returns {Promise<{ [role]: object[] }>}
  */
 export async function getAllMemory() {
-  const { readdir } = await import("fs/promises");
-  const { existsSync } = await import("fs");
-
   const result = {};
 
   // Scan agents directory for roles that have memory/db.json
