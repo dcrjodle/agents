@@ -54,20 +54,6 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
       borderBottom: "1px solid var(--border)",
       marginBottom: 16,
     }}>
-      {idleCount > 0 && onStartAll && (
-        <IconButton
-          icon={Play}
-          label={`start all`}
-          onClick={onStartAll}
-          title={`Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}`}
-          style={{
-            color: "var(--accent)",
-            opacity: 0.8,
-            alignSelf: "center",
-            padding: "5px 8px",
-          }}
-        />
-      )}
       {projects.map((project, index) => {
         const isActive = project.path === selected.path;
         const isDragging = dragIndex === index;
@@ -108,6 +94,22 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
             >
               {project.name}
             </button>
+            {isActive && idleCount > 0 && onStartAll && (
+              <IconButton
+                icon={Play}
+                size={11}
+                title={`Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartAll();
+                }}
+                style={{
+                  color: "var(--accent)",
+                  opacity: 0.8,
+                  padding: "4px",
+                }}
+              />
+            )}
             {isActive && onOpenSettings && (
               <IconButton
                 icon={Settings}
