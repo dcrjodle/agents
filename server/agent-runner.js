@@ -69,19 +69,16 @@ async function loadAgentConfigs() {
       console.warn(`No prompt builder for role "${role}" — agent will use system prompt only`);
     }
 
-    // Load MCP tools if specified
-    let mcpServer = null;
+    // Load MCP tools if specified — store the tools array, not a Protocol instance,
+    // so each agent run gets a fresh MCP server (Protocol can only connect once).
+    let mcpTools = null;
     if (config.mcpTools) {
       const toolsPath = join(agentDir, config.mcpTools);
       if (existsSync(toolsPath)) {
         try {
           const module = await import(toolsPath);
           if (module.tools && module.tools.length > 0) {
-            mcpServer = createSdkMcpServer({
-              name: `${role}-tools`,
-              version: "1.0.0",
-              tools: module.tools,
-            });
+            mcpTools = { name: `${role}-tools`, tools: module.tools };
           }
         } catch (err) {
           console.error(`Failed to load MCP tools for ${role} from ${toolsPath}:`, err);
@@ -99,7 +96,7 @@ async function loadAgentConfigs() {
       getCwd,
       buildPrompt,
       supportsResume: config.supportsResume || false,
-      mcpServer,
+      mcpTools,
     });
   }
 
@@ -393,8 +390,13 @@ export function runAgent(role, taskId, handoff, callbacks) {
   };
 
   // Add role-specific in-process MCP server if agent has custom tools
-  if (config.mcpServer) {
-    mcpServers[`${role}-tools`] = config.mcpServer;
+  // Create a fresh Protocol instance per run to avoid "already connected" errors
+  if (config.mcpTools) {
+    mcpServers[config.mcpTools.name] = createSdkMcpServer({
+      name: config.mcpTools.name,
+      version: "1.0.0",
+      tools: config.mcpTools.tools,
+    });
   }
 
   // Start the query in the background

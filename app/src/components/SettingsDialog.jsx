@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
+import { Button } from "./Button.jsx";
 
 /**
  * SettingsDialog - Modal dialog for application settings.
@@ -80,21 +81,9 @@ export function SettingsDialog({
           marginBottom: 16,
         }}>
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>dark mode</span>
-          <button
-            onClick={onToggleDark}
-            style={{
-              fontSize: 10,
-              padding: "3px 10px",
-              borderRadius: 3,
-              border: "1px solid var(--border)",
-              background: darkMode ? "var(--bg-muted)" : "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
+          <Button variant="toggle" active={darkMode} size="sm" onClick={onToggleDark}>
             {darkMode ? "on" : "off"}
-          </button>
+          </Button>
         </div>
 
         {/* Projects */}
@@ -115,19 +104,9 @@ export function SettingsDialog({
             }}
           >
             <span style={{ color: "var(--text)" }}>{p.name}</span>
-            <button
-              onClick={() => onRemoveProject(p.path)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--dot-failed)",
-                cursor: "pointer",
-                fontSize: 10,
-                fontFamily: "var(--font-mono)",
-              }}
-            >
+            <Button variant="danger" size="sm" onClick={() => onRemoveProject(p.path)}>
               remove
-            </button>
+            </Button>
           </div>
         ))}
 
@@ -163,21 +142,9 @@ export function SettingsDialog({
               fontFamily: "var(--font-mono)",
             }}
           />
-          <button
-            onClick={handleAdd}
-            style={{
-              fontSize: 10,
-              padding: "4px 10px",
-              borderRadius: 3,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
+          <Button variant="secondary" size="sm" onClick={handleAdd}>
             add
-          </button>
+          </Button>
         </div>
       </div>
     </div>
