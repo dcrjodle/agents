@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Settings } from "lucide-react";
 import { useWorkflow, stateKey } from "./hooks/useWorkflow.js";
 import { CreateTask } from "./components/CreateTask.jsx";
@@ -25,6 +25,10 @@ export function App() {
     const saved = localStorage.getItem("theme");
     return saved === "dark";
   });
+  const [autoApprovePlans, setAutoApprovePlans] = useState(() => {
+    return localStorage.getItem("autoApprovePlans") === "true";
+  });
+  const approvedPlanIds = useRef(new Set());
 
   const {
     tasks,
@@ -48,6 +52,20 @@ export function App() {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
     localStorage.setItem("theme", darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  useEffect(() => {
+    localStorage.setItem("autoApprovePlans", autoApprovePlans ? "true" : "false");
+  }, [autoApprovePlans]);
+
+  useEffect(() => {
+    if (!autoApprovePlans) return;
+    Object.keys(pendingPlans).forEach((taskId) => {
+      if (approvedPlanIds.current.has(taskId)) return;
+      approvedPlanIds.current.add(taskId);
+      approveTask(taskId, "Auto-approved");
+      clearPendingPlan(taskId);
+    });
+  }, [autoApprovePlans, pendingPlans, approveTask, clearPendingPlan]);
 
   useEffect(() => {
     fetch(`${API_BASE}/config`)
@@ -219,6 +237,28 @@ export function App() {
     startAllTasks(idleTasks.map((t) => t.id));
   };
 
+  const handleToggleAutoApprovePlans = useCallback(() => {
+    setAutoApprovePlans((v) => !v);
+  }, []);
+
+  const commands = useMemo(() => [
+    {
+      label: "run all",
+      description: "start all idle tasks",
+      action: () => handleStartAll(),
+    },
+    {
+      label: "open settings",
+      description: "open global settings",
+      action: () => setShowSettings(true),
+    },
+    {
+      label: autoApprovePlans ? "deactivate auto approve plans" : "activate auto approve plans",
+      description: "toggle auto-approve mode for plans",
+      action: handleToggleAutoApprovePlans,
+    },
+  ], [autoApprovePlans, handleToggleAutoApprovePlans, idleTasks]);
+
   const viewingTask = viewingPlanTaskId ? tasks.find((t) => t.id === viewingPlanTaskId) : null;
   const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;
 
@@ -262,7 +302,7 @@ export function App() {
         {/* Task list - centered when no selection, slides left when detail open */}
         <div className={`task-list-container${selectedTask ? " shifted" : ""}`}>
           {projects.length > 0 && selectedProject && (
-            <CreateTask onCreate={handleCreateTask} />
+            <CreateTask onCreate={handleCreateTask} commands={commands} />
           )}
           <TaskList
             tasks={filteredTasks}
