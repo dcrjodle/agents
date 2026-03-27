@@ -237,6 +237,15 @@ export function App() {
     startAllTasks(idleTasks.map((t) => t.id));
   };
 
+  const handleApproveAllPlans = useCallback(() => {
+    const taskIds = Object.keys(pendingPlans);
+    taskIds.forEach((taskId) => {
+      approveTask(taskId, "User approved all plans");
+      clearPendingPlan(taskId);
+    });
+    setViewingPlanTaskId(null);
+  }, [pendingPlans, approveTask, clearPendingPlan]);
+
   const handleToggleAutoApprovePlans = useCallback(() => {
     setAutoApprovePlans((v) => !v);
   }, []);
@@ -350,6 +359,8 @@ export function App() {
           onApprove={handleApprovePlan}
           onReject={handleRejectPlan}
           onClose={handleClosePlan}
+          onApproveAll={handleApproveAllPlans}
+          pendingPlanCount={Object.keys(pendingPlans).length}
         />
       )}
 

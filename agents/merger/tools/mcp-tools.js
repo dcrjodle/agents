@@ -65,32 +65,38 @@ export const tools = [
   {
     name: "fast_forward_main",
     description:
-      "Checkout main in the project directory, pull latest, merge the task branch (fast-forward), and push to remote.",
+      "Merge the task branch into remote main and push, without touching the local main checkout. Operates entirely from the worktree: fetches latest main, merges it into the task branch, then pushes the result to remote main.",
     inputSchema: {
-      projectPath: z.string().describe("Absolute path to the main project repository"),
-      branchName: z.string().describe("Task branch name to merge into main"),
+      worktreePath: z.string().describe("Absolute path to the git worktree (task branch)"),
+      branchName: z.string().describe("Task branch name to merge into remote main"),
     },
-    handler: async ({ projectPath, branchName }) => {
+    handler: async ({ worktreePath, branchName }) => {
       try {
         const mainBranch = execSync(
           `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main"`,
-          { cwd: projectPath, encoding: "utf-8" }
+          { cwd: worktreePath, encoding: "utf-8" }
         ).trim();
 
-        execSync(`git checkout ${mainBranch}`, { cwd: projectPath, encoding: "utf-8", stdio: "pipe" });
-        execSync(`git pull --ff-only origin ${mainBranch}`, { cwd: projectPath, encoding: "utf-8", stdio: "pipe" });
+        // Fetch latest main
+        execSync(`git fetch origin ${mainBranch}`, { cwd: worktreePath, encoding: "utf-8", stdio: "pipe" });
 
-        // Try fast-forward first, fall back to regular merge
+        // Merge latest main into the task branch (should be clean after step 1, but ensures we're up to date)
         try {
-          execSync(`git merge ${branchName} --ff-only`, { cwd: projectPath, encoding: "utf-8", stdio: "pipe" });
+          execSync(`git merge origin/${mainBranch} --no-edit`, { cwd: worktreePath, encoding: "utf-8", stdio: "pipe" });
         } catch {
-          execSync(`git merge ${branchName} --no-edit`, { cwd: projectPath, encoding: "utf-8", stdio: "pipe" });
+          // If merge conflicts arise here, abort and fail — step 1 should have resolved them
+          execSync("git merge --abort 2>/dev/null || true", { cwd: worktreePath, encoding: "utf-8", stdio: "pipe" });
+          return {
+            content: [{ type: "text", text: JSON.stringify({ success: false, error: `Merge conflicts with ${mainBranch} — resolve conflicts first using merge_main_into_branch.` }) }],
+            isError: true,
+          };
         }
 
-        execSync(`git push origin ${mainBranch}`, { cwd: projectPath, encoding: "utf-8", stdio: "pipe" });
+        // Push the task branch to remote main — this is now a fast-forward since we just merged
+        execSync(`git push origin HEAD:${mainBranch}`, { cwd: worktreePath, encoding: "utf-8", stdio: "pipe" });
 
         return {
-          content: [{ type: "text", text: JSON.stringify({ success: true, message: `Merged ${branchName} into ${mainBranch} and pushed.` }) }],
+          content: [{ type: "text", text: JSON.stringify({ success: true, message: `Merged ${branchName} into origin/${mainBranch} and pushed (local main unchanged).` }) }],
         };
       } catch (err) {
         return {

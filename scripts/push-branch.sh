@@ -40,8 +40,12 @@ echo "[pushing] Pushing $BRANCH_NAME from $WORKTREE_PATH" >&2
 
 cd "$WORKTREE_PATH"
 
-# Push the branch
-if ! git push -u origin "$BRANCH_NAME" 2>&1 >&2; then
+# Push the task branch. Use --force-with-lease so it succeeds even if the remote
+# branch diverged (e.g. from merge commits added during a previous merger run).
+# This is safe: task branches are agent-owned, --force-with-lease still rejects
+# if the remote was updated by something other than our last fetch, and this
+# only affects the task branch — never main or any other branch.
+if ! git push -u --force-with-lease origin "$BRANCH_NAME" 2>&1 >&2; then
   emit_result '{"status":"failed","error":"git push failed"}'
   exit 1
 fi
