@@ -25,6 +25,7 @@ export const STATE_COLORS = {
   "pushing": "var(--dot-merging)",
   "merging.awaitingApproval": "var(--dot-awaiting)",
   "merging.creatingPr": "var(--dot-merging)",
+  "directMerging": "var(--dot-merging)",
   "done": "var(--dot-done)",
   "failed": "var(--dot-failed)",
 };
@@ -46,6 +47,7 @@ export const STATE_LABELS = {
   "pushing": "pushing",
   "merging.awaitingApproval": "awaiting approval",
   "merging.creatingPr": "creating pr",
+  "directMerging": "direct merging",
   "done": "done",
   "failed": "failed",
 };

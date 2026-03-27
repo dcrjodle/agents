@@ -51,17 +51,18 @@ export function App() {
     localStorage.setItem("theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  const autoApprovePlans = selectedProject?.settings?.autoApprovePlans;
-
   useEffect(() => {
-    if (!autoApprovePlans) return;
     Object.keys(pendingPlans).forEach((taskId) => {
       if (approvedPlanIds.current.has(taskId)) return;
+      const task = tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      const project = projects.find((p) => p.path === task.projectPath);
+      if (!project?.settings?.autoApprovePlans) return;
       approvedPlanIds.current.add(taskId);
       approveTask(taskId, "Auto-approved");
       clearPendingPlan(taskId);
     });
-  }, [autoApprovePlans, pendingPlans, approveTask, clearPendingPlan]);
+  }, [pendingPlans, tasks, projects, approveTask, clearPendingPlan]);
 
   useEffect(() => {
     fetch(`${API_BASE}/config`)
@@ -265,6 +266,15 @@ export function App() {
     startAllTasks(idleTasks.map((t) => t.id));
   };
 
+  const handleApproveAllPlans = useCallback(() => {
+    const taskIds = Object.keys(pendingPlans);
+    taskIds.forEach((taskId) => {
+      approveTask(taskId, "User approved all plans");
+      clearPendingPlan(taskId);
+    });
+    setViewingPlanTaskId(null);
+  }, [pendingPlans, approveTask, clearPendingPlan]);
+
   const commands = useMemo(() => {
     // Global commands — always present
     const globalCommands = [
@@ -399,6 +409,7 @@ export function App() {
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             onSelectTask={setSelectedTaskId}
+            onRemoveProject={handleRemoveProject}
           />
         </>
       ) : (
@@ -450,6 +461,8 @@ export function App() {
           onApprove={handleApprovePlan}
           onReject={handleRejectPlan}
           onClose={handleClosePlan}
+          onApproveAll={handleApproveAllPlans}
+          pendingPlanCount={Object.keys(pendingPlans).length}
         />
       )}
 

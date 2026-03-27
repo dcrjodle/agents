@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
 import { Play, Settings } from "lucide-react";
-import { IconButton } from "./IconButton.jsx";
 import { TabTaskPopover } from "./TabTaskPopover.jsx";
 import { Button } from "./Button.jsx";
+import { ContextMenu } from "./ContextMenu.jsx";
+import { useContextMenu } from "../hooks/useContextMenu.js";
 
-export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onViewPlan, onApprove, onSelectTask }) {
+export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onViewPlan, onApprove, onSelectTask, onRemoveProject }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const dragNode = useRef(null);
@@ -12,6 +13,7 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
   const [anchorRect, setAnchorRect] = useState(null);
   const hoverTimerRef = useRef(null);
   const leaveTimerRef = useRef(null);
+  const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
 
   const handleDragStart = (e, index) => {
     setDragIndex(index);
@@ -121,6 +123,11 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
               }}
               onMouseEnter={(e) => handleTabMouseEnter(e, project)}
               onMouseLeave={handleTabMouseLeave}
+              onContextMenu={(e) => {
+                if (dragIndex !== null) return;
+                setHoveredProject(null);
+                openContextMenu(e, project);
+              }}
               className={[
                 isDragOver && "drag-over",
                 isDragging && "dragging",
@@ -171,23 +178,33 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                   <Settings size={11} />
                 </span>
               )}
+              {isActive && onStartAll && (
+                <span
+                  role="button"
+                  tabIndex={idleCount === 0 ? -1 : 0}
+                  title={idleCount > 0 ? `Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}` : "No idle tasks"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (idleCount > 0) onStartAll();
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === " ") && idleCount > 0) {
+                      e.stopPropagation();
+                      onStartAll();
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    color: "var(--accent)",
+                    opacity: idleCount === 0 ? 0.3 : 0.8,
+                    cursor: idleCount === 0 ? "default" : "pointer",
+                  }}
+                >
+                  <Play size={11} />
+                </span>
+              )}
             </Button>
-            {isActive && idleCount > 0 && onStartAll && (
-              <IconButton
-                icon={Play}
-                size={11}
-                title={`Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartAll();
-                }}
-                style={{
-                  color: "var(--accent)",
-                  opacity: 0.8,
-                  padding: "4px",
-                }}
-              />
-            )}
           </div>
         );
       })}
@@ -204,6 +221,26 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
           onSelectTask={onSelectTask}
           onMouseEnter={handlePopoverMouseEnter}
           onMouseLeave={handlePopoverMouseLeave}
+        />
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            ...(onOpenSettings ? [{
+              label: "open settings",
+              icon: "⚙",
+              action: () => onOpenSettings(contextMenu.target),
+            }] : []),
+            ...(onRemoveProject ? [{
+              label: "remove project",
+              icon: "×",
+              danger: true,
+              action: () => onRemoveProject(contextMenu.target.path),
+            }] : []),
+          ]}
+          onClose={closeContextMenu}
         />
       )}
     </div>

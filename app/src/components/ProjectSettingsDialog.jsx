@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
@@ -8,9 +8,18 @@ const API_BASE = "/api";
 export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const settings = project.settings || {};
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
+  const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [testingMode, setTestingMode] = useState(settings.testingMode || "build");
   const [autoApprovePlans, setAutoApprovePlans] = useState(!!settings.autoApprovePlans);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -18,7 +27,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr, testingMode, autoApprovePlans } }),
+        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePlans, testingMode } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -105,9 +114,9 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           }}
         >
           <div>
-            <div style={{ fontSize: 12, color: "var(--text)" }}>auto approve plans</div>
+            <div style={{ fontSize: 12, color: "var(--text)" }}>auto-approve plans</div>
             <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-              {autoApprovePlans ? "plans are automatically approved" : "plans require manual review before proceeding"}
+              {autoApprovePlans ? "plans are approved automatically without review" : "plans require manual approval before running"}
             </div>
           </div>
           <Button variant="toggle" active={autoApprovePlans} size="sm" onClick={() => setAutoApprovePlans((v) => !v)}>

@@ -14,7 +14,7 @@ You receive via the prompt:
 
 1. **Update the task branch** — Fetch latest main and merge it into the task branch
 2. **Resolve conflicts** — If the merge produces conflicts, read the conflicted files, understand both sides, and resolve them
-3. **Merge into main** — Use the `fast_forward_main` tool to merge the updated task branch into main and push
+3. **Push to remote main** — Use `fast_forward_main` with the **worktreePath** (not projectPath). It fetches latest main, merges into the task branch, and pushes to remote main — all from the worktree. Local main is never touched.
 4. **Clean up** — Use the `cleanup_branch` tool to remove the worktree and delete the task branch
 
 ## Conflict Resolution

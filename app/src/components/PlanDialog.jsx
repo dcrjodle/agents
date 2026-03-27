@@ -4,7 +4,7 @@ import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
-export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose }) {
+export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose, onApproveAll, pendingPlanCount }) {
   const contentRef = useRef(null);
 
   useEffect(() => {
@@ -116,6 +116,11 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
           <Button variant="secondary" size="md" onClick={onReject}>
             reject
           </Button>
+          {pendingPlanCount > 1 && (
+            <Button variant="secondary" size="md" onClick={onApproveAll}>
+              approve all ({pendingPlanCount})
+            </Button>
+          )}
           <Button variant="primary" size="md" onClick={onApprove}>
             approve
           </Button>
