@@ -106,14 +106,6 @@ export function TaskList({
       });
     }
 
-    if (!isIdle && onRestart) {
-      items.push({
-        label: "restart",
-        icon: "\u21BA",
-        action: () => onRestart(task.id),
-      });
-    }
-
     if (sk === "planning.awaitingApproval" && pendingPlans?.[task.id] && onViewPlan) {
       items.push({
         label: "view plan",
@@ -132,6 +124,14 @@ export function TaskList({
 
     if (items.length > 0) {
       items.push({ separator: true });
+    }
+
+    if (!isIdle && onRestart) {
+      items.push({
+        label: "restart",
+        icon: "\u21BA",
+        action: () => onRestart(task.id),
+      });
     }
 
     items.push({
