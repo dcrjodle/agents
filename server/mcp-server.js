@@ -96,6 +96,20 @@ server.registerTool("add_memory", {
   return { content: [{ type: "text", text: "Memory entry saved." }] };
 });
 
+// update_avatar — control the agent's 2D character in the room view
+server.registerTool("update_avatar", {
+  description: "Control your 2D character avatar in the room visualization. Call this to express what you're doing visually — e.g., walk to a position, start thinking, celebrate success, or show an emotion. The frontend renders you as an animated pixel-art character.",
+  inputSchema: {
+    action: z.enum(["idle", "walk", "think", "code", "celebrate", "confused", "wave"]).describe("Animation action for your character"),
+    message: z.string().optional().describe("Short speech bubble text (max 60 chars) shown above your character"),
+    targetX: z.number().optional().describe("X position to walk to (0-100, percentage of room width)"),
+    direction: z.enum(["left", "right"]).optional().describe("Direction the character faces"),
+  },
+}, async ({ action, message, targetX, direction }) => {
+  await post("/internal/avatar-update", { action, message, targetX, direction });
+  return { content: [{ type: "text", text: "Avatar updated." }] };
+});
+
 // get_memory — retrieve entries from agent memory database
 server.registerTool("get_memory", {
   description: "Retrieve entries from this agent's memory database (or another role's memory).",

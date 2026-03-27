@@ -13,13 +13,14 @@ const ICON_PATHS = {
   "merging.awaitingApproval": "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01",
   "merging.creatingPr": "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4",
   "done": "M5 13l4 4L19 7",
+  "directMerging": "M6 3v9m0 0a6 6 0 006 6m0 0v3M18 3v3a6 6 0 01-6 6",
   "failed": "M6 18L18 6M6 6l12 12",
 };
 
 export function StatusIcon({ stateKey, size = 16 }) {
   const color = STATE_COLORS[stateKey] || "var(--dot-idle)";
   const path = ICON_PATHS[stateKey] || ICON_PATHS["idle"];
-  const isAnimating = stateKey.includes("running") || stateKey === "developing" || stateKey === "testing" || stateKey === "reviewing" || stateKey === "branching" || stateKey === "committing" || stateKey === "pushing";
+  const isAnimating = stateKey.includes("running") || stateKey === "developing" || stateKey === "testing" || stateKey === "reviewing" || stateKey === "branching" || stateKey === "committing" || stateKey === "pushing" || stateKey === "directMerging";
 
   return (
     <svg
