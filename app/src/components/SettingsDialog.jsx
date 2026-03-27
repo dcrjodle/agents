@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
@@ -24,6 +24,14 @@ export function SettingsDialog({
 }) {
   const [newName, setNewName] = useState("");
   const [newPath, setNewPath] = useState("");
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const handleAdd = () => {
     if (newName.trim() && newPath.trim()) {
