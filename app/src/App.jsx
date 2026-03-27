@@ -9,6 +9,7 @@ import { DetailPanel } from "./components/DetailPanel.jsx";
 import { SettingsDialog } from "./components/SettingsDialog.jsx";
 import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import { IconButton } from "./components/IconButton.jsx";
+import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
 import "./styles/layout.css";
 
 const API_BASE = "/api";
@@ -24,9 +25,6 @@ export function App() {
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved === "dark";
-  });
-  const [autoApprovePlans, setAutoApprovePlans] = useState(() => {
-    return localStorage.getItem("autoApprovePlans") === "true";
   });
   const approvedPlanIds = useRef(new Set());
 
@@ -53,9 +51,7 @@ export function App() {
     localStorage.setItem("theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  useEffect(() => {
-    localStorage.setItem("autoApprovePlans", autoApprovePlans ? "true" : "false");
-  }, [autoApprovePlans]);
+  const autoApprovePlans = selectedProject?.settings?.autoApprovePlans;
 
   useEffect(() => {
     if (!autoApprovePlans) return;
@@ -175,6 +171,38 @@ export function App() {
     }
   }, [selectedProject]);
 
+  const patchProjectSetting = useCallback(async (key, value) => {
+    if (!selectedProject) return;
+    // Optimistic update
+    const optimistic = { ...selectedProject, settings: { ...selectedProject.settings, [key]: value } };
+    handleProjectSettingsUpdated(optimistic);
+    try {
+      const res = await fetch(`${API_BASE}/config/projects/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selectedProject.path, settings: { [key]: value } }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        handleProjectSettingsUpdated(updated);
+      } else {
+        // Revert on failure
+        const config = await fetch(`${API_BASE}/config`).then((r) => r.json());
+        const list = config.projects || [];
+        setProjects(list);
+        const fresh = list.find((p) => p.path === selectedProject.path);
+        if (fresh) setSelectedProject(fresh);
+      }
+    } catch (err) {
+      console.error("Failed to patch project setting:", err);
+      const config = await fetch(`${API_BASE}/config`).then((r) => r.json());
+      const list = config.projects || [];
+      setProjects(list);
+      const fresh = list.find((p) => p.path === selectedProject.path);
+      if (fresh) setSelectedProject(fresh);
+    }
+  }, [selectedProject, handleProjectSettingsUpdated]);
+
   const filteredTasks = selectedProject
     ? tasks.filter((t) => t.projectPath === selectedProject.path)
     : tasks;
@@ -237,27 +265,100 @@ export function App() {
     startAllTasks(idleTasks.map((t) => t.id));
   };
 
-  const handleToggleAutoApprovePlans = useCallback(() => {
-    setAutoApprovePlans((v) => !v);
-  }, []);
+  const commands = useMemo(() => {
+    // Global commands — always present
+    const globalCommands = [
+      {
+        label: "run all",
+        description: "start all idle tasks",
+        action: () => handleStartAll(),
+      },
+      {
+        label: "open settings",
+        description: "open global settings",
+        action: () => setShowSettings(true),
+      },
+      {
+        label: "open project settings",
+        description: "open settings for active project",
+        action: () => setProjectSettingsTarget(selectedProject),
+      },
+    ];
 
-  const commands = useMemo(() => [
-    {
-      label: "run all",
-      description: "start all idle tasks",
-      action: () => handleStartAll(),
-    },
-    {
-      label: "open settings",
-      description: "open global settings",
-      action: () => setShowSettings(true),
-    },
-    {
-      label: autoApprovePlans ? "deactivate auto approve plans" : "activate auto approve plans",
-      description: "toggle auto-approve mode for plans",
-      action: handleToggleAutoApprovePlans,
-    },
-  ], [autoApprovePlans, handleToggleAutoApprovePlans, idleTasks]);
+    // Task commands — derived from context menu items for the selected task
+    const taskCommands = [];
+    if (selectedTask) {
+      const descriptionMap = {
+        "start": "start selected task",
+        "view plan": "view plan for selected task",
+        "approve pr": "approve pull request for selected task",
+        "restart": "restart selected task",
+        "delete": "delete selected task",
+      };
+      const menuItems = buildTaskMenuItems(selectedTask, {
+        onStart: startTask,
+        onRestart: restartTask,
+        onDelete: deleteTask,
+        onViewPlan: handleViewPlan,
+        onApprove: approveTask,
+        pendingPlans,
+        // onStartEditing not passed — "edit" requires TaskList's local inline-edit state
+      });
+      for (const item of menuItems) {
+        if (item.separator) continue;
+        taskCommands.push({
+          label: item.label,
+          description: descriptionMap[item.label] || item.label,
+          action: item.action,
+        });
+      }
+    }
+
+    // Project settings commands — derived from the active project's settings
+    const projectCommands = [];
+    if (selectedProject?.settings) {
+      const s = selectedProject.settings;
+
+      // createPr boolean toggle
+      projectCommands.push({
+        label: s.createPr !== false ? "disable create pr" : "enable create pr",
+        description: "toggle pull request creation",
+        action: () => patchProjectSetting("createPr", s.createPr === false),
+      });
+
+      // testingMode enum — one command per non-active mode
+      const currentMode = s.testingMode || "build";
+      for (const mode of ["build", "sync", "async"]) {
+        if (mode !== currentMode) {
+          projectCommands.push({
+            label: `set testing ${mode}`,
+            description: `set testing mode to ${mode}`,
+            action: () => patchProjectSetting("testingMode", mode),
+          });
+        }
+      }
+
+      // autoApprovePlans boolean toggle
+      projectCommands.push({
+        label: s.autoApprovePlans ? "deactivate auto approve" : "activate auto approve",
+        description: "toggle auto-approve mode for plans",
+        action: () => patchProjectSetting("autoApprovePlans", !s.autoApprovePlans),
+      });
+    }
+
+    return [...globalCommands, ...taskCommands, ...projectCommands];
+  }, [
+    selectedTask,
+    selectedProject,
+    pendingPlans,
+    startTask,
+    restartTask,
+    deleteTask,
+    handleViewPlan,
+    approveTask,
+    patchProjectSetting,
+    idleTasks,
+  ]);
 
   const viewingTask = viewingPlanTaskId ? tasks.find((t) => t.id === viewingPlanTaskId) : null;
   const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;

@@ -3,6 +3,7 @@ import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
+import { buildTaskMenuItems } from "../utils/taskMenuItems.js";
 import "../styles/task-list.css";
 
 const DONE_COLLAPSED_KEY = "taskList.doneCollapsed";
@@ -85,64 +86,6 @@ export function TaskList({
     return <div className="task-list-empty">no tasks yet</div>;
   }
 
-  const buildMenuItems = (task) => {
-    const sk = task.stateKey || stateKey(task.state);
-    const isIdle = sk === "idle";
-    const items = [];
-
-    if (isIdle && onStart) {
-      items.push({
-        label: "start",
-        icon: "\u25B6",
-        action: () => onStart(task.id),
-      });
-    }
-
-    if (isIdle && onEdit) {
-      items.push({
-        label: "edit",
-        icon: "\u270E",
-        action: () => startEditing(task),
-      });
-    }
-
-    if (sk === "planning.awaitingApproval" && pendingPlans?.[task.id] && onViewPlan) {
-      items.push({
-        label: "view plan",
-        icon: "\uD83D\uDCCB",
-        action: () => onViewPlan(task.id),
-      });
-    }
-
-    if (sk === "merging.awaitingApproval" && onApprove) {
-      items.push({
-        label: "approve pr",
-        icon: "\u2714",
-        action: () => onApprove(task.id),
-      });
-    }
-
-    if (items.length > 0) {
-      items.push({ separator: true });
-    }
-
-    if (!isIdle && onRestart) {
-      items.push({
-        label: "restart",
-        icon: "\u21BA",
-        action: () => onRestart(task.id),
-      });
-    }
-
-    items.push({
-      label: "delete",
-      icon: "\u00D7",
-      danger: true,
-      action: () => onDelete(task.id),
-    });
-
-    return items;
-  };
 
   const activeTasks = [];
   const doneTasks = [];
@@ -253,7 +196,15 @@ export function TaskList({
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildMenuItems(contextMenu.task)}
+          items={buildTaskMenuItems(contextMenu.task, {
+            onStart,
+            onRestart,
+            onDelete,
+            onViewPlan,
+            onApprove,
+            pendingPlans,
+            onStartEditing: onEdit ? startEditing : undefined,
+          })}
           onClose={closeContextMenu}
         />
       )}
