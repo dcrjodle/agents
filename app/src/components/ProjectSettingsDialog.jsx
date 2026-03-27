@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { X } from "lucide-react";
+import { IconButton } from "./IconButton.jsx";
 
 const API_BASE = "/api";
 
@@ -58,18 +60,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
             {project.name} settings
           </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 14,
-            }}
-          >
-            x
-          </button>
+          <IconButton icon={X} onClick={onClose} title="close" />
         </div>
 
         {/* Workflow settings */}

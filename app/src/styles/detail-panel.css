@@ -119,51 +119,6 @@
   font-size: 11px;
 }
 
-/* Action controls at bottom */
-.detail-panel-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  border-top: 1px solid var(--border-light);
-  flex-shrink: 0;
-}
-
-.detail-panel-controls-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.detail-panel-action-btn {
-  font-size: 10px;
-  padding: 3px 10px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  transition: all 0.15s;
-}
-
-.detail-panel-action-btn:hover {
-  border-color: var(--text-dim);
-  color: var(--text);
-}
-
-.detail-panel-action-btn.primary {
-  border-color: var(--dot-planning);
-  color: var(--dot-planning);
-  font-weight: 600;
-}
-
-.detail-panel-action-btn.success {
-  border-color: var(--dot-done);
-  color: var(--dot-done);
-  font-weight: 600;
-}
-
 /* Agent Memory section */
 .detail-panel-memory {
   padding: 8px 16px;

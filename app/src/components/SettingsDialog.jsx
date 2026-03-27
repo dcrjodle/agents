@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { X } from "lucide-react";
+import { IconButton } from "./IconButton.jsx";
 
 /**
  * SettingsDialog - Modal dialog for application settings.
@@ -65,18 +67,7 @@ export function SettingsDialog({
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
             settings
           </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 14,
-            }}
-          >
-            x
-          </button>
+          <IconButton icon={X} onClick={onClose} title="close" />
         </div>
 
         {/* Dark mode toggle */}
