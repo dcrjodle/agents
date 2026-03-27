@@ -248,9 +248,6 @@ export function App() {
               task={selectedTask}
               logs={agentLogs[selectedTaskId] || []}
               errors={errors[selectedTaskId] || []}
-              pendingPlan={pendingPlans[selectedTaskId]}
-              onSendEvent={sendEvent}
-              onApprove={approveTask}
               onViewPlan={handleViewPlan}
               onClose={handleCloseDetail}
               viewMode={viewMode}

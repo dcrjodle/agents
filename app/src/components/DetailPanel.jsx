@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
-import { STATE_LABELS, NEXT_EVENTS } from "../constants.js";
+import { STATE_LABELS } from "../constants.js";
 import { PipelineBar } from "./PipelineBar.jsx";
 import { AgentNode } from "./AgentNode.jsx";
 import { LogLine } from "./LogLine.jsx";
@@ -11,9 +11,6 @@ export function DetailPanel({
   task,
   logs,
   errors,
-  pendingPlan,
-  onSendEvent,
-  onApprove,
   onViewPlan,
   onClose,
   viewMode,
@@ -21,7 +18,6 @@ export function DetailPanel({
 }) {
   const streamEndRef = useRef(null);
   const sk = task.stateKey || stateKey(task.state);
-  const events = NEXT_EVENTS[sk] || [];
   const label = STATE_LABELS[sk] || sk;
 
   // Group logs by agent
@@ -120,36 +116,6 @@ export function DetailPanel({
         )}
       </div>
 
-      {/* Controls */}
-      <div className="detail-panel-controls">
-        <div className="detail-panel-controls-group">
-          {sk === "planning.awaitingApproval" && pendingPlan && onViewPlan && (
-            <button
-              className="detail-panel-action-btn primary"
-              onClick={() => onViewPlan(task.id)}
-            >
-              view plan
-            </button>
-          )}
-          {sk === "merging.awaitingApproval" && onApprove && (
-            <button
-              className="detail-panel-action-btn success"
-              onClick={() => onApprove(task.id)}
-            >
-              approve pr
-            </button>
-          )}
-          {events.map((evt) => (
-            <button
-              key={evt.type}
-              className="detail-panel-action-btn"
-              onClick={() => onSendEvent(task.id, evt)}
-            >
-              {evt.type}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
