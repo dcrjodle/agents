@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
+import { IconButton } from "./IconButton.jsx";
 
 export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose }) {
   const contentRef = useRef(null);
@@ -75,21 +77,7 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
               {taskDescription}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-dim)",
-              fontSize: 16,
-              cursor: "pointer",
-              padding: "0 4px",
-              lineHeight: 1,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            ×
-          </button>
+          <IconButton icon={X} onClick={onClose} title="close" style={{ color: "var(--text-dim)" }} />
         </div>
 
         {/* Plan content */}

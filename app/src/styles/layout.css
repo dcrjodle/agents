@@ -29,24 +29,7 @@
 }
 
 .app-header-settings-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
   color: var(--text-dim);
-  transition: color 0.15s;
-}
-
-.app-header-settings-btn:hover {
-  color: var(--text);
-}
-
-.app-header-settings-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-  pointer-events: none;
 }
 
 .app-connection-status {
