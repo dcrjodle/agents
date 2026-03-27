@@ -311,11 +311,13 @@ export function useWorkflow() {
     if (!res.ok) throw new Error(`Failed to delete task: ${res.statusText}`);
   };
 
-  const approveTask = async (taskId, message) => {
+  const approveTask = async (taskId, message, reviewComments) => {
+    const body = { message: message || "Approved" };
+    if (reviewComments) body.reviewComments = reviewComments;
     const res = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message || "Approved" }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Failed to approve task: ${res.statusText}`);
     return res.json();

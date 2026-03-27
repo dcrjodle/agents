@@ -92,9 +92,9 @@ export function App() {
     setViewingPlanTaskId(taskId);
   }, []);
 
-  const handleApprovePlan = useCallback(() => {
+  const handleApprovePlan = useCallback((reviewComments) => {
     if (viewingPlanTaskId) {
-      approveTask(viewingPlanTaskId, "User approved plan");
+      approveTask(viewingPlanTaskId, "User approved plan", reviewComments);
       clearPendingPlan(viewingPlanTaskId);
       setViewingPlanTaskId(null);
     }
@@ -237,10 +237,10 @@ export function App() {
     startAllTasks(idleTasks.map((t) => t.id));
   };
 
-  const handleApproveAllPlans = useCallback(() => {
+  const handleApproveAllPlans = useCallback((reviewComments) => {
     const taskIds = Object.keys(pendingPlans);
     taskIds.forEach((taskId) => {
-      approveTask(taskId, "User approved all plans");
+      approveTask(taskId, "User approved all plans", reviewComments);
       clearPendingPlan(taskId);
     });
     setViewingPlanTaskId(null);

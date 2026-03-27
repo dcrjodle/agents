@@ -9,7 +9,7 @@ export const workflowMachine = setup({
       | { type: "START", task: string, testingMode?: string }
       | { type: "PLAN_READY", plan: object }
       | { type: "PLAN_FAILED", error: string }
-      | { type: "PLAN_APPROVED" }
+      | { type: "PLAN_APPROVED", reviewComments?: string }
       | { type: "PLAN_REJECTED" }
       | { type: "BRANCH_READY", worktreePath: string, branchName: string }
       | { type: "BRANCH_FAILED", error: string }
@@ -88,6 +88,12 @@ export const workflowMachine = setup({
           on: {
             PLAN_APPROVED: {
               target: "#workflow.branching",
+              actions: assign({
+                plan: ({ context, event }) =>
+                  event.reviewComments
+                    ? { ...context.plan, reviewComments: event.reviewComments }
+                    : context.plan,
+              }),
             },
             PLAN_REJECTED: {
               target: "#workflow.failed",

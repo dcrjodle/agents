@@ -160,6 +160,17 @@ function buildDeveloperPrompt(handoff) {
   const retries = handoff.context.retries || 0;
   const error = handoff.context.error || "";
 
+  const reviewComments = handoff.context.plan?.reviewComments || "";
+  let reviewerNotesSection = "";
+  if (reviewComments) {
+    reviewerNotesSection = `
+## Reviewer Notes
+The following notes were provided by the human reviewer when approving this plan. Take them into account when implementing:
+
+${reviewComments}
+`;
+  }
+
   let retrySection = "";
   if (error && retries > 0) {
     retrySection = `
@@ -185,7 +196,7 @@ Worktree path: ${worktreePath}
 
 Plan from planner:
 ${planMarkdown}
-${retrySection}
+${reviewerNotesSection}${retrySection}
 IMPORTANT RULES:
 - Work ONLY within the worktree at: ${worktreePath}
 - ALWAYS read a file before modifying it — use Read to see the current contents first

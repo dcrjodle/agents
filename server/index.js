@@ -571,7 +571,9 @@ app.post("/tasks/:id/approve", (req, res) => {
   const sk = stateKey(snap.value);
 
   if (sk === "planning.awaitingApproval") {
-    actor.send({ type: "PLAN_APPROVED" });
+    const planApprovedEvent = { type: "PLAN_APPROVED" };
+    if (req.body.reviewComments) planApprovedEvent.reviewComments = req.body.reviewComments;
+    actor.send(planApprovedEvent);
     broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || "Approved" });
     return res.json({ ok: true });
   }

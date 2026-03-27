@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, MessageSquarePlus } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
 export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose, onApproveAll, pendingPlanCount }) {
   const contentRef = useRef(null);
+  const [showNotes, setShowNotes] = useState(false);
+  const [reviewComments, setReviewComments] = useState("");
 
   useEffect(() => {
     const handler = (e) => {
@@ -17,6 +19,8 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
+    setShowNotes(false);
+    setReviewComments("");
   }, [plan]);
 
   if (!plan) return null;
@@ -102,6 +106,49 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
               {plan.projectPath}
             </div>
           )}
+
+          {/* Reviewer notes toggle */}
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={() => setShowNotes((v) => !v)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: showNotes ? "var(--text)" : "var(--text-dim)",
+                fontSize: 11,
+                padding: 0,
+              }}
+            >
+              <MessageSquarePlus size={13} />
+              {showNotes ? "hide reviewer notes" : "add reviewer notes"}
+            </button>
+            {showNotes && (
+              <textarea
+                value={reviewComments}
+                onChange={(e) => setReviewComments(e.target.value)}
+                placeholder="Add notes for the developer agent (markdown supported)..."
+                rows={5}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  background: "var(--bg)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text)",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Actions */}
@@ -117,11 +164,11 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
             reject
           </Button>
           {pendingPlanCount > 1 && (
-            <Button variant="secondary" size="md" onClick={onApproveAll}>
+            <Button variant="secondary" size="md" onClick={() => onApproveAll(reviewComments || undefined)}>
               approve all ({pendingPlanCount})
             </Button>
           )}
-          <Button variant="primary" size="md" onClick={onApprove}>
+          <Button variant="primary" size="md" onClick={() => onApprove(reviewComments || undefined)}>
             approve
           </Button>
         </div>
