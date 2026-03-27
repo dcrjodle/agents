@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import { Play, Settings } from "lucide-react";
-import { IconButton } from "./IconButton.jsx";
 import { TabTaskPopover } from "./TabTaskPopover.jsx";
 import { Button } from "./Button.jsx";
 
@@ -171,23 +170,33 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                   <Settings size={11} />
                 </span>
               )}
+              {isActive && onStartAll && (
+                <span
+                  role="button"
+                  tabIndex={idleCount === 0 ? -1 : 0}
+                  title={idleCount > 0 ? `Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}` : "No idle tasks"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (idleCount > 0) onStartAll();
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === " ") && idleCount > 0) {
+                      e.stopPropagation();
+                      onStartAll();
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    color: "var(--accent)",
+                    opacity: idleCount === 0 ? 0.3 : 0.8,
+                    cursor: idleCount === 0 ? "default" : "pointer",
+                  }}
+                >
+                  <Play size={11} />
+                </span>
+              )}
             </Button>
-            {isActive && idleCount > 0 && onStartAll && (
-              <IconButton
-                icon={Play}
-                size={11}
-                title={`Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartAll();
-                }}
-                style={{
-                  color: "var(--accent)",
-                  opacity: 0.8,
-                  padding: "4px",
-                }}
-              />
-            )}
           </div>
         );
       })}
