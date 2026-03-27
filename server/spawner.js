@@ -1,62 +1,11 @@
-import { spawn, execSync } from "child_process";
-import { existsSync, readdirSync } from "fs";
+import { spawn } from "child_process";
 import { join } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { homedir } from "os";
+import { runAgent as sdkRunAgent, clearSession, isBashAgent, ensureConfigsLoaded } from "./agent-runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const AGENTS_DIR = join(__dirname, "..", "agents");
 const SCRIPTS_DIR = join(__dirname, "..", "scripts");
-
-// Resolve the claude CLI path — it may not be on PATH in non-interactive shells
-function findClaudeCli() {
-  // Check PATH first
-  try {
-    return execSync("which claude 2>/dev/null", { encoding: "utf-8" }).trim();
-  } catch {}
-
-  // Check common install locations
-  const candidates = [
-    join(homedir(), ".local", "bin", "claude"),
-    join(homedir(), ".npm-global", "bin", "claude"),
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-  ];
-
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-
-  // macOS app bundle — find latest version
-  try {
-    const codeDir = join(homedir(), "Library", "Application Support", "Claude", "claude-code");
-    if (existsSync(codeDir)) {
-      const versions = readdirSync(codeDir).sort().reverse();
-      for (const ver of versions) {
-        const bin = join(codeDir, ver, "claude.app", "Contents", "MacOS", "claude");
-        if (existsSync(bin)) return bin;
-      }
-    }
-  } catch {}
-
-  // Also check claude-code-vm
-  try {
-    const vmDir = join(homedir(), "Library", "Application Support", "Claude", "claude-code-vm");
-    if (existsSync(vmDir)) {
-      const versions = readdirSync(vmDir).sort().reverse();
-      for (const ver of versions) {
-        const bin = join(vmDir, ver, "claude");
-        if (existsSync(bin)) return bin;
-      }
-    }
-  } catch {}
-
-  return "claude"; // fallback
-}
-
-const CLAUDE_CLI = findClaudeCli();
-console.log(`Claude CLI resolved to: ${CLAUDE_CLI}`);
 
 /**
  * Normalize XState compound state values to dot-notation strings.
@@ -81,6 +30,7 @@ const STATE_TO_ROLE = {
   "testing": "tester",
   "reviewing": "reviewer",
   "merging.creatingPr": "githubber",
+  "directMerging": "merger",
 };
 
 // Map XState states to deterministic scripts (no Claude)
@@ -138,6 +88,12 @@ const RESULT_TO_EVENT = {
     }
     return { type: "PUSH_FAILED", error: payload.error };
   },
+  merger: (payload) => {
+    if (payload.status === "complete") {
+      return { type: "DIRECT_MERGE_COMPLETE" };
+    }
+    return { type: "DIRECT_MERGE_FAILED", error: payload.error };
+  },
 };
 
 /**
@@ -152,7 +108,7 @@ function getMapperKey(sk) {
 
 /**
  * Spawn a deterministic script (no Claude) for a given state.
- * Uses the same stdio protocol as agents (:::STATUS:::, :::RESULT_START:::).
+ * Uses the stdio protocol (:::STATUS:::, :::RESULT_START:::).
  */
 export function spawnScript(sk, taskId, handoffContext, options = {}) {
   const scriptName = STATE_TO_SCRIPT[sk];
@@ -180,12 +136,12 @@ export function spawnScript(sk, taskId, handoffContext, options = {}) {
   }
   child.stdin.end();
 
-  // Reuse the same stdio parsing as spawnAgent
   return _wireChildProcess(child, sk, taskId, `script:${sk}`, options);
 }
 
 /**
- * Spawn an agent process for a given state.
+ * Spawn an agent via the Claude Agent SDK.
+ * Delegates to agent-runner.js which calls query() directly.
  */
 export function spawnAgent(sk, taskId, taskDescription, handoffContext, options = {}) {
   const role = STATE_TO_ROLE[sk];
@@ -194,6 +150,20 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
     return { pid: null, kill: () => {} };
   }
 
+  // Bash-only agents (e.g. tester) use child process, not SDK
+  if (isBashAgent(role)) {
+    return _spawnBashAgent(sk, taskId, taskDescription, handoffContext, options);
+  }
+
+  return sdkRunAgent(role, taskId, handoffContext, options);
+}
+
+/**
+ * Spawn a bash-based agent (only used for tester which doesn't use Claude).
+ */
+function _spawnBashAgent(sk, taskId, taskDescription, handoffContext, options) {
+  const role = STATE_TO_ROLE[sk];
+  const AGENTS_DIR = join(__dirname, "..", "agents");
   const scriptPath = join(AGENTS_DIR, role, "start.sh");
 
   const child = spawn("bash", [scriptPath], {
@@ -203,12 +173,10 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
       TASK_ID: taskId,
       TASK_DESCRIPTION: taskDescription,
       PROJECT_PATH: options.projectPath || "",
-      CLAUDE_CLI: CLAUDE_CLI,
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  // Write handoff JSON to stdin, then close
   if (handoffContext) {
     child.stdin.write(JSON.stringify(handoffContext));
   }
@@ -218,10 +186,9 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
 }
 
 /**
- * Wire up stdio parsing for a child process (shared by agents and scripts).
+ * Wire up stdio parsing for a child process (used by scripts and tester).
  */
 function _wireChildProcess(child, sk, taskId, label, options) {
-  const mapperKey = getMapperKey(sk);
   let gotResult = false;
 
   // Parse stderr: lines starting with :::STATUS::: are status updates
@@ -233,6 +200,7 @@ function _wireChildProcess(child, sk, taskId, label, options) {
 
     for (const line of lines) {
       const statusMatch = line.match(/^:::STATUS:::\s*(.+)$/);
+      const claudeMatch = line.match(/^:::CLAUDE:::\s?(.*)$/);
       if (statusMatch) {
         try {
           const status = JSON.parse(statusMatch[1]);
@@ -240,6 +208,8 @@ function _wireChildProcess(child, sk, taskId, label, options) {
         } catch (err) {
           console.error("Failed to parse status:", statusMatch[1], err);
         }
+      } else if (claudeMatch) {
+        if (options.onStdout) options.onStdout(claudeMatch[1] + "\n");
       } else if (options.onStderr) {
         options.onStderr(line + "\n");
       }
@@ -256,10 +226,13 @@ function _wireChildProcess(child, sk, taskId, label, options) {
     // Flush remaining stderr
     if (stderrBuffer.length > 0) {
       const statusMatch = stderrBuffer.match(/^:::STATUS:::\s*(.+)$/);
+      const claudeMatch = stderrBuffer.match(/^:::CLAUDE:::\s?(.*)$/);
       if (statusMatch) {
         try {
           if (options.onStatus) options.onStatus(JSON.parse(statusMatch[1]));
         } catch {}
+      } else if (claudeMatch) {
+        if (options.onStdout) options.onStdout(claudeMatch[1] + "\n");
       } else if (options.onStderr) {
         options.onStderr(stderrBuffer);
       }
@@ -307,4 +280,4 @@ function _wireChildProcess(child, sk, taskId, label, options) {
   };
 }
 
-export { STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey };
+export { STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, clearSession, ensureConfigsLoaded };

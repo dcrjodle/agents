@@ -41,4 +41,18 @@ You receive via stdin (JSON):
 
 ## Communication
 
-The start.sh script handles all communication via stdio markers. You just need to implement the changes and output a summary of what you changed.
+You have access to workflow tools for communicating with the orchestrator:
+
+- **report_status(message)** — Send progress updates (e.g., "Implementing login form")
+- **report_error(message)** — Report when you're stuck or hitting issues
+- **report_result(result)** — Submit your final result as a JSON string (see format below)
+- **get_task_context()** — Read the current task context if needed
+
+When you are done, you MUST call report_result with a JSON string:
+```
+{"status": "complete", "summary": "<summary of changes>"}
+```
+Or if you failed:
+```
+{"status": "failed", "error": "<what went wrong>"}
+```

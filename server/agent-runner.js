@@ -1,0 +1,477 @@
+import { query, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync, existsSync, readdirSync } from "fs";
+import { join, dirname } from "path";
+import { execSync } from "child_process";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const AGENTS_DIR = join(__dirname, "..", "agents");
+const PORT = process.env.PORT || 3001;
+
+// Session store for resume support: taskId -> sessionId
+const sessionStore = new Map();
+
+export function clearSession(taskId) {
+  sessionStore.delete(taskId);
+}
+
+// --- CWD resolvers ---
+
+const CWD_RESOLVERS = {
+  projectPath: (h) => h.projectPath,
+  worktreeOrProject: (h) => h.context.result?.worktreePath || h.projectPath,
+};
+
+// --- Prompt builder registry ---
+
+const PROMPT_BUILDERS = {
+  planner: buildPlannerPrompt,
+  developer: buildDeveloperPrompt,
+  reviewer: buildReviewerPrompt,
+  githubber: buildGithubberPrompt,
+  merger: buildMergerPrompt,
+};
+
+// --- Auto-discovery: load agent configs from agents/*/agent.json ---
+
+const agentConfigs = new Map();
+
+async function loadAgentConfigs() {
+  const entries = readdirSync(AGENTS_DIR, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const agentDir = join(AGENTS_DIR, entry.name);
+    const configPath = join(agentDir, "agent.json");
+
+    if (!existsSync(configPath)) continue;
+
+    const config = JSON.parse(readFileSync(configPath, "utf-8"));
+    const role = entry.name;
+
+    // Bash-only agents (tester) — store config but skip SDK setup
+    if (config.runtime === "bash") {
+      agentConfigs.set(role, { runtime: "bash", entrypoint: config.entrypoint || "start.sh", agentDir });
+      continue;
+    }
+
+    // Read system prompt
+    const programMdPath = join(agentDir, "program.md");
+    const systemPrompt = existsSync(programMdPath) ? readFileSync(programMdPath, "utf-8") : "";
+
+    // Resolve CWD strategy
+    const getCwd = CWD_RESOLVERS[config.cwd] || CWD_RESOLVERS.projectPath;
+
+    // Map prompt builder by role name
+    const buildPrompt = PROMPT_BUILDERS[role];
+    if (!buildPrompt) {
+      console.warn(`No prompt builder for role "${role}" — agent will use system prompt only`);
+    }
+
+    // Load MCP tools if specified
+    let mcpServer = null;
+    if (config.mcpTools) {
+      const toolsPath = join(agentDir, config.mcpTools);
+      if (existsSync(toolsPath)) {
+        try {
+          const module = await import(toolsPath);
+          if (module.tools && module.tools.length > 0) {
+            mcpServer = createSdkMcpServer({
+              name: `${role}-tools`,
+              version: "1.0.0",
+              tools: module.tools,
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to load MCP tools for ${role} from ${toolsPath}:`, err);
+        }
+      } else {
+        console.warn(`MCP tools file not found for ${role}: ${toolsPath}`);
+      }
+    }
+
+    agentConfigs.set(role, {
+      runtime: "sdk",
+      agentDir,
+      systemPrompt,
+      tools: config.tools || [],
+      getCwd,
+      buildPrompt,
+      supportsResume: config.supportsResume || false,
+      mcpServer,
+    });
+  }
+
+  console.log(`Loaded ${agentConfigs.size} agent configs: ${[...agentConfigs.keys()].join(", ")}`);
+}
+
+// Initialize on import
+const _configsReady = loadAgentConfigs();
+
+/**
+ * Ensure agent configs are loaded before use.
+ */
+export async function ensureConfigsLoaded() {
+  await _configsReady;
+}
+
+/**
+ * Check if a role uses bash runtime (vs SDK).
+ */
+export function isBashAgent(role) {
+  const config = agentConfigs.get(role);
+  return config?.runtime === "bash";
+}
+
+// --- Helper to read files relative to an agent's directory ---
+
+function readAgentFile(relativePath) {
+  const fullPath = join(__dirname, "..", relativePath);
+  return readFileSync(fullPath, "utf-8");
+}
+
+// --- Prompt Builders ---
+
+function buildPlannerPrompt(handoff) {
+  const planTemplate = readAgentFile("agents/planner/templates/plan.md");
+
+  return `You are a planner agent. Your job is to create an implementation plan.
+
+Task: ${handoff.instruction}
+Project path: ${handoff.projectPath}
+
+First, explore the project directory to understand its structure, framework, and conventions.
+Detect the framework from actual project files (package.json, .csproj, go.mod, etc.) — do NOT assume any framework that isn't evidenced in the codebase.
+Then write a plan following this template:
+
+${planTemplate}
+
+IMPORTANT: When you are done, you MUST call the report_result tool with:
+{
+  "status": "plan_ready",
+  "plan": {
+    "markdown": "<your plan in markdown>",
+    "projectPath": "${handoff.projectPath}"
+  }
+}`;
+}
+
+function buildDeveloperPrompt(handoff) {
+  const worktreePath = handoff.context.result?.worktreePath || "";
+  const planMarkdown = handoff.context.plan?.markdown || "";
+  const retries = handoff.context.retries || 0;
+  const error = handoff.context.error || "";
+
+  let retrySection = "";
+  if (error && retries > 0) {
+    retrySection = `
+## REVIEWER FEEDBACK (RETRY ${retries})
+The reviewer rejected your previous changes. You MUST address ALL of the issues listed below.
+
+${error}
+
+RETRY INSTRUCTIONS:
+1. Read each file mentioned in the feedback to see its CURRENT state in the worktree
+2. Identify the SPECIFIC lines/sections the reviewer flagged
+3. Use the Edit tool to make ONLY the fixes requested — do not rewrite files
+4. If the reviewer says something is missing (e.g. an import, prop, or function), add it back surgically
+5. Do NOT claim 'no changes needed' unless you have verified every issue is resolved by reading the files
+`;
+  }
+
+  return `You are a developer agent. Implement the following task in the worktree.
+
+Task: ${handoff.instruction}
+Project path: ${handoff.projectPath}
+Worktree path: ${worktreePath}
+
+Plan from planner:
+${planMarkdown}
+${retrySection}
+IMPORTANT RULES:
+- Work ONLY within the worktree at: ${worktreePath}
+- ALWAYS read a file before modifying it — use Read to see the current contents first
+- Use the Edit tool (not Write) for existing files — Edit makes surgical replacements, Write replaces the entire file and risks losing existing code
+- Only use Write for brand-new files that don't exist yet
+- Preserve ALL existing imports, props, functions, event handlers, and patterns not mentioned in the plan
+- Follow the project's existing conventions (if the file uses CSS classes, keep CSS classes; if it uses certain patterns, match them)
+- Do NOT run any git commands (no git add, commit, push, etc.) — git is handled separately
+
+When you are done, you MUST call the report_result tool with:
+{"status": "complete", "summary": "<summary of changes>"} or {"status": "failed", "error": "<what went wrong>"}`;
+}
+
+function buildReviewerPrompt(handoff) {
+  const worktreePath = handoff.context.result?.worktreePath || "";
+  const reviewPath = worktreePath || handoff.projectPath;
+  const planMarkdown = handoff.context.plan?.markdown || "";
+  const filesChanged = handoff.context.result?.files || [];
+
+  // Detect framework and select checklist
+  let checklistFile = "agents/reviewer/checklists/general.md";
+  const projectPath = handoff.projectPath;
+
+  try {
+    const entries = existsSync(projectPath) ? execSync(`ls "${projectPath}"`, { encoding: "utf-8" }) : "";
+    if (entries.match(/\.csproj/)) {
+      checklistFile = "agents/reviewer/checklists/dotnet-ivy.md";
+    } else if (existsSync(join(projectPath, "package.json"))) {
+      const pkg = readFileSync(join(projectPath, "package.json"), "utf-8");
+      if (pkg.includes('"react"')) {
+        checklistFile = "agents/reviewer/checklists/react-typescript.md";
+      }
+    }
+  } catch {}
+
+  const checklist = readAgentFile(checklistFile);
+  const checklistName = checklistFile.split("/").pop();
+
+  // Generate git diff
+  let diffSection = "";
+  try {
+    if (worktreePath && existsSync(worktreePath)) {
+      const gitDiff = execSync(
+        `cd "${worktreePath}" && git diff HEAD~1 --no-color 2>/dev/null || git diff main --no-color 2>/dev/null || echo "(diff unavailable)"`,
+        { encoding: "utf-8", maxBuffer: 1024 * 1024 }
+      );
+      if (gitDiff && gitDiff !== "(diff unavailable)") {
+        diffSection = `
+## Git Diff (what was actually changed)
+Review this diff carefully. Lines starting with \`-\` were REMOVED, lines starting with \`+\` were ADDED.
+If you see important code being removed that isn't mentioned in the plan, that is a REGRESSION.
+
+\`\`\`diff
+${gitDiff}
+\`\`\`
+`;
+      }
+    }
+  } catch {}
+
+  return `You are a code reviewer. Review the code changes against the checklist below.
+
+Task: ${handoff.instruction}
+Project path: ${projectPath}
+Review path: ${reviewPath}
+Files changed: ${JSON.stringify(filesChanged)}
+
+Plan:
+${planMarkdown}
+${diffSection}
+## Review Checklist
+${checklist}
+
+## Regression Checklist
+In addition to the checklist above, verify that:
+- [ ] No existing imports were removed unless the plan required it
+- [ ] No existing props were dropped from component signatures
+- [ ] No existing event handlers (onClick, onContextMenu, onChange, etc.) were removed
+- [ ] No existing CSS class usage was replaced with inline styles (or vice versa)
+- [ ] No existing functions or callbacks were deleted
+- [ ] The diff only adds/modifies what the plan describes — nothing else was lost
+
+INSTRUCTIONS:
+1. Read each changed file in the review path
+2. Review the git diff above to check for unintended removals or regressions
+3. Evaluate against EVERY item in both checklists above
+4. Run the check_style and security_scan tools on the review path
+5. When you are done, you MUST call the report_result tool with:
+{"status": "complete", "verdict": "approved", "summary": "<review>", "checklist": "${checklistName}", "comments": []}
+or
+{"status": "complete", "verdict": "changes_requested", "summary": "<review>", "checklist": "${checklistName}", "comments": ["issue1", "issue2"]}
+
+5. Be thorough but practical. Approve if the code is correct, follows conventions, and introduces no regressions.`;
+}
+
+function buildGithubberPrompt(handoff) {
+  const worktreePath = handoff.context.result?.worktreePath || "";
+  const branchName = handoff.context.result?.branchName || "";
+
+  return `Create a pull request for the following task.
+
+Task: ${handoff.instruction}
+Branch: ${branchName}
+Worktree: ${worktreePath}
+
+Steps:
+1. Use the get_diff_summary tool to see what changed
+2. Generate a concise PR title (under 70 characters) and a markdown body with:
+   - A brief summary of changes (2-3 bullet points)
+   - A test plan section
+3. Use the create_pr tool to create the PR
+
+When you are done, you MUST call the report_result tool with:
+{"status": "complete", "prUrl": "<the PR URL>", "branchName": "${branchName}"}
+or if it fails:
+{"status": "failed", "error": "<what went wrong>"}`;
+}
+
+function buildMergerPrompt(handoff) {
+  const worktreePath = handoff.context.result?.worktreePath || "";
+  const branchName = handoff.context.result?.branchName || "";
+  const projectPath = handoff.projectPath;
+  const planMarkdown = handoff.context.plan?.markdown || "";
+
+  return `Merge the task branch into main.
+
+Task: ${handoff.instruction}
+Project path: ${projectPath}
+Worktree path: ${worktreePath}
+Branch: ${branchName}
+
+Plan that was implemented:
+${planMarkdown}
+
+## Steps
+
+1. Use the merge_main_into_branch tool to fetch latest main and merge it into the task branch
+2. If conflicts are reported, read the conflicted files, resolve the conflict markers, then run: git add -A && git commit --no-edit
+3. Use the fast_forward_main tool to merge the task branch into main and push
+4. Use the cleanup_branch tool to remove the worktree and delete the branch
+
+When resolving conflicts, read the plan to understand what the task changed — keep BOTH the task's changes AND main's updates.
+
+When you are done, you MUST call the report_result tool with:
+{"status": "complete"}
+or if it fails:
+{"status": "failed", "error": "<what went wrong>"}`;
+}
+
+// --- Resume prompt (for developer retries with existing session) ---
+
+function buildResumePrompt(handoff) {
+  const error = handoff.context.error || "Unknown feedback";
+  return `Your previous implementation was rejected. Here is the feedback:
+
+${error}
+
+Fix the issues above. Read affected files first, then make surgical edits.
+
+When you are done, you MUST call the report_result tool with:
+{"status": "complete", "summary": "<summary of fixes>"} or {"status": "failed", "error": "<what went wrong>"}`;
+}
+
+// --- Main runner ---
+
+let pidCounter = 1;
+
+/**
+ * Run an agent via the Claude Agent SDK.
+ * Returns { pid, kill(), gotResult() } — same interface as the old spawnAgent.
+ */
+export function runAgent(role, taskId, handoff, callbacks) {
+  const config = agentConfigs.get(role);
+  if (!config || config.runtime === "bash") {
+    console.error(`Cannot run SDK agent for role: ${role}`);
+    return { pid: null, kill: () => {}, gotResult: () => false };
+  }
+
+  const cwd = config.getCwd(handoff);
+
+  // Determine if we should resume an existing session
+  const retries = handoff.context.retries || 0;
+  const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
+  const prompt = canResume ? buildResumePrompt(handoff) : (config.buildPrompt ? config.buildPrompt(handoff) : handoff.instruction);
+  const resumeSessionId = canResume ? sessionStore.get(taskId) : undefined;
+
+  const abortController = new AbortController();
+  let resultReceived = false;
+  const fakePid = pidCounter++;
+
+  // Build MCP servers config
+  const mcpServers = {
+    // Workflow tools (report_status, report_result, etc.) — stdio subprocess with per-task env
+    workflow: {
+      command: "node",
+      args: [join(__dirname, "mcp-server.js")],
+      env: {
+        TASK_ID: taskId,
+        ORCHESTRATOR_URL: `http://localhost:${PORT}`,
+      },
+    },
+  };
+
+  // Add role-specific in-process MCP server if agent has custom tools
+  if (config.mcpServer) {
+    mcpServers[`${role}-tools`] = config.mcpServer;
+  }
+
+  // Start the query in the background
+  const run = async () => {
+    try {
+      const options = {
+        abortController,
+        cwd,
+        systemPrompt: config.systemPrompt,
+        tools: config.tools,
+        allowedTools: config.tools,
+        mcpServers,
+        model: "claude-sonnet-4-6",
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        maxTurns: 50,
+        persistSession: true,
+      };
+
+      if (resumeSessionId) {
+        options.resume = resumeSessionId;
+      }
+
+      const q = query({ prompt, options });
+
+      for await (const msg of q) {
+        if (msg.type === "system" && msg.subtype === "init") {
+          if (msg.session_id) {
+            sessionStore.set(taskId, msg.session_id);
+          }
+        } else if (msg.type === "assistant") {
+          if (msg.message?.content) {
+            for (const block of msg.message.content) {
+              if (block.type === "text" && block.text) {
+                if (callbacks.onStdout) callbacks.onStdout(block.text + "\n");
+              }
+            }
+          }
+          if (msg.session_id && !sessionStore.has(taskId)) {
+            sessionStore.set(taskId, msg.session_id);
+          }
+        } else if (msg.type === "result") {
+          if (msg.subtype === "error" && !resultReceived) {
+            if (callbacks.onStderr) {
+              callbacks.onStderr(`Agent error: ${msg.error}\n`);
+            }
+          }
+        }
+      }
+
+      if (!resultReceived) {
+        if (callbacks.onExit) callbacks.onExit(0);
+      }
+    } catch (err) {
+      const isAbort = err.name === "AbortError" || (err.message && err.message.includes("aborted"));
+      if (isAbort) {
+        if (!resultReceived) {
+          console.log(`Agent ${role} for task ${taskId} was aborted before producing a result`);
+        }
+      } else {
+        console.error(`Agent ${role} for task ${taskId} failed:`, err);
+        if (!resultReceived && callbacks.onStderr) {
+          callbacks.onStderr(`Agent error: ${err.message}\n`);
+        }
+      }
+      if (!resultReceived) {
+        if (callbacks.onExit) callbacks.onExit(1);
+      }
+    }
+  };
+
+  run();
+
+  return {
+    pid: fakePid,
+    kill: () => abortController.abort(),
+    gotResult: () => resultReceived,
+    markResultReceived: () => { resultReceived = true; },
+  };
+}

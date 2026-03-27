@@ -40,6 +40,15 @@ You receive via stdin (JSON):
 Overall assessment and recommendation
 ```
 
+## Code Scanning Tools
+
+You have access to automated scanning tools — run these on the review path before writing your review:
+
+- **check_style(path)** — Scans for TODO/FIXME/HACK comments and hardcoded secret patterns (password=, secret=, api_key=)
+- **security_scan(path)** — Scans for eval usage, curl/wget piped to shell, and overly permissive chmod (777, a+w)
+
+Include their findings in your review.
+
 ## Guidelines
 
 - Be thorough but not nitpicky — focus on correctness, security, and conventions
@@ -49,4 +58,18 @@ Overall assessment and recommendation
 
 ## Communication
 
-The start.sh script handles all communication via stdio markers. You just need to output your review in the format above.
+You have access to workflow tools for communicating with the orchestrator:
+
+- **report_status(message)** — Send progress updates (e.g., "Reviewing authentication changes")
+- **report_error(message)** — Report when you're stuck or hitting issues
+- **report_result(result)** — Submit your final result as a JSON string (see format below)
+- **get_task_context()** — Read the current task context if needed
+
+When you are done, you MUST call report_result with a JSON string:
+```
+{"status": "complete", "verdict": "approved", "summary": "<review>", "checklist": "<checklist used>", "comments": []}
+```
+Or if changes are needed:
+```
+{"status": "complete", "verdict": "changes_requested", "summary": "<review>", "checklist": "<checklist used>", "comments": ["issue1", "issue2"]}
+```

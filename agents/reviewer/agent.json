@@ -1,0 +1,5 @@
+{
+  "tools": ["Bash", "Read", "Glob", "Grep"],
+  "cwd": "worktreeOrProject",
+  "mcpTools": "tools/mcp-tools.js"
+}

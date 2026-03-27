@@ -1,0 +1,5 @@
+{
+  "tools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+  "cwd": "worktreeOrProject",
+  "supportsResume": true
+}

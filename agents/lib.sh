@@ -41,28 +41,49 @@ emit_result() {
 }
 
 # Run claude with retries on transient failures (signal kills, rate limits)
-# Usage: OUTPUT=$(run_claude "$PROMPT" "$SYSTEM_PROMPT_FILE" "$ALLOWED_TOOLS")
+# Streams Claude's response line-by-line to stderr with :::CLAUDE::: prefix
+# so the server can forward it to the frontend in real time.
+# Usage: OUTPUT=$(run_claude "$PROMPT" "$SYSTEM_PROMPT_FILE" "$ALLOWED_TOOLS" ["$WORK_DIR"])
 run_claude() {
-  local prompt="$1" system_prompt_file="$2" allowed_tools="$3"
-  local max_retries=2 attempt=0 output="" exit_code=0
-  local claude_stderr=""
+  local prompt="$1" system_prompt_file="$2" allowed_tools="$3" work_dir="${4:-}"
+  local max_retries=2 attempt=0 exit_code=0
+  local claude_stderr="" claude_stdout="" last_stdout=""
 
   while [ $attempt -le $max_retries ]; do
     exit_code=0
     claude_stderr=$(mktemp)
-    output=$(echo "$prompt" | ${CLAUDE_CLI:-claude} --print \
-      --system-prompt "$(cat "$system_prompt_file")" \
-      --allowedTools "$allowed_tools" \
-      2>"$claude_stderr") || exit_code=$?
+    claude_stdout=$(mktemp)
+    last_stdout="$claude_stdout"
+
+    # Run claude, teeing stdout so each line streams to stderr in real time.
+    # Subshell with pipefail captures claude's exit code through the pipe.
+    # If work_dir is set, cd into it so Claude CLI sees the project as its cwd.
+    set +e
+    ( set -o pipefail
+      [ -n "$work_dir" ] && cd "$work_dir"
+      echo "$prompt" | ${CLAUDE_CLI:-claude} --print \
+        --system-prompt "$(cat "$system_prompt_file")" \
+        --allowedTools "$allowed_tools" \
+        2>"$claude_stderr" \
+      | tee "$claude_stdout" \
+      | while IFS= read -r line; do
+          echo ":::CLAUDE::: $line" >&2
+        done
+    )
+    exit_code=$?
+    set -e
 
     # Always forward Claude stderr so parent sees it
     if [ -s "$claude_stderr" ]; then
       cat "$claude_stderr" >&2
     fi
 
+    local output
+    output=$(cat "$claude_stdout")
+
     # Success or clean failure (non-signal) — return immediately
     if [ $exit_code -eq 0 ] && [ -n "$output" ]; then
-      rm -f "$claude_stderr"
+      rm -f "$claude_stderr" "$claude_stdout"
       echo "$output"
       return 0
     fi
@@ -89,7 +110,10 @@ run_claude() {
   done
 
   # Return whatever we got on the last attempt
-  echo "$output"
+  if [ -f "$last_stdout" ]; then
+    cat "$last_stdout"
+    rm -f "$last_stdout"
+  fi
   return $exit_code
 }
 

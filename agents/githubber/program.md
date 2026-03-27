@@ -16,13 +16,34 @@ You receive via the prompt:
 - Diff summary (files changed, commit log)
 - Worktree path
 
+## Available Tools
+
+You have access to deterministic tools for GitHub operations:
+
+- **get_diff_summary(worktreePath)** — Get branch info, files changed, and commit log
+- **create_pr(worktreePath, title, body)** — Create a PR using `gh pr create`
+
 ## Process
 
-1. Review the diff summary to understand what changed
-2. Create a PR with `gh pr create` using an appropriate title and body
-3. The title should be concise (under 70 characters)
+1. Use get_diff_summary to understand what changed
+2. Generate a concise PR title (under 70 characters) and markdown body
+3. Use create_pr to create the PR
 4. The body should include a summary and test plan
 
 ## Communication
 
-The start.sh script handles all communication via stdio markers.
+You have access to workflow tools for communicating with the orchestrator:
+
+- **report_status(message)** — Send progress updates (e.g., "Creating pull request")
+- **report_error(message)** — Report when you're stuck or hitting issues
+- **report_result(result)** — Submit your final result as a JSON string (see format below)
+- **get_task_context()** — Read the current task context if needed
+
+When you are done, you MUST call report_result with a JSON string:
+```
+{"status": "complete", "prUrl": "<the PR URL>", "branchName": "<branch name>"}
+```
+Or if it fails:
+```
+{"status": "failed", "error": "<what went wrong>"}
+```

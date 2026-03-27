@@ -4,7 +4,8 @@ import { WebSocketServer } from "ws";
 import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { workflowMachine } from "../machine.js";
-import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey } from "./spawner.js";
+import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
+import { clearSession } from "./agent-runner.js";
 import {
   getAllTasks as dbGetAllTasks,
   getTask as dbGetTask,
@@ -55,6 +56,7 @@ function stateLabel(stateValue) {
     "testing": "testing",
     "reviewing": "reviewing",
     "pushing": "pushing",
+    "directMerging": "merging",
     "merging.awaitingApproval": "awaiting_approval",
     "merging.creatingPr": "creating_pr",
     "done": "published",
@@ -295,7 +297,7 @@ function onStateTransition(taskId, stateValue, context) {
     }, 30_000);
   }
 
-  activeAgents.set(taskId, { handle, resultReceived: false, timeoutTimer, staleTimer });
+  activeAgents.set(taskId, { handle, resultReceived: false, timeoutTimer, staleTimer, resetStaleTimer });
 }
 
 /**
@@ -564,8 +566,9 @@ app.post("/tasks/:id/restart", async (req, res) => {
     const snap = existingActor.getSnapshot();
     worktreePath = snap.context?.result?.worktreePath;
     branchName = snap.context?.result?.branchName;
-    // Kill any running agent and stop actor
+    // Kill any running agent, clear session, and stop actor
     cleanupAgent(id);
+    clearSession(id);
     existingActor.stop();
     actors.delete(id);
   } else {
@@ -638,6 +641,7 @@ app.delete("/tasks/:id", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (actor) {
     cleanupAgent(req.params.id);
+    clearSession(req.params.id);
     actor.stop();
     actors.delete(req.params.id);
   }
@@ -645,6 +649,111 @@ app.delete("/tasks/:id", async (req, res) => {
   await dbDeleteTask(req.params.id);
   broadcast({ type: "TASK_DELETED", taskId: req.params.id });
   res.json({ ok: true });
+});
+
+// --- Internal API (MCP server callbacks) ---
+
+app.post("/internal/agent-status", (req, res) => {
+  const { taskId, message } = req.body;
+  if (!taskId || !message) return res.status(400).json({ error: "taskId and message required" });
+
+  const agentEntry = activeAgents.get(taskId);
+  const actor = actors.get(taskId);
+  const sk = actor ? stateKey(actor.getSnapshot().value) : null;
+  const label = sk ? (STATE_TO_ROLE[sk] || sk) : "unknown";
+
+  // Reset stale timer
+  if (agentEntry && agentEntry.resetStaleTimer) agentEntry.resetStaleTimer();
+
+  broadcastAndLog({
+    type: "AGENT_STATUS",
+    taskId,
+    agent: label,
+    status: { currentStep: message, state: "running" },
+  });
+  res.json({ ok: true });
+});
+
+app.post("/internal/agent-error", (req, res) => {
+  const { taskId, message } = req.body;
+  if (!taskId || !message) return res.status(400).json({ error: "taskId and message required" });
+
+  const actor = actors.get(taskId);
+  const sk = actor ? stateKey(actor.getSnapshot().value) : null;
+  const label = sk ? (STATE_TO_ROLE[sk] || sk) : "unknown";
+
+  broadcastAndLog({
+    type: "AGENT_ERROR",
+    taskId,
+    agent: label,
+    error: message,
+  });
+  res.json({ ok: true });
+});
+
+app.post("/internal/agent-result", (req, res) => {
+  const { taskId, ...resultPayload } = req.body;
+  if (!taskId) return res.status(400).json({ error: "taskId required" });
+
+  const agentEntry = activeAgents.get(taskId);
+  if (agentEntry) {
+    // Prevent double-processing
+    if (agentEntry.resultReceived) {
+      return res.json({ ok: true, note: "result already received" });
+    }
+    agentEntry.resultReceived = true;
+    if (agentEntry.handle && agentEntry.handle.markResultReceived) {
+      agentEntry.handle.markResultReceived();
+    }
+  }
+
+  const actor = actors.get(taskId);
+  const sk = actor ? stateKey(actor.getSnapshot().value) : null;
+  const label = sk ? (STATE_TO_ROLE[sk] || sk) : "unknown";
+  const mapperKey = sk ? getMapperKey(sk) : null;
+
+  broadcastAndLog({
+    type: "AGENT_RESULT",
+    taskId,
+    agent: label,
+    result: resultPayload,
+  });
+
+  // Map result to XState event and advance state machine
+  const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
+  if (mapper && actor) {
+    (async () => {
+      let event = mapper(resultPayload);
+
+      // If push completed, check project settings to decide PR vs direct
+      if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
+        const projectSettings = await getProjectSettings(actor._projectPath);
+        if (projectSettings.createPr === false) {
+          event = { ...event, type: "PUSH_COMPLETE_NO_PR" };
+        }
+      }
+
+      if (actors.has(taskId)) actors.get(taskId).send(event);
+    })();
+  }
+
+  res.json({ ok: true });
+});
+
+app.get("/internal/task-context/:taskId", (req, res) => {
+  const { taskId } = req.params;
+  const actor = actors.get(taskId);
+  if (!actor) return res.status(404).json({ error: "task not found" });
+
+  const snap = actor.getSnapshot();
+  res.json({
+    task: actor._description,
+    plan: snap.context.plan,
+    result: snap.context.result,
+    error: snap.context.error,
+    retries: snap.context.retries,
+    projectPath: actor._projectPath,
+  });
 });
 
 // --- WebSocket ---
@@ -685,6 +794,9 @@ wss.on("connection", async (ws) => {
 // --- Start ---
 
 async function start() {
+  // Ensure agent configs are loaded before anything else
+  await ensureConfigsLoaded();
+
   // Initialize db
   const db = await getDb();
 
@@ -740,6 +852,7 @@ async function start() {
     const testsPassed = { type: "TESTS_PASSED" };
     const reviewApproved = { type: "REVIEW_APPROVED" };
     const pushComplete = { type: "PUSH_COMPLETE", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
+    const pushCompleteNoPr = { type: "PUSH_COMPLETE_NO_PR", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
     const prApproved = { type: "PR_APPROVED" };
 
     const replayEvents = {
@@ -751,6 +864,7 @@ async function start() {
       "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
       "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
       "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
+      "directMerging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushCompleteNoPr],
       "merging.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete],
       "merging.creatingPr": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete, prApproved],
       // Legacy flat state names for backwards compat

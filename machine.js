@@ -23,6 +23,8 @@ export const workflowMachine = setup({
       | { type: "CHANGES_REQUESTED", feedback: string }
       | { type: "PUSH_COMPLETE", branchName: string, diffSummary: string }
       | { type: "PUSH_COMPLETE_NO_PR", branchName: string, diffSummary: string }
+      | { type: "DIRECT_MERGE_COMPLETE" }
+      | { type: "DIRECT_MERGE_FAILED", error: string }
       | { type: "PUSH_FAILED", error: string }
       | { type: "PR_APPROVED" }
       | { type: "MERGED", url: string }
@@ -220,7 +222,7 @@ export const workflowMachine = setup({
           }),
         },
         PUSH_COMPLETE_NO_PR: {
-          target: "done",
+          target: "directMerging",
           actions: assign({
             result: ({ context, event }) => ({
               ...context.result,
@@ -230,6 +232,22 @@ export const workflowMachine = setup({
           }),
         },
         PUSH_FAILED: {
+          target: "failed",
+          actions: assign({
+            error: ({ event }) => event.error,
+          }),
+        },
+      },
+    },
+
+    directMerging: {
+      // Merger agent: pulls latest main, merges into task branch (resolving conflicts),
+      // then merges task branch into main and pushes. Handles everything including conflicts.
+      on: {
+        DIRECT_MERGE_COMPLETE: {
+          target: "done",
+        },
+        DIRECT_MERGE_FAILED: {
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
