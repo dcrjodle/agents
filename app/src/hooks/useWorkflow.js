@@ -30,6 +30,8 @@ export function useWorkflow() {
   const [errors, setErrors] = useState({});
   // agentMemory: { [role]: Array<{ id, timestamp, type, content, taskId, projectPath }> }
   const [agentMemory, setAgentMemory] = useState({});
+  // avatarStates: { [taskId]: { [agent]: { action, message, targetX, direction, timestamp } } }
+  const [avatarStates, setAvatarStates] = useState({});
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -173,6 +175,14 @@ export function useWorkflow() {
               data: `Agent ${msg.agent} spawned (pid: ${msg.pid})`,
               pid: msg.pid,
             });
+            // Auto-avatar: agent walks into the room
+            setAvatarStates((prev) => ({
+              ...prev,
+              [msg.taskId]: {
+                ...(prev[msg.taskId] || {}),
+                [msg.agent]: { action: "walk", message: "reporting in", direction: "right", timestamp: Date.now() },
+              },
+            }));
             break;
 
           case "AGENT_OUTPUT":
@@ -181,6 +191,18 @@ export function useWorkflow() {
               agent: msg.agent,
               stream: msg.stream,
               data: msg.data,
+            });
+            // Auto-avatar: agent is working (throttled — only set if not already coding/thinking)
+            setAvatarStates((prev) => {
+              const current = prev[msg.taskId]?.[msg.agent];
+              if (current && (current.action === "code" || current.action === "think") && Date.now() - current.timestamp < 3000) return prev;
+              return {
+                ...prev,
+                [msg.taskId]: {
+                  ...(prev[msg.taskId] || {}),
+                  [msg.agent]: { action: "code", direction: current?.direction, timestamp: Date.now() },
+                },
+              };
             });
             break;
 
@@ -191,6 +213,19 @@ export function useWorkflow() {
               data: `[${msg.agent}] ${msg.status.currentStep || msg.status.state}`,
               status: msg.status,
             });
+            // Auto-avatar: show status as speech bubble
+            setAvatarStates((prev) => ({
+              ...prev,
+              [msg.taskId]: {
+                ...(prev[msg.taskId] || {}),
+                [msg.agent]: {
+                  action: "think",
+                  message: (msg.status.currentStep || msg.status.state || "").slice(0, 60),
+                  direction: prev[msg.taskId]?.[msg.agent]?.direction,
+                  timestamp: Date.now(),
+                },
+              },
+            }));
             break;
 
           case "AGENT_EXITED":
@@ -200,10 +235,26 @@ export function useWorkflow() {
               data: `Agent ${msg.agent} exited (code: ${msg.exitCode})`,
               exitCode: msg.exitCode,
             });
+            // Auto-avatar: agent leaves
+            setAvatarStates((prev) => ({
+              ...prev,
+              [msg.taskId]: {
+                ...(prev[msg.taskId] || {}),
+                [msg.agent]: { action: "walk", message: "done", direction: "left", targetX: -10, timestamp: Date.now() },
+              },
+            }));
             break;
 
           case "AGENT_ERROR":
             appendError(msg.taskId, msg.agent, msg.error);
+            // Auto-avatar: confused on error
+            setAvatarStates((prev) => ({
+              ...prev,
+              [msg.taskId]: {
+                ...(prev[msg.taskId] || {}),
+                [msg.agent]: { action: "confused", message: "something went wrong", timestamp: Date.now() },
+              },
+            }));
             break;
 
           case "AGENT_RESULT":
@@ -213,6 +264,14 @@ export function useWorkflow() {
               data: `[${msg.agent}] result: ${msg.result?.summary || msg.result?.status || ""}`,
               result: msg.result,
             });
+            // Auto-avatar: celebrate on result
+            setAvatarStates((prev) => ({
+              ...prev,
+              [msg.taskId]: {
+                ...(prev[msg.taskId] || {}),
+                [msg.agent]: { action: "celebrate", message: "finished!", timestamp: Date.now() },
+              },
+            }));
             break;
 
           case "PLAN_READY":
@@ -263,6 +322,24 @@ export function useWorkflow() {
               data: `[${msg.message?.from}] ${msg.message?.type}: ${msg.message?.payload?.summary || msg.message?.payload?.message || ""}`,
               message: msg.message,
             });
+            break;
+
+          case "AVATAR_UPDATE":
+            if (msg.taskId && msg.agent) {
+              setAvatarStates((prev) => ({
+                ...prev,
+                [msg.taskId]: {
+                  ...(prev[msg.taskId] || {}),
+                  [msg.agent]: {
+                    action: msg.action || "idle",
+                    message: msg.message,
+                    targetX: msg.targetX,
+                    direction: msg.direction,
+                    timestamp: Date.now(),
+                  },
+                },
+              }));
+            }
             break;
 
           case "MEMORY_UPDATED":
@@ -374,7 +451,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };

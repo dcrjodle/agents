@@ -3,6 +3,7 @@ import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS } from "../constants.js";
 import { PipelineBar } from "./PipelineBar.jsx";
 import { AgentNode } from "./AgentNode.jsx";
+import { AgentRoom } from "./AgentRoom.jsx";
 import { LogLine } from "./LogLine.jsx";
 import { Button } from "./Button.jsx";
 import "../styles/detail-panel.css";
@@ -13,6 +14,7 @@ export function DetailPanel({
   logs,
   errors,
   agentMemory,
+  avatarStates,
   onViewPlan,
   onClose,
   viewMode,
@@ -67,9 +69,13 @@ export function DetailPanel({
             variant="toggle"
             active={viewMode === "stream"}
             size="sm"
-            onClick={() => onToggleViewMode(viewMode === "stream" ? "nodes" : viewMode === "nodes" ? "cards" : "stream")}
+            onClick={() => {
+              const modes = ["nodes", "cards", "stream", "room"];
+              const next = modes[(modes.indexOf(viewMode) + 1) % modes.length];
+              onToggleViewMode(next);
+            }}
           >
-            {viewMode === "stream" ? "nodes" : viewMode === "nodes" ? "cards" : "stream"}
+            {viewMode === "nodes" ? "cards" : viewMode === "cards" ? "stream" : viewMode === "stream" ? "room" : "nodes"}
           </Button>
           <Button variant="secondary" size="sm" onClick={onClose}>
             close
@@ -98,7 +104,12 @@ export function DetailPanel({
 
       {/* Content area */}
       <div className="detail-panel-content">
-        {viewMode === "nodes" ? (
+        {viewMode === "room" ? (
+          <AgentRoom
+            avatarStates={avatarStates}
+            agents={[...new Set([...agents, ...Object.keys(avatarStates || {})])]}
+          />
+        ) : viewMode === "nodes" ? (
           <div className="node-chain">
             {ordered.length === 0 ? (
               <div style={{ color: "var(--text-dim)", fontSize: 11 }}>

@@ -35,6 +35,7 @@ export function App() {
     pendingPlans,
     errors,
     agentMemory,
+    avatarStates,
     createTask,
     startTask,
     startAllTasks,
@@ -445,6 +446,7 @@ export function App() {
               logs={agentLogs[selectedTaskId] || []}
               errors={errors[selectedTaskId] || []}
               agentMemory={agentMemory}
+              avatarStates={avatarStates[selectedTaskId] || {}}
               onViewPlan={handleViewPlan}
               onClose={handleCloseDetail}
               viewMode={viewMode}

@@ -834,6 +834,26 @@ app.post("/internal/add-memory", async (req, res) => {
   res.json({ ok: true, entry });
 });
 
+app.post("/internal/avatar-update", (req, res) => {
+  const { taskId, action, message, targetX, direction } = req.body;
+  if (!taskId) return res.status(400).json({ error: "taskId required" });
+
+  const actor = actors.get(taskId);
+  const sk = actor ? stateKey(actor.getSnapshot().value) : null;
+  const agent = sk ? (STATE_TO_ROLE[sk] || sk) : "unknown";
+
+  broadcast({
+    type: "AVATAR_UPDATE",
+    taskId,
+    agent,
+    action: action || "idle",
+    message: message ? message.slice(0, 60) : undefined,
+    targetX,
+    direction,
+  });
+  res.json({ ok: true });
+});
+
 const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "githubber", "merger", "visual-tester"]);
 
 app.get("/memory/:role", async (req, res) => {

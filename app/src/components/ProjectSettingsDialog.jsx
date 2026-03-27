@@ -10,7 +10,6 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [testingMode, setTestingMode] = useState(settings.testingMode || "build");
-  const [autoApprovePlans, setAutoApprovePlans] = useState(!!settings.autoApprovePlans);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
