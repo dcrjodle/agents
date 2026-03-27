@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
+import { Button } from "./Button.jsx";
 
 const API_BASE = "/api";
 
@@ -87,22 +88,9 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
               {createPr ? "branch is pushed, PR created for review" : "changes are pushed directly to main"}
             </div>
           </div>
-          <button
-            onClick={() => setCreatePr((v) => !v)}
-            style={{
-              fontSize: 10,
-              padding: "3px 10px",
-              borderRadius: 3,
-              border: "1px solid var(--border)",
-              background: createPr ? "var(--bg-muted)" : "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontFamily: "var(--font-mono)",
-              minWidth: 32,
-            }}
-          >
+          <Button variant="toggle" active={createPr} size="sm" onClick={() => setCreatePr((v) => !v)}>
             {createPr ? "on" : "off"}
-          </button>
+          </Button>
         </label>
 
         {/* Testing mode */}
@@ -110,24 +98,15 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6 }}>testing mode</div>
           <div style={{ display: "flex", gap: 4 }}>
             {["build", "sync", "async"].map((mode) => (
-              <button
+              <Button
                 key={mode}
+                variant="seg"
+                active={testingMode === mode}
                 onClick={() => setTestingMode(mode)}
-                style={{
-                  flex: 1,
-                  fontSize: 10,
-                  padding: "5px 8px",
-                  borderRadius: 3,
-                  border: `1px solid ${testingMode === mode ? "var(--accent)" : "var(--border)"}`,
-                  background: testingMode === mode ? "var(--bg-muted)" : "transparent",
-                  color: testingMode === mode ? "var(--text)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-mono)",
-                  fontWeight: testingMode === mode ? 600 : 400,
-                }}
+                style={{ flex: 1 }}
               >
                 {mode}
-              </button>
+              </Button>
             ))}
           </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
@@ -139,38 +118,12 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
 
         {/* Save */}
         <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            onClick={onClose}
-            style={{
-              fontSize: 11,
-              padding: "5px 14px",
-              borderRadius: 4,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
+          <Button variant="secondary" size="md" onClick={onClose}>
             cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{
-              fontSize: 11,
-              padding: "5px 14px",
-              borderRadius: 4,
-              border: "1px solid var(--accent)",
-              background: "var(--accent)",
-              color: "#fff",
-              cursor: saving ? "default" : "pointer",
-              fontFamily: "var(--font-mono)",
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
+          </Button>
+          <Button variant="primary" size="md" disabled={saving} onClick={handleSave}>
             {saving ? "saving..." : "save"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

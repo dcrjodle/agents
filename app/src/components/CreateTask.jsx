@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "./Button.jsx";
 
 export function CreateTask({ onCreate }) {
   const [value, setValue] = useState("");
@@ -32,22 +33,9 @@ export function CreateTask({ onCreate }) {
           outline: "none",
         }}
       />
-      <button
-        type="submit"
-        style={{
-          padding: "7px 14px",
-          fontSize: 12,
-          borderRadius: 4,
-          border: "1px solid var(--border)",
-          background: "var(--text)",
-          color: "var(--bg)",
-          cursor: "pointer",
-          fontFamily: "var(--font-mono)",
-          fontWeight: 500,
-        }}
-      >
+      <Button variant="primary" type="submit" size="md">
         add
-      </button>
+      </Button>
     </form>
   );
 }
