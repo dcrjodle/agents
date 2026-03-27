@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
+import { Button } from "./Button.jsx";
 
 export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose }) {
   const contentRef = useRef(null);
@@ -112,38 +113,12 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
           borderTop: "1px solid var(--border-light)",
           flexShrink: 0,
         }}>
-          <button
-            onClick={onReject}
-            style={{
-              fontSize: 12,
-              padding: "6px 16px",
-              borderRadius: 4,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontWeight: 500,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
+          <Button variant="secondary" size="md" onClick={onReject}>
             reject
-          </button>
-          <button
-            onClick={onApprove}
-            style={{
-              fontSize: 12,
-              padding: "6px 16px",
-              borderRadius: 4,
-              border: "1px solid var(--accent)",
-              background: "var(--text)",
-              color: "var(--bg)",
-              cursor: "pointer",
-              fontWeight: 600,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
+          </Button>
+          <Button variant="primary" size="md" onClick={onApprove}>
             approve
-          </button>
+          </Button>
         </div>
       </div>
     </div>

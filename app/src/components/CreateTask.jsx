@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { Button } from "./Button.jsx";
 import "../styles/create-task.css";
 
 export function CreateTask({ onCreate, commands = [] }) {
@@ -81,22 +82,9 @@ export function CreateTask({ onCreate, commands = [] }) {
             outline: "none",
           }}
         />
-        <button
-          type="submit"
-          style={{
-            padding: "7px 14px",
-            fontSize: 12,
-            borderRadius: 4,
-            border: "1px solid var(--border)",
-            background: "var(--text)",
-            color: "var(--bg)",
-            cursor: "pointer",
-            fontFamily: "var(--font-mono)",
-            fontWeight: 500,
-          }}
-        >
+        <Button variant="primary" type="submit" size="md">
           add
-        </button>
+        </Button>
       </form>
 
       {showDropdown && (

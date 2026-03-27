@@ -1,4 +1,4 @@
-import "../styles/icon-button.css";
+import "../styles/button.css";
 
 /**
  * IconButton — a shared icon button component using Lucide React icons.

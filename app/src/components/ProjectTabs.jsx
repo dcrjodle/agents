@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Play, Settings } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
+import { Button } from "./Button.jsx";
 
 export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount }) {
   const [dragIndex, setDragIndex] = useState(null);
@@ -66,7 +67,9 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
               alignItems: "center",
             }}
           >
-            <button
+            <Button
+              variant="tab"
+              active={isActive}
               draggable
               onClick={() => onSelect(project)}
               onDragStart={(e) => handleDragStart(e, index)}
@@ -76,6 +79,10 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
               onDragLeave={() => {
                 if (dragOverIndex === index) setDragOverIndex(null);
               }}
+              className={[
+                isDragOver && "drag-over",
+                isDragging && "dragging",
+              ].filter(Boolean).join(" ")}
               style={{
                 padding: "7px 16px",
                 fontSize: 12,
@@ -90,10 +97,39 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                 transition: "all 0.15s",
                 letterSpacing: "0.01em",
                 opacity: isDragging ? 0.4 : 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
               }}
             >
               {project.name}
-            </button>
+              {isActive && onOpenSettings && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  title="project settings"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSettings(project);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      onOpenSettings(project);
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    color: "var(--text-dim)",
+                    opacity: 0.6,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Settings size={11} />
+                </span>
+              )}
+            </Button>
             {isActive && idleCount > 0 && onStartAll && (
               <IconButton
                 icon={Play}
@@ -106,22 +142,6 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                 style={{
                   color: "var(--accent)",
                   opacity: 0.8,
-                  padding: "4px",
-                }}
-              />
-            )}
-            {isActive && onOpenSettings && (
-              <IconButton
-                icon={Settings}
-                size={11}
-                title="project settings"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenSettings(project);
-                }}
-                style={{
-                  color: "var(--text-dim)",
-                  opacity: 0.6,
                   padding: "4px",
                 }}
               />
