@@ -12,6 +12,7 @@ export function DetailPanel({
   logs,
   errors,
   pendingPlan,
+  agentMemory,
   onSendEvent,
   onApprove,
   onViewPlan,
@@ -34,6 +35,21 @@ export function DetailPanel({
   const agents = Object.keys(grouped).filter((a) => a !== "_system");
   const ordered = [...agents].reverse();
   if (grouped["_system"]) ordered.push("_system");
+
+  // Collect memory entries relevant to this task
+  const memoryEntries = [];
+  if (agentMemory && typeof agentMemory === "object") {
+    for (const [, entries] of Object.entries(agentMemory)) {
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (entry.taskId === task.id) {
+          memoryEntries.push(entry);
+        }
+      }
+    }
+    // Sort by timestamp ascending
+    memoryEntries.sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+  }
 
   useEffect(() => {
     if (viewMode === "stream" && streamEndRef.current) {
@@ -119,6 +135,24 @@ export function DetailPanel({
           </div>
         )}
       </div>
+
+      {/* Agent Memory */}
+      {memoryEntries.length > 0 && (
+        <div className="detail-panel-memory">
+          <div className="detail-panel-memory-title">agent memory</div>
+          {memoryEntries.map((entry) => (
+            <div key={entry.id} className="detail-panel-memory-entry">
+              <span className={`detail-panel-memory-badge detail-panel-memory-badge--${entry.type}`}>
+                {entry.type}
+              </span>
+              <span className="detail-panel-memory-content">{entry.content}</span>
+              <span className="detail-panel-memory-time">
+                {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Controls */}
       <div className="detail-panel-controls">

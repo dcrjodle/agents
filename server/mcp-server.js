@@ -84,6 +84,30 @@ server.registerTool("get_task_context", {
   return { content: [{ type: "text", text: JSON.stringify(ctx, null, 2) }] };
 });
 
+// add_memory — save a useful discovery to persistent memory
+server.registerTool("add_memory", {
+  description: "Save a useful discovery (problem, error, warning, rule or pattern) to this agent's persistent memory so it can be referenced in future runs.",
+  inputSchema: {
+    content: z.string().describe("The useful information to remember (one concise sentence)"),
+    type: z.enum(["problem", "error", "warning", "rule", "pattern", "info"]).describe("Category of the memory entry"),
+  },
+}, async ({ content, type }) => {
+  await post("/internal/add-memory", { content, type });
+  return { content: [{ type: "text", text: "Memory entry saved." }] };
+});
+
+// get_memory — retrieve entries from agent memory database
+server.registerTool("get_memory", {
+  description: "Retrieve entries from this agent's memory database (or another role's memory).",
+  inputSchema: {
+    role: z.string().optional().describe("Agent role to fetch memory for. Omit to fetch all memory entries."),
+  },
+}, async ({ role } = {}) => {
+  const path = role ? `/memory/${encodeURIComponent(role)}` : "/memory";
+  const data = await get(path);
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+});
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

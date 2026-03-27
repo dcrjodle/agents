@@ -30,6 +30,7 @@ export function App() {
     agentLogs,
     pendingPlans,
     errors,
+    agentMemory,
     createTask,
     startTask,
     startAllTasks,
@@ -249,6 +250,7 @@ export function App() {
               logs={agentLogs[selectedTaskId] || []}
               errors={errors[selectedTaskId] || []}
               pendingPlan={pendingPlans[selectedTaskId]}
+              agentMemory={agentMemory}
               onSendEvent={sendEvent}
               onApprove={approveTask}
               onViewPlan={handleViewPlan}

@@ -28,6 +28,8 @@ export function useWorkflow() {
   const [pendingPlans, setPendingPlans] = useState({});
   // errors: { [taskId]: Array<{ time, agent, error }> }
   const [errors, setErrors] = useState({});
+  // agentMemory: { [role]: Array<{ id, timestamp, type, content, taskId, projectPath }> }
+  const [agentMemory, setAgentMemory] = useState({});
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -128,6 +130,11 @@ export function useWorkflow() {
                 });
               }
             }
+            // Hydrate initial agent memory from REST API
+            fetch(`${API_BASE}/memory`)
+              .then((r) => r.ok ? r.json() : {})
+              .then((all) => { if (all && typeof all === "object") setAgentMemory(all); })
+              .catch(() => {});
             break;
 
           case "TASK_CREATED":
@@ -257,6 +264,15 @@ export function useWorkflow() {
               message: msg.message,
             });
             break;
+
+          case "MEMORY_UPDATED":
+            if (msg.role && msg.entry) {
+              setAgentMemory((prev) => ({
+                ...prev,
+                [msg.role]: [...(prev[msg.role] || []), msg.entry],
+              }));
+            }
+            break;
         }
       };
     }
@@ -358,7 +374,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };

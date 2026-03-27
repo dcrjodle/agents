@@ -18,6 +18,7 @@ import {
   getTaskLogs,
   clearTaskLogs,
 } from "./db.js";
+import { addMemoryEntry, getMemory, getAllMemory } from "./memory-db.js";
 
 const app = express();
 const server = createServer(app);
@@ -777,6 +778,48 @@ app.get("/internal/task-context/:taskId", (req, res) => {
     retries: snap.context.retries,
     projectPath: actor._projectPath,
   });
+});
+
+app.post("/internal/add-memory", async (req, res) => {
+  const { taskId, content, type, agentRole } = req.body;
+  if (!taskId || !content) return res.status(400).json({ error: "taskId and content required" });
+
+  // Resolve the agent role from the active task state, with optional override
+  let role = agentRole || null;
+  if (!role) {
+    const actor = actors.get(taskId);
+    const sk = actor ? stateKey(actor.getSnapshot().value) : null;
+    role = sk ? (STATE_TO_ROLE[sk] || null) : null;
+  }
+  if (!role) role = "unknown";
+
+  const actor = actors.get(taskId);
+  const projectPath = actor ? actor._projectPath : null;
+
+  const entry = await addMemoryEntry(role, { content, type: type || "info", taskId, projectPath });
+
+  broadcast({ type: "MEMORY_UPDATED", role, entry });
+
+  const time = new Date().toISOString();
+  appendTaskLog(taskId, {
+    time,
+    type: "memory",
+    agent: role,
+    data: `[memory:${entry.type}] ${entry.content}`,
+    entry,
+  });
+
+  res.json({ ok: true, entry });
+});
+
+app.get("/memory/:role", async (req, res) => {
+  const entries = await getMemory(req.params.role);
+  res.json(entries);
+});
+
+app.get("/memory", async (req, res) => {
+  const all = await getAllMemory();
+  res.json(all);
 });
 
 // --- WebSocket ---

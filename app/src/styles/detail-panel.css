@@ -163,3 +163,80 @@
   color: var(--dot-done);
   font-weight: 600;
 }
+
+/* Agent Memory section */
+.detail-panel-memory {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-panel-memory-title {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+  font-family: var(--font-mono);
+}
+
+.detail-panel-memory-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.detail-panel-memory-badge {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: lowercase;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.detail-panel-memory-badge--error,
+.detail-panel-memory-badge--problem {
+  background: color-mix(in srgb, var(--dot-failed) 15%, transparent);
+  color: var(--dot-failed);
+}
+
+.detail-panel-memory-badge--warning {
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
+  color: #f59e0b;
+}
+
+.detail-panel-memory-badge--rule {
+  background: color-mix(in srgb, #3b82f6 15%, transparent);
+  color: #3b82f6;
+}
+
+.detail-panel-memory-badge--pattern {
+  background: color-mix(in srgb, var(--dot-done) 15%, transparent);
+  color: var(--dot-done);
+}
+
+.detail-panel-memory-badge--info {
+  background: color-mix(in srgb, var(--text-dim) 15%, transparent);
+  color: var(--text-dim);
+}
+
+.detail-panel-memory-content {
+  flex: 1;
+  color: var(--text);
+  min-width: 0;
+}
+
+.detail-panel-memory-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
