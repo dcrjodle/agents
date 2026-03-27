@@ -3,6 +3,7 @@ import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS, NEXT_EVENTS } from "../constants.js";
 import { LogLine } from "./LogLine.jsx";
 import { PipelineBar } from "./PipelineBar.jsx";
+import { Button } from "./Button.jsx";
 
 export const StreamPanel = forwardRef(function StreamPanel({
   task,
@@ -74,23 +75,15 @@ export const StreamPanel = forwardRef(function StreamPanel({
           </span>
         </div>
 
-        <button
+        <Button
+          variant="toggle"
+          active={columnsMode}
+          size="sm"
           onClick={onToggleColumns}
-          style={{
-            background: columnsMode ? "var(--bg-muted)" : "transparent",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "3px 8px",
-            fontSize: 10,
-            color: "var(--text-muted)",
-            cursor: "pointer",
-            fontFamily: "var(--font-mono)",
-            letterSpacing: "0.03em",
-            flexShrink: 0,
-          }}
+          style={{ flexShrink: 0 }}
         >
           {columnsMode ? "stream" : "columns"}
-        </button>
+        </Button>
       </div>
 
       {/* Pipeline */}
@@ -156,58 +149,33 @@ export const StreamPanel = forwardRef(function StreamPanel({
       }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
           {sk === "planning.awaitingApproval" && pendingPlan && onViewPlan && (
-            <button
+            <Button
+              variant="action"
+              color="var(--dot-planning)"
+              size="sm"
               onClick={() => onViewPlan(task.id)}
-              style={{
-                fontSize: 10,
-                padding: "3px 10px",
-                borderRadius: 3,
-                border: "1px solid var(--dot-planning)",
-                background: "transparent",
-                color: "var(--dot-planning)",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontFamily: "var(--font-mono)",
-              }}
             >
               view plan
-            </button>
+            </Button>
           )}
           {sk === "merging.awaitingApproval" && onApprove && (
-            <button
+            <Button
+              variant="action"
+              color="var(--dot-done)"
+              size="sm"
               onClick={() => onApprove(task.id)}
-              style={{
-                fontSize: 10,
-                padding: "3px 10px",
-                borderRadius: 3,
-                border: "1px solid var(--dot-done)",
-                background: "transparent",
-                color: "var(--dot-done)",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontFamily: "var(--font-mono)",
-              }}
             >
               approve pr
-            </button>
+            </Button>
           )}
           {events.map((evt) => (
-            <button
+            <Button
               key={evt.type}
+              variant="sim"
               onClick={() => onSendEvent(task.id, evt)}
-              style={{
-                fontSize: 10,
-                padding: "3px 8px",
-                borderRadius: 3,
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                fontFamily: "var(--font-mono)",
-              }}
             >
               {evt.type}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

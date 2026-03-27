@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
+import { Button } from "./Button.jsx";
 
 // Map state keys to agent/script roles
 const STATE_AGENTS = {
@@ -376,95 +377,52 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {/* View Plan button when plan is ready */}
               {sk === "planning.awaitingApproval" && pendingPlan && onViewPlan && (
-                <button
+                <Button
+                  variant="action"
+                  color="var(--dot-planning)"
                   onClick={() => onViewPlan(task.id)}
-                  style={{
-                    fontSize: 11,
-                    padding: "4px 12px",
-                    borderRadius: 4,
-                    border: "1px solid #8b5cf6",
-                    background: "#5b21b6",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                    animation: "pulse-border 2s infinite",
-                  }}
+                  style={{ animation: "pulse-border 2s infinite" }}
                 >
                   View Plan
-                </button>
+                </Button>
               )}
               {/* Approve PR button for merging awaiting approval */}
               {sk === "merging.awaitingApproval" && onApprove && (
-                <button
+                <Button
+                  variant="action"
+                  color="var(--dot-done)"
                   onClick={() => onApprove(task.id)}
-                  style={{
-                    fontSize: 11,
-                    padding: "4px 12px",
-                    borderRadius: 4,
-                    border: "1px solid #22c55e",
-                    background: "#166534",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
                 >
                   Approve PR
-                </button>
+                </Button>
               )}
               {/* Run Visual Test button for async mode */}
               {isAwaitingVisualTest && (
-                <button
+                <Button
+                  variant="action"
+                  color="#f59e0b"
                   onClick={async () => {
                     await fetch(`/api/tasks/${task.id}/visual-test`, { method: "POST" });
                   }}
-                  style={{
-                    fontSize: 11,
-                    padding: "4px 12px",
-                    borderRadius: 4,
-                    border: "1px solid #f59e0b",
-                    background: "#92400e",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
                 >
                   Run Visual Test
-                </button>
+                </Button>
               )}
               {/* Sim buttons */}
               {events.map((evt) => (
-                <button
+                <Button
                   key={evt.type}
+                  variant="sim"
                   onClick={() => onSendEvent(task.id, evt)}
-                  style={{
-                    fontSize: 10,
-                    padding: "3px 8px",
-                    borderRadius: 4,
-                    border: "1px solid #3d3d3d",
-                    background: "#2d2d2d",
-                    color: "#9ca3af",
-                    cursor: "pointer",
-                    fontFamily: "monospace",
-                  }}
                 >
                   {evt.type}
-                </button>
+                </Button>
               ))}
             </div>
 
-            <button
-              onClick={() => onDelete(task.id)}
-              style={{
-                fontSize: 11,
-                color: "#6b7280",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "2px 8px",
-              }}
-            >
+            <Button variant="ghost" size="sm" onClick={() => onDelete(task.id)}>
               delete
-            </button>
+            </Button>
           </div>
         </>
       )}
