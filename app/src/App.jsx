@@ -25,9 +25,6 @@ export function App() {
     const saved = localStorage.getItem("theme");
     return saved === "dark";
   });
-  const [autoApprovePlans, setAutoApprovePlans] = useState(() => {
-    return localStorage.getItem("autoApprovePlans") === "true";
-  });
   const approvedPlanIds = useRef(new Set());
 
   const {
@@ -54,18 +51,17 @@ export function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    localStorage.setItem("autoApprovePlans", autoApprovePlans ? "true" : "false");
-  }, [autoApprovePlans]);
-
-  useEffect(() => {
-    if (!autoApprovePlans) return;
     Object.keys(pendingPlans).forEach((taskId) => {
       if (approvedPlanIds.current.has(taskId)) return;
+      const task = tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      const project = projects.find((p) => p.path === task.projectPath);
+      if (!project?.settings?.autoApprovePlans) return;
       approvedPlanIds.current.add(taskId);
       approveTask(taskId, "Auto-approved");
       clearPendingPlan(taskId);
     });
-  }, [autoApprovePlans, pendingPlans, approveTask, clearPendingPlan]);
+  }, [pendingPlans, tasks, projects, approveTask, clearPendingPlan]);
 
   useEffect(() => {
     fetch(`${API_BASE}/config`)
@@ -246,10 +242,6 @@ export function App() {
     setViewingPlanTaskId(null);
   }, [pendingPlans, approveTask, clearPendingPlan]);
 
-  const handleToggleAutoApprovePlans = useCallback(() => {
-    setAutoApprovePlans((v) => !v);
-  }, []);
-
   const commands = useMemo(() => [
     {
       label: "run all",
@@ -261,12 +253,7 @@ export function App() {
       description: "open global settings",
       action: () => setShowSettings(true),
     },
-    {
-      label: autoApprovePlans ? "deactivate auto approve plans" : "activate auto approve plans",
-      description: "toggle auto-approve mode for plans",
-      action: handleToggleAutoApprovePlans,
-    },
-  ], [autoApprovePlans, handleToggleAutoApprovePlans, idleTasks]);
+  ], [idleTasks]);
 
   const viewingTask = viewingPlanTaskId ? tasks.find((t) => t.id === viewingPlanTaskId) : null;
   const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;
