@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Button } from "./Button.jsx";
 import "../styles/create-task.css";
 
-export function CreateTask({ onCreate, commands = [], value, onValueChange }) {
+export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, onValueChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef(null);
 
@@ -38,16 +38,23 @@ export function CreateTask({ onCreate, commands = [], value, onValueChange }) {
   };
 
   const handleKeyDown = (e) => {
-    if (!showDropdown) return;
-    if (e.key === "ArrowDown") {
+    if (showDropdown) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((i) => (i + 1) % filtered.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((i) => (i - 1 + filtered.length) % filtered.length);
+      } else if (e.key === "Escape") {
+        onValueChange("");
+        setActiveIndex(0);
+      }
+      return;
+    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && value.trim() && onCreateAndStart) {
       e.preventDefault();
-      setActiveIndex((i) => (i + 1) % filtered.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => (i - 1 + filtered.length) % filtered.length);
-    } else if (e.key === "Escape") {
+      onCreateAndStart(value.trim());
       onValueChange("");
-      setActiveIndex(0);
     }
   };
 

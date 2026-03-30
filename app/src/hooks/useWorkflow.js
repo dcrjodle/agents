@@ -441,11 +441,13 @@ export function useWorkflow() {
     };
   }, [appendLog, appendError]);
 
-  const createTask = async (description, projectPath) => {
+  const createTask = async (description, projectPath, { autoStart = false } = {}) => {
+    const body = { description, projectPath };
+    if (autoStart) body.autoStart = true;
     const res = await fetch(`${API_BASE}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description, projectPath }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Failed to create task: ${res.statusText}`);
     return res.json();
