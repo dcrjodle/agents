@@ -72,8 +72,8 @@ async function resolveServerPath(projectPath, log) {
 // --- CWD resolvers ---
 
 const CWD_RESOLVERS = {
-  projectPath: (h, log) => resolveServerPath(h.projectPath, log),
-  worktreeOrProject: (h, log) => resolveServerPath(h.context.result?.worktreePath || h.projectPath, log),
+  projectPath: (h) => h.projectPath,
+  worktreeOrProject: (h) => h.context.result?.worktreePath || h.projectPath,
 };
 
 // --- Prompt builder registry ---
@@ -462,12 +462,6 @@ export function runAgent(role, taskId, handoff, callbacks) {
     return { pid: null, kill: () => {}, gotResult: () => false };
   }
 
-  // Determine if we should resume an existing session
-  const retries = handoff.context.retries || 0;
-  const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
-  const prompt = canResume ? buildResumePrompt(handoff) : (config.buildPrompt ? config.buildPrompt(handoff) : handoff.instruction);
-  const resumeSessionId = canResume ? sessionStore.get(taskId) : undefined;
-
   const abortController = new AbortController();
   let resultReceived = false;
   const fakePid = pidCounter++;
@@ -498,12 +492,26 @@ export function runAgent(role, taskId, handoff, callbacks) {
   // Start the query in the background
   const run = async () => {
     try {
-      // Resolve CWD (may clone repo if path doesn't exist on this server)
+      // Resolve project path first (may clone repo if path doesn't exist on this server)
       const log = (msg) => {
         console.log(`[${role}] ${msg}`);
         if (callbacks.onStdout) callbacks.onStdout(`[system] ${msg}\n`);
       };
-      const cwd = await config.getCwd(handoff, log);
+      const resolvedPath = await resolveServerPath(handoff.projectPath, log);
+      handoff.projectPath = resolvedPath;
+
+      // Also resolve worktree path if present
+      if (handoff.context.result?.worktreePath) {
+        handoff.context.result.worktreePath = await resolveServerPath(handoff.context.result.worktreePath, log);
+      }
+
+      const cwd = config.getCwd(handoff);
+
+      // Build prompt after path resolution so all paths are correct
+      const retries = handoff.context.retries || 0;
+      const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
+      const prompt = canResume ? buildResumePrompt(handoff) : (config.buildPrompt ? config.buildPrompt(handoff) : handoff.instruction);
+      const resumeSessionId = canResume ? sessionStore.get(taskId) : undefined;
 
       const options = {
         abortController,
