@@ -353,28 +353,31 @@ function wireActor(id, actor) {
       context: snapshot.context,
     });
 
-    // Spawn agent or script if state has one
-    if (STATE_TO_ROLE[sk] || STATE_TO_SCRIPT[sk]) {
-      onStateTransition(id, snapshot.value, snapshot.context);
-    }
+    // Skip side-effects (agent spawning, auto-approvals, broadcasts) during rehydration replay
+    if (!actor._rehydrating) {
+      // Spawn agent or script if state has one
+      if (STATE_TO_ROLE[sk] || STATE_TO_SCRIPT[sk]) {
+        onStateTransition(id, snapshot.value, snapshot.context);
+      }
 
-    // Auto-approve PR creation if setting is enabled
-    if (sk === "merging.awaitingApproval") {
-      getProjectSettings(actor._projectPath).then((projectSettings) => {
-        if (projectSettings.autoApprovePr !== false) {
-          actor.send({ type: "PR_APPROVED" });
-          broadcast({ type: "APPROVAL", taskId: id, approval: "pr", message: "Auto-approved" });
-        }
-      });
-    }
+      // Auto-approve PR creation if setting is enabled
+      if (sk === "merging.awaitingApproval") {
+        getProjectSettings(actor._projectPath).then((projectSettings) => {
+          if (projectSettings.autoApprovePr !== false) {
+            actor.send({ type: "PR_APPROVED" });
+            broadcast({ type: "APPROVAL", taskId: id, approval: "pr", message: "Auto-approved" });
+          }
+        });
+      }
 
-    // Broadcast PLAN_READY event when entering awaitingApproval in planning
-    if (sk === "planning.awaitingApproval" && snapshot.context.plan) {
-      broadcast({
-        type: "PLAN_READY",
-        taskId: id,
-        plan: snapshot.context.plan,
-      });
+      // Broadcast PLAN_READY event when entering awaitingApproval in planning
+      if (sk === "planning.awaitingApproval" && snapshot.context.plan) {
+        broadcast({
+          type: "PLAN_READY",
+          taskId: id,
+          plan: snapshot.context.plan,
+        });
+      }
     }
 
     // Clean up auto-continue counter when task completes successfully
@@ -1307,7 +1310,8 @@ async function start() {
       continue;
     }
 
-    // Replay events to get back to the persisted state
+    // Replay events to get back to the persisted state — suppress side-effects during replay
+    actor._rehydrating = true;
     actor.send({ type: "START", task: task.description });
 
     // Helper: build cumulative replay sequences
@@ -1345,6 +1349,24 @@ async function start() {
       for (const event of events) {
         actor.send(event);
       }
+    }
+
+    // Replay complete — re-enable side-effects
+    actor._rehydrating = false;
+
+    // For tasks that were mid-flight in planning.running, re-spawn the planner agent
+    if (sk === "planning.running" || sk === "planning") {
+      const snap = actor.getSnapshot();
+      onStateTransition(task.id, snap.value, snap.context);
+    }
+
+    // For tasks awaiting plan approval, broadcast PLAN_READY so connected clients can show the dialog
+    if (sk === "planning.awaitingApproval" && task.context?.plan) {
+      broadcast({
+        type: "PLAN_READY",
+        taskId: task.id,
+        plan: task.context.plan,
+      });
     }
   }
 
