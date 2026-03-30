@@ -44,6 +44,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Serve static frontend build (production)
+const distPath = join(__dirname, "..", "app", "dist");
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+
 // In-memory XState actors keyed by task id
 const actors = new Map();
 
@@ -1465,10 +1471,17 @@ async function start() {
     }
   }
 
+  // SPA catch-all: serve index.html for non-API routes (production)
+  if (existsSync(distPath)) {
+    app.get("*", (req, res) => {
+      res.sendFile(join(distPath, "index.html"));
+    });
+  }
+
   const PORT = process.env.PORT || 3001;
-  server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`WebSocket on ws://localhost:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`WebSocket on ws://0.0.0.0:${PORT}`);
   });
 }
 
