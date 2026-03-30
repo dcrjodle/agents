@@ -53,3 +53,15 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* Mobile — ensure the submit button meets the 44 px minimum tap target */
+@media (max-width: 768px) {
+  .create-task-form .btn--md {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .create-task-form input {
+    min-height: 44px;
+  }
+}

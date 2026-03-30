@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
-import { useContextMenu } from "../hooks/useContextMenu.js";
+import { useContextMenu, useLongPress } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
@@ -45,6 +45,22 @@ export function TaskList({
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
   const [isDraggingState, setIsDraggingState] = useState(false);
   const isDragging = useRef(false);
+
+  // Long-press ref — stores which task is being pressed so the single hook can act on it
+  const longPressTaskRef = useRef(null);
+  const longPressIsEditing = useRef(false);
+  const longPressHandlers = useLongPress((pos) => {
+    const task = longPressTaskRef.current;
+    if (!task || longPressIsEditing.current) return;
+    const fakeEvent = { clientX: pos.clientX, clientY: pos.clientY, preventDefault: () => {} };
+    if (selectedTaskIds.size > 1 && selectedTaskIds.has(task.id)) {
+      const selectedTasks = tasks.filter((t) => selectedTaskIds.has(t.id));
+      openContextMenu(fakeEvent, { _bulk: true, tasks: selectedTasks });
+    } else {
+      setSelectedTaskIds(new Set());
+      openContextMenu(fakeEvent, task);
+    }
+  }, 500);
 
   // Refs for auto-scroll RAF loop
   const listRef = useRef(null);
@@ -164,6 +180,14 @@ export function TaskList({
         key={task.id}
         className={rowClass}
         data-task-id={task.id}
+        style={{ touchAction: "pan-y" }}
+        onTouchStart={(e) => {
+          longPressTaskRef.current = task;
+          longPressIsEditing.current = isEditing;
+          longPressHandlers.onTouchStart(e);
+        }}
+        onTouchMove={longPressHandlers.onTouchMove}
+        onTouchEnd={longPressHandlers.onTouchEnd}
         onMouseDown={(e) => {
           if (isEditing) return;
           // Only primary button
@@ -237,7 +261,8 @@ export function TaskList({
           }
         }}
         onContextMenu={(e) => {
-          if (isEditing) return;
+          if (isEditing) return; // Allow native context menu (copy/paste) when editing
+          e.preventDefault(); // Suppress native browser context menu (important on mobile)
           // If right-clicking inside a multi-selection, show bulk menu
           if (selectedTaskIds.size > 1 && selectedTaskIds.has(task.id)) {
             const selectedTasks = tasks.filter((t) => selectedTaskIds.has(t.id));

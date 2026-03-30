@@ -78,3 +78,41 @@
 .context-menu-item.danger .context-menu-item-icon {
   color: var(--dot-failed);
 }
+
+/* ============================================================
+   Mobile bottom sheet
+   ============================================================ */
+.context-menu--sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  border-radius: 12px 12px 0 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  min-width: 0;
+  width: 100%;
+  /* Override the floating popover animation */
+  animation: context-menu-sheet-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes context-menu-sheet-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Larger tap targets for mobile items */
+@media (max-width: 768px) {
+  .context-menu--sheet .context-menu-item {
+    min-height: 44px;
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+}

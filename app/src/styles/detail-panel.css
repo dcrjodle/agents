@@ -179,3 +179,11 @@
   flex-shrink: 0;
   font-family: var(--font-mono);
 }
+
+/* Mobile — ensure header icon buttons have adequate tap targets */
+@media (max-width: 768px) {
+  .detail-panel-header-controls .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
