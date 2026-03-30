@@ -2,8 +2,7 @@ import { useState, useRef } from "react";
 import { Button } from "./Button.jsx";
 import "../styles/create-task.css";
 
-export function CreateTask({ onCreate, commands = [] }) {
-  const [value, setValue] = useState("");
+export function CreateTask({ onCreate, commands = [], value, onValueChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef(null);
 
@@ -16,7 +15,7 @@ export function CreateTask({ onCreate, commands = [] }) {
 
   const executeCommand = (cmd) => {
     cmd.action();
-    setValue("");
+    onValueChange("");
     setActiveIndex(0);
   };
 
@@ -30,11 +29,11 @@ export function CreateTask({ onCreate, commands = [] }) {
     }
     if (!value.trim()) return;
     onCreate(value.trim());
-    setValue("");
+    onValueChange("");
   };
 
   const handleChange = (e) => {
-    setValue(e.target.value);
+    onValueChange(e.target.value);
     setActiveIndex(0);
   };
 
@@ -47,7 +46,7 @@ export function CreateTask({ onCreate, commands = [] }) {
       e.preventDefault();
       setActiveIndex((i) => (i - 1 + filtered.length) % filtered.length);
     } else if (e.key === "Escape") {
-      setValue("");
+      onValueChange("");
       setActiveIndex(0);
     }
   };
@@ -55,8 +54,10 @@ export function CreateTask({ onCreate, commands = [] }) {
   const handleBlur = () => {
     // Small delay so click on item registers before dropdown closes
     setTimeout(() => {
-      setValue((v) => (v.startsWith("/") ? "" : v));
-      setActiveIndex(0);
+      if (value.startsWith("/")) {
+        onValueChange("");
+        setActiveIndex(0);
+      }
     }, 150);
   };
 
