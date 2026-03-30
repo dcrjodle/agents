@@ -4,16 +4,16 @@ import { stateKey } from "../hooks/useWorkflow.js";
 import "../styles/tab-task-popover.css";
 
 
-function getActionLabel(sk) {
+function getActionLabel(sk, task) {
   if (sk === "idle") return "start";
   if (sk === "planning.awaitingApproval") return "view plan";
   if (sk === "merging.awaitingApproval") return "approve";
-  if (sk === "failed") return "restart";
+  if (sk === "failed") return task?.context?.failedFrom ? "continue" : "restart";
   if (sk === "done") return "view";
   return "open";
 }
 
-function handleTaskAction(task, pendingPlans, onStart, onRestart, onViewPlan, onApprove, onSelectTask) {
+function handleTaskAction(task, pendingPlans, onStart, onRestart, onContinue, onViewPlan, onApprove, onSelectTask) {
   const sk = task.stateKey || stateKey(task.state);
   if (sk === "idle") {
     onStart(task.id);
@@ -21,6 +21,8 @@ function handleTaskAction(task, pendingPlans, onStart, onRestart, onViewPlan, on
     onViewPlan(task.id);
   } else if (sk === "merging.awaitingApproval") {
     onApprove(task.id);
+  } else if (sk === "failed" && task.context?.failedFrom && onContinue) {
+    onContinue(task.id);
   } else if (sk === "failed") {
     onRestart(task.id);
   } else {
@@ -35,6 +37,7 @@ export function TabTaskPopover({
   anchorRect,
   onStart,
   onRestart,
+  onContinue,
   onViewPlan,
   onApprove,
   onSelectTask,
@@ -73,13 +76,13 @@ export function TabTaskPopover({
 
       {activeTasks.map((task) => {
         const sk = task.stateKey || stateKey(task.state);
-        const actionLabel = getActionLabel(sk);
+        const actionLabel = getActionLabel(sk, task);
         return (
           <button
             key={task.id}
             className="tab-task-popover-row"
             onClick={() =>
-              handleTaskAction(task, pendingPlans, onStart, onRestart, onViewPlan, onApprove, onSelectTask)
+              handleTaskAction(task, pendingPlans, onStart, onRestart, onContinue, onViewPlan, onApprove, onSelectTask)
             }
           >
             <StatusIcon stateKey={sk} size={12} />

@@ -324,6 +324,13 @@ export function useWorkflow() {
             });
             break;
 
+          case "TASK_CONTINUED":
+            appendLog(msg.taskId, {
+              type: "system",
+              data: `Continuing from ${msg.fromState}...`,
+            });
+            break;
+
           case "AVATAR_UPDATE":
             if (msg.taskId && msg.agent) {
               setAvatarStates((prev) => ({
@@ -430,6 +437,17 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const continueTask = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/continue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to continue task: ${res.statusText}`);
+    // Clear errors but keep logs for context
+    setErrors((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+    return res.json();
+  };
+
   const clearErrors = (taskId) => {
     setErrors((prev) => {
       const next = { ...prev };
@@ -453,7 +471,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, createTask, startTask, startAllTasks, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };

@@ -40,6 +40,7 @@ export function App() {
     startTask,
     startAllTasks,
     restartTask,
+    continueTask,
     sendEvent,
     deleteTask,
     approveTask,
@@ -303,12 +304,14 @@ export function App() {
         "start": "start selected task",
         "view plan": "view plan for selected task",
         "approve pr": "approve pull request for selected task",
-        "restart": "restart selected task",
+        "continue": "continue selected task from failure point",
+        "restart": "restart selected task from scratch",
         "delete": "delete selected task",
       };
       const menuItems = buildTaskMenuItems(selectedTask, {
         onStart: startTask,
         onRestart: restartTask,
+        onContinue: continueTask,
         onDelete: deleteTask,
         onViewPlan: handleViewPlan,
         onApprove: approveTask,
@@ -364,6 +367,7 @@ export function App() {
     pendingPlans,
     startTask,
     restartTask,
+    continueTask,
     deleteTask,
     handleViewPlan,
     approveTask,
@@ -407,6 +411,7 @@ export function App() {
             pendingPlans={pendingPlans}
             onStart={startTask}
             onRestart={restartTask}
+            onContinue={continueTask}
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             onSelectTask={setSelectedTaskId}
@@ -431,6 +436,7 @@ export function App() {
             onDelete={deleteTask}
             onStart={startTask}
             onRestart={restartTask}
+            onContinue={continueTask}
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             onEdit={(taskId, description) => updateTask(taskId, description).catch((err) => console.error("Failed to edit task:", err))}

@@ -92,7 +92,12 @@ export function DetailPanel({
       {((sk === "failed" && task.context?.error) || (errors && errors.length > 0)) && (
         <div className="detail-panel-errors">
           {sk === "failed" && task.context?.error && (
-            <div className="detail-panel-error-line">{task.context.error}</div>
+            <div className="detail-panel-error-line">
+              {task.context.failedFrom && (
+                <span style={{ opacity: 0.7 }}>failed during {task.context.failedFrom}: </span>
+              )}
+              {task.context.error}
+            </div>
           )}
           {errors && errors.length > 0 && errors.slice(-3).map((err, i) => (
             <div key={i} className="detail-panel-error-line">

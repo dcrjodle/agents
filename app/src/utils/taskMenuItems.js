@@ -18,6 +18,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   const {
     onStart,
     onRestart,
+    onContinue,
     onDelete,
     onViewPlan,
     onApprove,
@@ -63,6 +64,15 @@ export function buildTaskMenuItems(task, handlers = {}) {
 
   if (items.length > 0) {
     items.push({ separator: true });
+  }
+
+  // "continue" — resume from failure point (only when failedFrom is recorded)
+  if (sk === "failed" && task.context?.failedFrom && onContinue) {
+    items.push({
+      label: "continue",
+      icon: "\u25B6",
+      action: () => onContinue(task.id),
+    });
   }
 
   if (!isIdle && onRestart) {
