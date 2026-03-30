@@ -11,6 +11,7 @@ export const workflowMachine = setup({
       | { type: "PLAN_FAILED", error: string }
       | { type: "PLAN_APPROVED", reviewComments?: string }
       | { type: "PLAN_REJECTED" }
+      | { type: "PLAN_REVISION_REQUESTED", comments: string }
       | { type: "BRANCH_READY", worktreePath: string, branchName: string }
       | { type: "BRANCH_FAILED", error: string }
       | { type: "CODE_COMPLETE", files: string[] }
@@ -113,6 +114,15 @@ export const workflowMachine = setup({
               actions: assign({
                 error: () => "Plan rejected by user",
                 failedFrom: () => "planning.awaitingApproval",
+              }),
+            },
+            PLAN_REVISION_REQUESTED: {
+              target: "running",
+              actions: assign({
+                plan: ({ context, event }) => ({
+                  ...context.plan,
+                  userComments: event.comments,
+                }),
               }),
             },
           },

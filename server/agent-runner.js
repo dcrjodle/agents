@@ -144,11 +144,22 @@ function readAgentFile(relativePath) {
 function buildPlannerPrompt(handoff) {
   const planTemplate = readAgentFile("agents/planner/templates/plan.md");
 
+  const userComments = handoff.context.plan?.userComments || "";
+  let userFeedbackSection = "";
+  if (userComments) {
+    userFeedbackSection = `
+## User Feedback
+The following feedback was provided by the user on the previous plan. Address these notes in your revised plan:
+
+${userComments}
+`;
+  }
+
   return `You are a planner agent. Your job is to create an implementation plan.
 
 Task: ${handoff.instruction}
 Project path: ${handoff.projectPath}
-
+${userFeedbackSection}
 First, explore the project directory to understand its structure, framework, and conventions.
 Detect the framework from actual project files (package.json, .csproj, go.mod, etc.) — do NOT assume any framework that isn't evidenced in the codebase.
 Then write a plan following this template:

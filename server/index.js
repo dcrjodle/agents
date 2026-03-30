@@ -823,10 +823,17 @@ app.post("/tasks/:id/approve", (req, res) => {
   const sk = stateKey(snap.value);
 
   if (sk === "planning.awaitingApproval") {
-    const planApprovedEvent = { type: "PLAN_APPROVED" };
-    if (req.body.reviewComments) planApprovedEvent.reviewComments = req.body.reviewComments;
-    actor.send(planApprovedEvent);
-    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || "Approved" });
+    const action = req.body.action; // "revise" | "reject" | undefined (treat as approve)
+    if (action === "revise") {
+      actor.send({ type: "PLAN_REVISION_REQUESTED", comments: req.body.comments || "" });
+    } else if (action === "reject") {
+      actor.send({ type: "PLAN_REJECTED" });
+    } else {
+      const planApprovedEvent = { type: "PLAN_APPROVED" };
+      if (req.body.reviewComments) planApprovedEvent.reviewComments = req.body.reviewComments;
+      actor.send(planApprovedEvent);
+    }
+    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || action || "Approved" });
     return res.json({ ok: true });
   }
 

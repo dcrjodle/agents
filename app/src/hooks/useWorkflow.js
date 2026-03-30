@@ -536,6 +536,16 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const planAction = async (taskId, action, comments) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, comments, message: `Plan: ${action}` }),
+    });
+    if (!res.ok) throw new Error(`Failed to perform plan action: ${res.statusText}`);
+    return res.json();
+  };
+
   const startTask = async (taskId) => {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/start`, {
       method: "POST",
@@ -653,7 +663,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, planAction, clearErrors, updateTask };
 }
 
 export { stateKey };
