@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { useContextMenu, useLongPress } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
@@ -256,6 +256,8 @@ export function TaskList({
             onViewPlan(task.id);
           } else if (sk === "reviewing.awaitingApproval" && pendingReviews?.[task.id] && onViewReview) {
             onViewReview(task.id);
+          } else if (sk === "done" && task.context?.prUrl) {
+            window.open(task.context.prUrl, "_blank", "noopener,noreferrer");
           } else {
             onSelectTask(isSelected ? null : task.id);
           }
@@ -299,7 +301,12 @@ export function TaskList({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className={descClass}>{task.description}</span>
+            <span className={descClass}>
+              {task.description}
+              {isDone && task.context?.prUrl && (
+                <ExternalLink size={11} style={{ marginLeft: 4, verticalAlign: "middle", flexShrink: 0 }} />
+              )}
+            </span>
           )}
         </div>
       </div>

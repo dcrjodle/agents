@@ -343,6 +343,10 @@ export const workflowMachine = setup({
           on: {
             MERGED: {
               target: "#workflow.done",
+              actions: assign({
+                prUrl: ({ event }) => event.url,
+                prTitle: ({ event }) => event.prTitle,
+              }),
             },
             PR_FAILED: {
               target: "#workflow.failed",
