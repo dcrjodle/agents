@@ -101,6 +101,7 @@ async function loadAgentConfigs() {
       buildPrompt,
       supportsResume: config.supportsResume || false,
       mcpTools,
+      model: config.model || "claude-sonnet-4-6",
     });
   }
 
@@ -139,10 +140,29 @@ function readAgentFile(relativePath) {
   return readFileSync(fullPath, "utf-8");
 }
 
+// --- Helper to read project-level rules from AGENTS.md ---
+
+const MAX_PROJECT_RULES_LENGTH = 4000;
+
+function readProjectRules(projectPath) {
+  const rulesPath = join(projectPath, "AGENTS.md");
+  if (!existsSync(rulesPath)) return "";
+  const contents = readFileSync(rulesPath, "utf-8");
+  if (contents.length > MAX_PROJECT_RULES_LENGTH) {
+    console.warn(`AGENTS.md in ${projectPath} exceeds ${MAX_PROJECT_RULES_LENGTH} chars — truncating`);
+    return contents.slice(0, MAX_PROJECT_RULES_LENGTH) + "\n\n[... truncated ...]";
+  }
+  return contents;
+}
+
 // --- Prompt Builders ---
 
 function buildPlannerPrompt(handoff) {
   const planTemplate = readAgentFile("agents/planner/templates/plan.md");
+  const projectRules = readProjectRules(handoff.projectPath);
+  const rulesSection = projectRules
+    ? `\n## Project Rules\nThe following rules are defined by the project owner and MUST be followed:\n\n${projectRules}\n`
+    : "";
 
   const userComments = handoff.context.plan?.userComments || "";
   let userFeedbackSection = "";
@@ -165,7 +185,7 @@ Detect the framework from actual project files (package.json, .csproj, go.mod, e
 Then write a plan following this template:
 
 ${planTemplate}
-
+${rulesSection}
 IMPORTANT: When you are done, you MUST call the report_result tool with:
 {
   "status": "plan_ready",
@@ -210,6 +230,11 @@ RETRY INSTRUCTIONS:
 `;
   }
 
+  const projectRules = readProjectRules(handoff.projectPath);
+  const rulesSection = projectRules
+    ? `\n## Project Rules\nThe following rules are defined by the project owner and MUST be followed:\n\n${projectRules}\n`
+    : "";
+
   return `You are a developer agent. Implement the following task in the worktree.
 
 Task: ${handoff.instruction}
@@ -218,7 +243,7 @@ Worktree path: ${worktreePath}
 
 Plan from planner:
 ${planMarkdown}
-${reviewerNotesSection}${retrySection}
+${reviewerNotesSection}${retrySection}${rulesSection}
 IMPORTANT RULES:
 - Work ONLY within the worktree at: ${worktreePath}
 - ALWAYS read a file before modifying it — use Read to see the current contents first
@@ -464,7 +489,7 @@ export function runAgent(role, taskId, handoff, callbacks) {
         tools: config.tools,
         allowedTools: config.tools,
         mcpServers,
-        model: "claude-sonnet-4-6",
+        model: config.model,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         maxTurns: 50,

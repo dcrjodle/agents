@@ -199,6 +199,20 @@
   cursor: grabbing;
 }
 
+/* tab icon buttons — Settings & Play inside tab label */
+.tab-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  padding: 1px 2px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.tab-icon-btn:hover {
+  opacity: 1 !important;
+  background: rgba(128, 128, 128, 0.15);
+}
+
 /* ----------------------------------------------------------
    Icon button styles (shared from icon-button.css)
    ---------------------------------------------------------- */

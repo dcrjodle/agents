@@ -74,6 +74,7 @@ function AuthenticatedApp({ user, onLogout }) {
     triggerEvaluation,
     visualTestResults,
     visualTestingProjects,
+    visualTestProgress,
     triggerVisualTest,
     createTask,
     startTask,
@@ -549,6 +550,7 @@ function AuthenticatedApp({ user, onLogout }) {
             onAddTask={handleCreateTask}
             visualTestIsRunning={visualTestingProjects.has(selectedProject.path)}
             visualTestResults={visualTestResults[selectedProject.path]}
+            visualTestProgress={visualTestProgress[selectedProject.path]}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
