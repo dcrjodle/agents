@@ -119,7 +119,14 @@ export function TaskList({
       <div
         key={task.id}
         className={`task-row${isSelected ? " selected" : ""}`}
-        onClick={() => !isEditing && onSelectTask(isSelected ? null : task.id)}
+        onClick={() => {
+          if (isEditing) return;
+          if (sk === "planning.awaitingApproval" && pendingPlans[task.id]) {
+            onViewPlan(task.id);
+          } else {
+            onSelectTask(isSelected ? null : task.id);
+          }
+        }}
         onContextMenu={(e) => !isEditing && openContextMenu(e, task)}
       >
         <div className="task-row-header">
