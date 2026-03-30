@@ -1,12 +1,14 @@
 import { query, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, existsSync, readdirSync } from "fs";
-import { join, dirname } from "path";
+import { readFileSync, existsSync, readdirSync, mkdirSync } from "fs";
+import { join, dirname, basename } from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
+import { homedir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = join(__dirname, "..", "agents");
 const PORT = process.env.PORT || 3001;
+const SERVER_PROJECTS_DIR = join(homedir(), "projects");
 
 // Session store for resume support: taskId -> sessionId
 const sessionStore = new Map();
@@ -15,11 +17,60 @@ export function clearSession(taskId) {
   sessionStore.delete(taskId);
 }
 
+// --- Server-side project path resolution ---
+
+/**
+ * Ensure the project path exists on this machine.
+ * If it doesn't (e.g. a Mac path on a Linux server), clone the repo
+ * to ~/projects/<repo-name> using the project's githubUrl setting.
+ */
+async function resolveServerPath(projectPath) {
+  if (existsSync(projectPath)) return projectPath;
+
+  // Try to fetch project settings for the githubUrl
+  try {
+    const res = await fetch(`http://localhost:${PORT}/config`);
+    if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
+    const config = await res.json();
+    const project = config.projects?.find((p) => p.path === projectPath);
+    const githubUrl = project?.settings?.githubUrl;
+    if (!githubUrl) {
+      console.warn(`Project path ${projectPath} does not exist and no githubUrl configured — using project dir name as fallback`);
+      const fallback = join(SERVER_PROJECTS_DIR, basename(projectPath));
+      if (existsSync(fallback)) return fallback;
+      throw new Error(`No githubUrl and fallback ${fallback} does not exist`);
+    }
+
+    // Derive clone target from repo name
+    const match = githubUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+    if (!match) throw new Error(`Cannot parse githubUrl: ${githubUrl}`);
+    const repoName = match[2];
+    const clonePath = join(SERVER_PROJECTS_DIR, repoName);
+
+    if (existsSync(clonePath)) {
+      console.log(`Using existing clone at ${clonePath} for ${projectPath}`);
+      return clonePath;
+    }
+
+    // Clone the repo
+    console.log(`Cloning ${githubUrl} to ${clonePath} (original path ${projectPath} not found on server)`);
+    mkdirSync(SERVER_PROJECTS_DIR, { recursive: true });
+    const cloneUrl = `https://github.com/${match[1]}/${match[2]}.git`;
+    execSync(`git clone ${cloneUrl} "${clonePath}"`, { encoding: "utf-8", timeout: 120000 });
+    console.log(`Cloned successfully to ${clonePath}`);
+    return clonePath;
+  } catch (err) {
+    console.error(`Failed to resolve server path for ${projectPath}:`, err.message);
+    // Last resort: return the original path (will fail with a clearer error downstream)
+    return projectPath;
+  }
+}
+
 // --- CWD resolvers ---
 
 const CWD_RESOLVERS = {
-  projectPath: (h) => h.projectPath,
-  worktreeOrProject: (h) => h.context.result?.worktreePath || h.projectPath,
+  projectPath: (h) => resolveServerPath(h.projectPath),
+  worktreeOrProject: (h) => resolveServerPath(h.context.result?.worktreePath || h.projectPath),
 };
 
 // --- Prompt builder registry ---
@@ -408,8 +459,6 @@ export function runAgent(role, taskId, handoff, callbacks) {
     return { pid: null, kill: () => {}, gotResult: () => false };
   }
 
-  const cwd = config.getCwd(handoff);
-
   // Determine if we should resume an existing session
   const retries = handoff.context.retries || 0;
   const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
@@ -446,6 +495,9 @@ export function runAgent(role, taskId, handoff, callbacks) {
   // Start the query in the background
   const run = async () => {
     try {
+      // Resolve CWD (may clone repo if path doesn't exist on this server)
+      const cwd = await config.getCwd(handoff);
+
       const options = {
         abortController,
         cwd,
