@@ -3,4 +3,5 @@ dist
 agents/*/memory/runs/
 agents/mailbox/
 db.json
+.env
 .worktrees/

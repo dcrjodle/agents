@@ -18,7 +18,13 @@ import {
   updateTask as dbUpdateTask,
   deleteTask as dbDeleteTask,
   getConfig,
-  getDb,
+  getProject,
+  getProjects,
+  addProject,
+  updateProjectSettings as dbUpdateProjectSettings,
+  removeProject,
+  reorderProjects,
+  seedConfig,
   appendTaskLog,
   getTaskLogs,
   clearTaskLogs,
@@ -161,8 +167,7 @@ function cleanupAgent(taskId) {
  * Get project settings from the config by path.
  */
 async function getProjectSettings(projectPath) {
-  const config = await getConfig();
-  const project = config.projects.find((p) => p.path === projectPath);
+  const project = await getProject(projectPath);
   return project?.settings || {};
 }
 
@@ -469,19 +474,17 @@ app.post("/config/pick-folder", async (req, res) => {
 app.post("/config/projects", async (req, res) => {
   const { name, path } = req.body;
   if (!name || !path) return res.status(400).json({ error: "name and path required" });
-  const db = await getDb();
-  const exists = db.data.config.projects.some((p) => p.path === path);
-  if (exists) return res.status(409).json({ error: "project already exists" });
-  db.data.config.projects.push({ name, path });
-  await db.write();
-  res.status(201).json(db.data.config);
+  const existing = await getProject(path);
+  if (existing) return res.status(409).json({ error: "project already exists" });
+  await addProject({ name, path });
+  const config = await getConfig();
+  res.status(201).json(config);
 });
 
 app.put("/config/projects/reorder", async (req, res) => {
   const { projects } = req.body;
   if (!Array.isArray(projects)) return res.status(400).json({ error: "projects array required" });
-  const db = await getDb();
-  const existing = db.data.config.projects;
+  const existing = await getProjects();
   // Validate same set of projects (no additions/removals)
   if (projects.length !== existing.length) {
     return res.status(400).json({ error: "reorder must contain the same projects" });
@@ -492,32 +495,27 @@ app.put("/config/projects/reorder", async (req, res) => {
       return res.status(400).json({ error: `unknown project path: ${p.path}` });
     }
   }
-  db.data.config.projects = projects;
-  await db.write();
-  res.json(db.data.config);
+  const config = await reorderProjects(projects);
+  res.json(config);
 });
 
 app.patch("/config/projects/settings", async (req, res) => {
   const { path, settings } = req.body;
   if (!path) return res.status(400).json({ error: "path required" });
   if (!settings || typeof settings !== "object") return res.status(400).json({ error: "settings object required" });
-  const db = await getDb();
-  const project = db.data.config.projects.find((p) => p.path === path);
+  const project = await dbUpdateProjectSettings(path, settings);
   if (!project) return res.status(404).json({ error: "project not found" });
-  project.settings = { ...project.settings, ...settings };
-  await db.write();
   res.json(project);
 });
 
 app.delete("/config/projects", async (req, res) => {
   const { path } = req.body;
   if (!path) return res.status(400).json({ error: "path required" });
-  const db = await getDb();
-  const idx = db.data.config.projects.findIndex((p) => p.path === path);
-  if (idx === -1) return res.status(404).json({ error: "project not found" });
-  db.data.config.projects.splice(idx, 1);
-  await db.write();
-  res.json(db.data.config);
+  const existing = await getProject(path);
+  if (!existing) return res.status(404).json({ error: "project not found" });
+  await removeProject(path);
+  const config = await getConfig();
+  res.json(config);
 });
 
 app.post("/config/browse", async (req, res) => {
@@ -1198,13 +1196,8 @@ app.post("/visual-test", async (req, res) => {
         const lastVisualTest = { ...result, timestamp };
 
         // Persist to project settings
-        getDb().then(async (db) => {
-          const project = db.data.config.projects.find((p) => p.path === projectPath);
-          if (project) {
-            project.settings = { ...project.settings, lastVisualTest };
-            await db.write();
-          }
-        }).catch((err) => console.error("Failed to persist visual test result:", err));
+        dbUpdateProjectSettings(projectPath, { lastVisualTest })
+          .catch((err) => console.error("Failed to persist visual test result:", err));
 
         broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: lastVisualTest });
       } catch (err) {
@@ -1281,12 +1274,7 @@ app.post("/evaluate", async (req, res) => {
 
       // Persist to project settings
       try {
-        const db = await getDb();
-        const project = db.data.config.projects.find((p) => p.path === projectPath);
-        if (project) {
-          project.settings = { ...project.settings, lastEvaluation };
-          await db.write();
-        }
+        await dbUpdateProjectSettings(projectPath, { lastEvaluation });
       } catch (err) {
         console.error("Failed to persist evaluation result:", err);
       }
@@ -1358,19 +1346,16 @@ async function start() {
   // Ensure agent configs are loaded before anything else
   await ensureConfigsLoaded();
 
-  // Initialize db
-  const db = await getDb();
-
-  // Seed config from config.json if db config is empty
-  if (!db.data.config.projects || db.data.config.projects.length === 0) {
+  // Seed config from config.json if no projects exist yet
+  const existingProjects = await getProjects();
+  if (existingProjects.length === 0) {
     try {
       const { readFileSync } = await import("fs");
       const { join, dirname } = await import("path");
       const { fileURLToPath } = await import("url");
       const __dirname = dirname(fileURLToPath(import.meta.url));
       const configFile = JSON.parse(readFileSync(join(__dirname, "..", "config.json"), "utf-8"));
-      db.data.config = configFile;
-      await db.write();
+      await seedConfig(configFile);
       console.log("Seeded config from config.json");
     } catch {
       console.warn("No config.json found, starting with empty config");
