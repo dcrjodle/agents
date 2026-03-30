@@ -121,6 +121,13 @@ export function isBashAgent(role) {
   return config?.runtime === "bash";
 }
 
+/**
+ * Get the loaded config for an agent role (used by CLI spawner).
+ */
+export function getAgentConfig(role) {
+  return agentConfigs.get(role);
+}
+
 // --- Helper to read files relative to an agent's directory ---
 
 function readAgentFile(relativePath) {

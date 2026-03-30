@@ -156,7 +156,7 @@ async function getProjectSettings(projectPath) {
 /**
  * When XState transitions to a state that has an agent, spawn it.
  */
-function onStateTransition(taskId, stateValue, context) {
+async function onStateTransition(taskId, stateValue, context) {
   const sk = stateKey(stateValue);
   const isAgent = !!STATE_TO_ROLE[sk];
   const isScript = !!STATE_TO_SCRIPT[sk];
@@ -247,10 +247,14 @@ function onStateTransition(taskId, stateValue, context) {
     },
   };
 
+  // Read agentMode from project settings (defaults to "sdk")
+  const projectSettings = await getProjectSettings(actor._projectPath);
+  const agentMode = projectSettings.agentMode || "sdk";
+
   // Spawn script or agent
   const handle = isScript
     ? spawnScript(sk, taskId, handoff, callbacks)
-    : spawnAgent(sk, taskId, actor._description, handoff, callbacks);
+    : spawnAgent(sk, taskId, actor._description, handoff, { ...callbacks, agentMode });
 
   if (!handle.pid) {
     const error = `Failed to spawn ${label} — process did not start`;

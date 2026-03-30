@@ -10,6 +10,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [testingMode, setTestingMode] = useState(settings.testingMode || "build");
+  const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePlans, testingMode } }),
+        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePlans, testingMode, agentMode } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -143,6 +144,28 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             {testingMode === "build" && "run build + tests only (default)"}
             {testingMode === "sync" && "visual test all tasks in parallel with browser screenshots"}
             {testingMode === "async" && "queue tasks for one-at-a-time visual testing"}
+          </div>
+        </div>
+
+        {/* Agent mode */}
+        <div style={{ marginTop: 16, marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6 }}>agent runtime</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {["sdk", "cli"].map((mode) => (
+              <Button
+                key={mode}
+                variant="seg"
+                active={agentMode === mode}
+                onClick={() => setAgentMode(mode)}
+                style={{ flex: 1 }}
+              >
+                {mode}
+              </Button>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
+            {agentMode === "sdk" && "use anthropic agent sdk to spawn agents (requires api key)"}
+            {agentMode === "cli" && "use headless claude code cli to spawn agents (uses local auth)"}
           </div>
         </div>
 

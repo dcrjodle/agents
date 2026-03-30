@@ -2,7 +2,9 @@ import { spawn } from "child_process";
 import { join } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { runAgent as sdkRunAgent, clearSession, isBashAgent, ensureConfigsLoaded } from "./agent-runner.js";
+import { writeFileSync, mkdirSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
+import { runAgent as sdkRunAgent, clearSession, isBashAgent, ensureConfigsLoaded, getAgentConfig } from "./agent-runner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS_DIR = join(__dirname, "..", "scripts");
@@ -145,8 +147,8 @@ export function spawnScript(sk, taskId, handoffContext, options = {}) {
 }
 
 /**
- * Spawn an agent via the Claude Agent SDK.
- * Delegates to agent-runner.js which calls query() directly.
+ * Spawn an agent via the Claude Agent SDK or Claude CLI (based on agentMode).
+ * Delegates to agent-runner.js (SDK) or spawns headless claude CLI process.
  */
 export function spawnAgent(sk, taskId, taskDescription, handoffContext, options = {}) {
   const role = STATE_TO_ROLE[sk];
@@ -155,12 +157,174 @@ export function spawnAgent(sk, taskId, taskDescription, handoffContext, options 
     return { pid: null, kill: () => {} };
   }
 
-  // Bash-only agents (e.g. tester) use child process, not SDK
+  // Bash-only agents (e.g. tester) always use child process
   if (isBashAgent(role)) {
     return _spawnBashAgent(sk, taskId, taskDescription, handoffContext, options);
   }
 
+  // Route based on agentMode setting: "cli" uses headless Claude Code, "sdk" (default) uses Agent SDK
+  if (options.agentMode === "cli") {
+    return _spawnCliAgent(sk, taskId, taskDescription, handoffContext, options);
+  }
+
   return sdkRunAgent(role, taskId, handoffContext, options);
+}
+
+/**
+ * Spawn a headless Claude Code CLI process for an agent role.
+ * Uses `claude --print` with stream-json output and the workflow MCP server
+ * so the agent can call report_result, report_status, etc.
+ */
+function _spawnCliAgent(sk, taskId, taskDescription, handoffContext, options) {
+  const role = STATE_TO_ROLE[sk];
+  const config = getAgentConfig(role);
+
+  if (!config || config.runtime === "bash") {
+    console.error(`Cannot spawn CLI agent for role: ${role}`);
+    return { pid: null, kill: () => {}, gotResult: () => false };
+  }
+
+  // Resolve CWD
+  const cwd = config.getCwd(handoffContext);
+
+  // Build the user prompt the same way the SDK path does
+  const prompt = config.buildPrompt ? config.buildPrompt(handoffContext) : handoffContext.instruction;
+
+  // Write MCP config to a temp file so claude CLI can load it
+  const PORT = process.env.PORT || 3001;
+  const mcpConfig = {
+    mcpServers: {
+      workflow: {
+        command: "node",
+        args: [join(__dirname, "mcp-server.js")],
+        env: {
+          TASK_ID: taskId,
+          ORCHESTRATOR_URL: `http://localhost:${PORT}`,
+        },
+      },
+    },
+  };
+  const mcpTmpDir = join(tmpdir(), "agents-mcp");
+  mkdirSync(mcpTmpDir, { recursive: true });
+  const mcpConfigPath = join(mcpTmpDir, `mcp-${taskId}-${Date.now()}.json`);
+  writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig));
+
+  // Build claude CLI args
+  const args = [
+    "--print",
+    "--output-format", "stream-json",
+    "--dangerously-skip-permissions",
+    "--model", "claude-sonnet-4-6",
+    "--max-turns", "50",
+    "--mcp-config", mcpConfigPath,
+    "--bare",
+  ];
+
+  // Pass system prompt if the agent has one
+  if (config.systemPrompt) {
+    args.push("--system-prompt", config.systemPrompt);
+  }
+
+  // Pass allowed tools
+  if (config.tools && config.tools.length > 0) {
+    args.push("--allowedTools", ...config.tools);
+  }
+
+  // Pass the prompt as the positional argument
+  args.push(prompt);
+
+  const child = spawn("claude", args, {
+    cwd,
+    env: { ...process.env },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  child.stdin.end();
+
+  let gotResult = false;
+  let resultReceived = false;
+
+  // Parse stream-json output from stdout
+  let stdoutBuffer = "";
+  child.stdout.on("data", (chunk) => {
+    stdoutBuffer += chunk.toString();
+    const lines = stdoutBuffer.split("\n");
+    stdoutBuffer = lines.pop(); // keep incomplete line
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        _handleCliStreamMessage(msg, role, taskId, options);
+      } catch {
+        // Not JSON — pass as raw stdout
+        if (options.onStdout) options.onStdout(line + "\n");
+      }
+    }
+  });
+
+  // Stderr is diagnostic output from Claude CLI
+  let stderrBuffer = "";
+  child.stderr.on("data", (chunk) => {
+    stderrBuffer += chunk.toString();
+    const lines = stderrBuffer.split("\n");
+    stderrBuffer = lines.pop();
+
+    for (const line of lines) {
+      if (line.trim() && options.onStderr) {
+        options.onStderr(line + "\n");
+      }
+    }
+  });
+
+  child.on("close", (code) => {
+    // Flush remaining buffers
+    if (stdoutBuffer.trim()) {
+      try {
+        const msg = JSON.parse(stdoutBuffer);
+        _handleCliStreamMessage(msg, role, taskId, options);
+      } catch {
+        if (options.onStdout) options.onStdout(stdoutBuffer);
+      }
+    }
+    if (stderrBuffer.trim() && options.onStderr) {
+      options.onStderr(stderrBuffer);
+    }
+
+    // Clean up temp MCP config
+    try { unlinkSync(mcpConfigPath); } catch {}
+
+    if (options.onExit) options.onExit(code);
+  });
+
+  child.on("error", (err) => {
+    console.error(`Failed to spawn CLI agent ${role}:`, err);
+    if (options.onExit) options.onExit(1);
+  });
+
+  return {
+    pid: child.pid,
+    kill: () => child.kill("SIGTERM"),
+    gotResult: () => gotResult,
+    markResultReceived: () => { resultReceived = true; gotResult = true; },
+  };
+}
+
+/**
+ * Handle a single stream-json message from the Claude CLI.
+ * Extracts text output from assistant messages to forward to the UI.
+ */
+function _handleCliStreamMessage(msg, role, taskId, options) {
+  // Stream-json emits various message types. We care about assistant text output.
+  if (msg.type === "assistant" && msg.message?.content) {
+    for (const block of msg.message.content) {
+      if (block.type === "text" && block.text) {
+        if (options.onStdout) options.onStdout(block.text + "\n");
+      }
+    }
+  } else if (msg.type === "result" && msg.subtype === "error") {
+    if (options.onStderr) options.onStderr(`CLI agent error: ${msg.error}\n`);
+  }
 }
 
 /**
