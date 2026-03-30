@@ -913,12 +913,16 @@ app.post("/tasks/:id/stop", async (req, res) => {
   const restoredMachine = workflowMachine.provide({});
   const newActor = createActor(restoredMachine, {
     snapshot: {
-      value: "failed",
+      value: "idle",
       context: {
         ...snap.context,
-        error: "Stopped by user",
-        failedFrom: sk,
+        error: null,
+        failedFrom: null,
       },
+      children: {},
+      status: "active",
+      output: undefined,
+      error: undefined,
     },
   });
   newActor._description = actor._description;
@@ -968,6 +972,10 @@ app.post("/tasks/:id/continue", async (req, res) => {
       snapshot: {
         value: "failed",
         context: dbTask.context,
+        children: {},
+        status: "active",
+        output: undefined,
+        error: undefined,
       },
     });
     actor._description = dbTask.description;
