@@ -10,6 +10,7 @@ import { SettingsDialog } from "./components/SettingsDialog.jsx";
 import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import { IconButton } from "./components/IconButton.jsx";
 import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
+import { EvaluatorCharacter } from "./components/EvaluatorCharacter.jsx";
 import "./styles/layout.css";
 
 const API_BASE = "/api";
@@ -36,6 +37,9 @@ export function App() {
     errors,
     agentMemory,
     avatarStates,
+    evaluationResults,
+    evaluatingProjects,
+    triggerEvaluation,
     createTask,
     startTask,
     startAllTasks,
@@ -490,6 +494,15 @@ export function App() {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {selectedProject && (
+        <EvaluatorCharacter
+          evaluationResult={evaluationResults[selectedProject.path]}
+          isEvaluating={evaluatingProjects.has(selectedProject.path)}
+          onEvaluate={() => triggerEvaluation(selectedProject.path).catch((err) => console.error("Evaluation error:", err))}
+          onAddTask={handleCreateTask}
         />
       )}
     </div>
