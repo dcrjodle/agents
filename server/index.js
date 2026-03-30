@@ -469,12 +469,22 @@ function wireActor(id, actor) {
         onStateTransition(id, snapshot.value, snapshot.context);
       }
 
-      // Auto-approve PR creation if setting is enabled
+      // Auto-approve PR creation if setting is enabled, or broadcast PR_READY for manual approval
       if (sk === "merging.awaitingApproval") {
         getProjectSettings(actor._projectPath).then((projectSettings) => {
           if (projectSettings.autoApprovePr !== false) {
             actor.send({ type: "PR_APPROVED" });
             broadcast({ type: "APPROVAL", taskId: id, approval: "pr", message: "Auto-approved" });
+          } else {
+            // Broadcast PR_READY so the client can show an approval dialog
+            broadcast({
+              type: "PR_READY",
+              taskId: id,
+              pr: {
+                branchName: snapshot.context.result?.branchName || snapshot.context.branchName || null,
+                diffSummary: snapshot.context.result?.diffSummary || snapshot.context.diffSummary || null,
+              },
+            });
           }
         });
       }
@@ -1629,6 +1639,25 @@ async function start() {
         taskId: task.id,
         review: task.context.review,
       });
+    }
+
+    // For tasks awaiting PR approval (autoApprovePr=false), broadcast PR_READY
+    if (sk === "merging.awaitingApproval") {
+      const actor = actors.get(task.id);
+      if (actor) {
+        getProjectSettings(actor._projectPath).then((projectSettings) => {
+          if (projectSettings.autoApprovePr === false) {
+            broadcast({
+              type: "PR_READY",
+              taskId: task.id,
+              pr: {
+                branchName: task.context?.result?.branchName || task.context?.branchName || null,
+                diffSummary: task.context?.result?.diffSummary || task.context?.diffSummary || null,
+              },
+            });
+          }
+        });
+      }
     }
   }
 

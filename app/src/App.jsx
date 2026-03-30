@@ -6,6 +6,7 @@ import { TaskList } from "./components/TaskList.jsx";
 import { ProjectTabs } from "./components/ProjectTabs.jsx";
 import { PlanDialog } from "./components/PlanDialog.jsx";
 import { ReviewDialog } from "./components/ReviewDialog.jsx";
+import { PRApprovalDialog } from "./components/PRApprovalDialog.jsx";
 import { DetailPanel } from "./components/DetailPanel.jsx";
 import { SettingsDialog } from "./components/SettingsDialog.jsx";
 import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
@@ -50,6 +51,7 @@ function AuthenticatedApp({ user, onLogout }) {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
   const [viewingReviewTaskId, setViewingReviewTaskId] = useState(null);
+  const [viewingPrTaskId, setViewingPrTaskId] = useState(null);
   const [viewMode, setViewMode] = useState("stream");
   const [showSettings, setShowSettings] = useState(false);
   const [projectSettingsTarget, setProjectSettingsTarget] = useState(null);
@@ -87,6 +89,8 @@ function AuthenticatedApp({ user, onLogout }) {
     clearPendingPlan,
     pendingReviews,
     clearPendingReview,
+    pendingPrs,
+    clearPendingPr,
     reviewAction,
     updateTask,
     launchIvyStudio,
@@ -204,6 +208,22 @@ function AuthenticatedApp({ user, onLogout }) {
     setViewingReviewTaskId(null);
   }, []);
 
+  const handleViewPr = useCallback((taskId) => {
+    setViewingPrTaskId(taskId);
+  }, []);
+
+  const handleApprovePr = useCallback(() => {
+    if (viewingPrTaskId) {
+      approveTask(viewingPrTaskId, "User approved PR");
+      clearPendingPr(viewingPrTaskId);
+      setViewingPrTaskId(null);
+    }
+  }, [viewingPrTaskId, approveTask, clearPendingPr]);
+
+  const handleClosePr = useCallback(() => {
+    setViewingPrTaskId(null);
+  }, []);
+
   const handleCloseDetail = useCallback(() => {
     setSelectedTaskId(null);
   }, []);
@@ -316,7 +336,7 @@ function AuthenticatedApp({ user, onLogout }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Skip when a modal/dialog is open
-      if (viewingPlanTaskId || viewingReviewTaskId || showSettings || projectSettingsTarget) return;
+      if (viewingPlanTaskId || viewingReviewTaskId || viewingPrTaskId || showSettings || projectSettingsTarget) return;
       // Skip when focus is inside an input or textarea
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       // Need at least one project
@@ -349,7 +369,7 @@ function AuthenticatedApp({ user, onLogout }) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [projects, selectedProject, showSettings, viewingPlanTaskId, viewingReviewTaskId, projectSettingsTarget]);
+  }, [projects, selectedProject, showSettings, viewingPlanTaskId, viewingReviewTaskId, viewingPrTaskId, projectSettingsTarget]);
 
   const idleTasks = filteredTasks.filter((t) => {
     const sk = t.stateKey || stateKey(t.state);
@@ -573,10 +593,12 @@ function AuthenticatedApp({ user, onLogout }) {
             onContinue={continueTask}
             onViewPlan={handleViewPlan}
             onViewReview={handleViewReview}
+            onViewPr={handleViewPr}
             onApprove={approveTask}
             onEdit={(taskId, description) => updateTask(taskId, description).catch((err) => console.error("Failed to edit task:", err))}
             pendingPlans={pendingPlans}
             pendingReviews={pendingReviews}
+            pendingPrs={pendingPrs}
           />
         </div>
 
@@ -618,6 +640,15 @@ function AuthenticatedApp({ user, onLogout }) {
           onRequestChanges={handleRequestChanges}
           onRevise={handleReviseReview}
           onClose={handleCloseReview}
+        />
+      )}
+
+      {viewingPrTaskId && pendingPrs[viewingPrTaskId] && (
+        <PRApprovalDialog
+          pr={pendingPrs[viewingPrTaskId]}
+          taskDescription={tasks.find((t) => t.id === viewingPrTaskId)?.description || ""}
+          onApprove={handleApprovePr}
+          onClose={handleClosePr}
         />
       )}
 

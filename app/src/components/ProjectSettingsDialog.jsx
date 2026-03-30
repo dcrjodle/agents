@@ -162,9 +162,9 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             }}
           >
             <div>
-              <div style={{ fontSize: 11, color: "var(--text)" }}>auto-approve PR creation</div>
+              <div style={{ fontSize: 11, color: "var(--text)" }}>skip PR creation approval step</div>
               <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-                {autoApprovePr ? "PR is created automatically after push" : "wait for user approval before creating PR"}
+                {autoApprovePr ? "PR is created automatically without waiting for approval" : "pause before creating PR so you can review the diff"}
               </div>
             </div>
             <Button variant="toggle" active={autoApprovePr} size="sm" onClick={() => setAutoApprovePr((v) => !v)}>

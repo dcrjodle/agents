@@ -204,7 +204,7 @@ function LogLine({ entry }) {
   );
 }
 
-export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove, pendingPlan, onViewPlan }) {
+export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove, pendingPlan, onViewPlan, pendingPr, onViewPr }) {
   const [expanded, setExpanded] = useState(true);
   const logEndRef = useRef(null);
 
@@ -366,8 +366,19 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
                   View Plan
                 </Button>
               )}
-              {/* Approve PR button for merging awaiting approval */}
-              {sk === "merging.awaitingApproval" && onApprove && (
+              {/* View PR button for merging awaiting approval */}
+              {sk === "merging.awaitingApproval" && pendingPr && onViewPr && (
+                <Button
+                  variant="action"
+                  color="var(--dot-done)"
+                  onClick={() => onViewPr(task.id)}
+                  style={{ animation: "pulse-border 2s infinite" }}
+                >
+                  View PR
+                </Button>
+              )}
+              {/* Fallback Approve PR button when no pending PR data */}
+              {sk === "merging.awaitingApproval" && !pendingPr && onApprove && (
                 <Button
                   variant="action"
                   color="var(--dot-done)"

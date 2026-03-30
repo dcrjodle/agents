@@ -106,9 +106,11 @@ export function buildTaskMenuItems(task, handlers = {}) {
     onDelete,
     onViewPlan,
     onViewReview,
+    onViewPr,
     onApprove,
     pendingPlans,
     pendingReviews,
+    pendingPrs,
     onStartEditing,
   } = handlers;
 
@@ -158,7 +160,13 @@ export function buildTaskMenuItems(task, handlers = {}) {
     });
   }
 
-  if (sk === "merging.awaitingApproval" && onApprove) {
+  if (sk === "merging.awaitingApproval" && pendingPrs?.[task.id] && onViewPr) {
+    items.push({
+      label: "view pr",
+      icon: ClipboardList,
+      action: () => onViewPr(task.id),
+    });
+  } else if (sk === "merging.awaitingApproval" && onApprove) {
     items.push({
       label: "approve pr",
       icon: Check,

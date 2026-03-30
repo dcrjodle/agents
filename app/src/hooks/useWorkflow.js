@@ -28,6 +28,8 @@ export function useWorkflow() {
   const [pendingPlans, setPendingPlans] = useState({});
   // pendingReviews: { [taskId]: { markdown, verdict, feedback } }
   const [pendingReviews, setPendingReviews] = useState({});
+  // pendingPrs: { [taskId]: { branchName, diffSummary } }
+  const [pendingPrs, setPendingPrs] = useState({});
   // errors: { [taskId]: Array<{ time, agent, error }> }
   const [errors, setErrors] = useState({});
   // agentMemory: { [role]: Array<{ id, timestamp, type, content, taskId, projectPath }> }
@@ -145,6 +147,15 @@ export function useWorkflow() {
                 setPendingReviews((prev) => prev[task.id] ? prev : {
                   ...prev,
                   [task.id]: task.context.review,
+                });
+              }
+              if (sk === "merging.awaitingApproval") {
+                setPendingPrs((prev) => prev[task.id] ? prev : {
+                  ...prev,
+                  [task.id]: {
+                    branchName: task.context?.result?.branchName || task.context?.branchName || null,
+                    diffSummary: task.context?.result?.diffSummary || task.context?.diffSummary || null,
+                  },
                 });
               }
             }
@@ -337,6 +348,20 @@ export function useWorkflow() {
             }
             break;
 
+          case "PR_READY":
+            // Server broadcasts this when XState enters merging.awaitingApproval and autoApprovePr is false
+            if (msg.pr) {
+              setPendingPrs((prev) => ({
+                ...prev,
+                [msg.taskId]: msg.pr,
+              }));
+              appendLog(msg.taskId, {
+                type: "pr_link",
+                data: "PR ready \u2014 click to review",
+              });
+            }
+            break;
+
           case "APPROVAL":
             appendLog(msg.taskId, {
               type: "system",
@@ -353,6 +378,14 @@ export function useWorkflow() {
             // Clear pending review on review approval/action
             if (msg.approval === "review") {
               setPendingReviews((prev) => {
+                const next = { ...prev };
+                delete next[msg.taskId];
+                return next;
+              });
+            }
+            // Clear pending PR on pr approval
+            if (msg.approval === "pr") {
+              setPendingPrs((prev) => {
                 const next = { ...prev };
                 delete next[msg.taskId];
                 return next;
@@ -526,6 +559,14 @@ export function useWorkflow() {
     });
   };
 
+  const clearPendingPr = (taskId) => {
+    setPendingPrs((prev) => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  };
+
   const reviewAction = async (taskId, action, comments, feedback) => {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
       method: "POST",
@@ -565,6 +606,7 @@ export function useWorkflow() {
     setErrors((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
     setPendingPlans((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
     setPendingReviews((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+    setPendingPrs((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
     return res.json();
   };
 
@@ -653,7 +695,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, clearErrors, updateTask };
 }
 
 export { stateKey };
