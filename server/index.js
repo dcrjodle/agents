@@ -496,6 +496,16 @@ function wireActor(id, actor) {
           review: snapshot.context.review,
         });
       }
+
+      // Auto-approve code review if setting is enabled
+      if (sk === "reviewing.awaitingApproval") {
+        getProjectSettings(actor._projectPath).then((projectSettings) => {
+          if (projectSettings.autoApproveReviews === true) {
+            actor.send({ type: "REVIEW_APPROVED" });
+            broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved" });
+          }
+        });
+      }
     }
 
     // Clean up auto-continue counter when task completes successfully

@@ -16,6 +16,7 @@ export function ProjectToolbar({
   onAddTask,
   visualTestIsRunning,
   visualTestResults,
+  visualTestProgress,
   onVisualTest,
   eligibleTaskCount,
   onLaunchStudio,
@@ -34,6 +35,7 @@ export function ProjectToolbar({
       <VisualTestButton
         isRunning={visualTestIsRunning}
         results={visualTestResults}
+        progress={visualTestProgress}
         onTrigger={onVisualTest}
         eligibleTaskCount={eligibleTaskCount}
       />
