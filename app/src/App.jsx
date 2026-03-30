@@ -18,6 +18,7 @@ const API_BASE = "/api";
 export function App() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [taskInputsByProject, setTaskInputsByProject] = useState({});
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
   const [viewMode, setViewMode] = useState("nodes");
@@ -84,7 +85,13 @@ export function App() {
   const handleCreateTask = (description) => {
     if (!selectedProject) return;
     createTask(description, selectedProject.path);
+    setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
   };
+
+  const handleTaskInputChange = useCallback((newValue) => {
+    if (!selectedProject) return;
+    setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: newValue }));
+  }, [selectedProject]);
 
   const handleSelectProject = (project) => {
     setSelectedProject(project);
@@ -431,7 +438,12 @@ export function App() {
         {/* Task list - centered when no selection, slides left when detail open */}
         <div className={`task-list-container${selectedTask ? " shifted" : ""}`}>
           {projects.length > 0 && selectedProject && (
-            <CreateTask onCreate={handleCreateTask} commands={commands} />
+            <CreateTask
+              onCreate={handleCreateTask}
+              commands={commands}
+              value={taskInputsByProject[selectedProject?.path] ?? ""}
+              onValueChange={handleTaskInputChange}
+            />
           )}
           <TaskList
             tasks={filteredTasks}
