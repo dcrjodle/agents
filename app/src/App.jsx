@@ -87,6 +87,7 @@ function AuthenticatedApp({ user, onLogout }) {
     clearPendingReview,
     reviewAction,
     updateTask,
+    launchIvyStudio,
   } = useWorkflow();
 
   useEffect(() => {
@@ -515,6 +516,7 @@ function AuthenticatedApp({ user, onLogout }) {
             visualTestResults={visualTestResults[selectedProject.path]}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
+            onLaunchStudio={launchIvyStudio}
           />
         </div>
       ) : (

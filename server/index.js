@@ -131,6 +131,7 @@ const actors = new Map();
 
 // Track active agent processes per task
 const activeAgents = new Map(); // taskId -> { handle, timeoutTimer, staleTimer }
+const stoppedTasks = new Set(); // taskIds where stop was initiated — prevents async onExit race
 
 // Track auto-continue attempts per task (resets on done or delete)
 const taskAutoContinues = new Map(); // taskId -> number
@@ -330,6 +331,13 @@ async function onStateTransition(taskId, stateValue, context) {
     onExit(code) {
       resetStaleTimer();
       broadcastAndLog({ type: "AGENT_EXITED", taskId, agent: label, exitCode: code });
+
+      // If the task was stopped by the user, don't send failure events —
+      // the stop handler already manages the state transition.
+      if (stoppedTasks.has(taskId)) {
+        stoppedTasks.delete(taskId);
+        return;
+      }
 
       if (!gotResult) {
         const error = code !== 0
@@ -806,6 +814,7 @@ app.post("/tasks/:id/restart", async (req, res) => {
     worktreePath = snap.context?.result?.worktreePath;
     branchName = snap.context?.result?.branchName;
     // Kill any running agent, clear session, and stop actor
+    stoppedTasks.add(id);
     cleanupAgent(id);
     clearSession(id);
     existingActor.stop();
@@ -887,6 +896,10 @@ app.post("/tasks/:id/stop", async (req, res) => {
   if (sk === "idle" || sk === "done" || sk === "failed") {
     return res.status(400).json({ error: `Task is in state "${sk}", nothing to stop` });
   }
+
+  // Mark as stopped so the async onExit callback (which fires after kill/abort)
+  // won't send failure events to the replacement actor.
+  stoppedTasks.add(id);
 
   // Kill any running agent process
   cleanupAgent(id);
@@ -977,6 +990,7 @@ app.post("/tasks/:id/continue", async (req, res) => {
   }
 
   // Clean up any lingering agent process but keep worktree
+  stoppedTasks.add(id);
   cleanupAgent(id);
 
   // Clear errors from logs (keep other log entries for context)
@@ -993,6 +1007,7 @@ app.post("/tasks/:id/continue", async (req, res) => {
 app.delete("/tasks/:id", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (actor) {
+    stoppedTasks.add(req.params.id);
     cleanupAgent(req.params.id);
     clearSession(req.params.id);
     actor.stop();
@@ -1556,69 +1571,30 @@ async function start() {
   }
 
   // --- Ivy Studio launcher endpoint ---
-
-  const activeStudioProcesses = new Map();
+  // Opens a new Terminal.app window running the ivy-studio-local.sh script
 
   app.post("/ivy-studio", async (req, res) => {
     const { branch } = req.body;
     if (!branch) return res.status(400).json({ error: "branch required" });
 
-    const studioId = `studio-${Date.now()}`;
     const scriptPath = join(process.env.HOME, "scripts", "ivy-studio-local.sh");
 
     if (!existsSync(scriptPath)) {
       return res.status(500).json({ error: `Script not found: ${scriptPath}` });
     }
 
-    const child = spawn("bash", [scriptPath, `--branch=${branch}`], {
-      stdio: ["pipe", "pipe", "pipe"],
+    // Use osascript to open a new Terminal.app window running the script
+    const appleScript = `tell application "Terminal"
+  activate
+  do script "bash ${scriptPath} --branch=${branch}"
+end tell`;
+
+    spawn("osascript", ["-e", appleScript], {
+      stdio: "ignore",
       detached: true,
-    });
+    }).unref();
 
-    activeStudioProcesses.set(studioId, { child, branch });
-
-    let output = "";
-    child.stdout.on("data", (chunk) => {
-      output += chunk.toString();
-      broadcast({ type: "IVY_STUDIO_OUTPUT", studioId, data: chunk.toString() });
-    });
-    child.stderr.on("data", (chunk) => {
-      output += chunk.toString();
-      broadcast({ type: "IVY_STUDIO_OUTPUT", studioId, data: chunk.toString() });
-    });
-    child.on("close", (code) => {
-      activeStudioProcesses.delete(studioId);
-      broadcast({ type: "IVY_STUDIO_STOPPED", studioId, code });
-    });
-
-    broadcast({ type: "IVY_STUDIO_STARTED", studioId, branch });
-    res.status(202).json({ studioId, branch });
-  });
-
-  app.post("/ivy-studio/stop", async (req, res) => {
-    const { studioId } = req.body;
-    const entry = studioId ? activeStudioProcesses.get(studioId) : null;
-
-    if (!entry) {
-      // Stop all
-      for (const [id, e] of activeStudioProcesses) {
-        try { process.kill(-e.child.pid, "SIGTERM"); } catch { e.child.kill("SIGTERM"); }
-      }
-      activeStudioProcesses.clear();
-      return res.json({ stopped: "all" });
-    }
-
-    try { process.kill(-entry.child.pid, "SIGTERM"); } catch { entry.child.kill("SIGTERM"); }
-    activeStudioProcesses.delete(studioId);
-    res.json({ stopped: studioId });
-  });
-
-  app.get("/ivy-studio/status", (req, res) => {
-    const running = [];
-    for (const [id, entry] of activeStudioProcesses) {
-      running.push({ studioId: id, branch: entry.branch });
-    }
-    res.json({ running });
+    res.json({ launched: true, branch });
   });
 
   // SPA catch-all: serve index.html for non-API routes (production)
@@ -1639,4 +1615,12 @@ async function start() {
 start().catch((err) => {
   console.error("Failed to start server:", err);
   process.exit(1);
+});
+
+// Prevent unhandled errors from crashing the server
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception (server staying up):", err);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled rejection (server staying up):", err);
 });

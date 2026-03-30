@@ -1,11 +1,13 @@
 import { EvaluatorCharacter } from "./EvaluatorCharacter.jsx";
 import { VisualTestButton } from "./VisualTestButton.jsx";
+import { LaunchStudioButton } from "./LaunchStudioButton.jsx";
 import "../styles/project-toolbar.css";
 
 /**
  * ProjectToolbar — compact inline toolbar containing project tools.
- * Renders the EvaluatorCharacter (at compact scale) and VisualTestButton
- * side-by-side, intended to live at the right end of the ProjectTabs row.
+ * Renders the EvaluatorCharacter (at compact scale), VisualTestButton,
+ * and LaunchStudioButton side-by-side, intended to live at the right
+ * end of the ProjectTabs row.
  */
 export function ProjectToolbar({
   evaluationResult,
@@ -16,6 +18,7 @@ export function ProjectToolbar({
   visualTestResults,
   onVisualTest,
   eligibleTaskCount,
+  onLaunchStudio,
 }) {
   return (
     <div className="project-toolbar">
@@ -32,6 +35,10 @@ export function ProjectToolbar({
         results={visualTestResults}
         onTrigger={onVisualTest}
         eligibleTaskCount={eligibleTaskCount}
+      />
+      <div className="project-toolbar-separator" />
+      <LaunchStudioButton
+        onLaunch={onLaunchStudio}
       />
     </div>
   );

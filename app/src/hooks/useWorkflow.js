@@ -628,7 +628,20 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
+  const launchIvyStudio = async (branch) => {
+    const res = await fetch(`${API_BASE}/ivy-studio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ branch }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Failed to launch Ivy Studio: ${res.statusText}`);
+    }
+    return res.json();
+  };
+
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
 }
 
 export { stateKey };
