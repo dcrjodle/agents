@@ -648,25 +648,27 @@ app.post("/deploy", async (req, res) => {
   const { hostname } = await import("os");
   const isLocal = hostname() === "joel-linux-monstrosity";
 
-  const steps = [
-    'export NVM_DIR="$HOME/.nvm"',
-    '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"',
+  const script = [
+    `export NVM_DIR="$HOME/.nvm"`,
+    `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"`,
     `cd ${remoteDir}`,
-    "git pull origin main",
-    "npm install --omit=dev",
-    "cd app && npm install && npm run build",
+    `git pull origin main`,
+    `npm install --omit=dev`,
+    `cd app && npm install && npm run build`,
     `cd ${remoteDir}`,
-    "pkill -9 -f 'node.*server/index.js' || true",
-    "sleep 1",
-    "nohup node server/index.js > /tmp/agents-server.log 2>&1 &",
-    "echo DEPLOY_OK",
-  ].join(" && ");
+    `pkill -9 -f "node.*server/index.js" || true`,
+    `sleep 1`,
+    `nohup node server/index.js > /tmp/agents-server.log 2>&1 &`,
+    `echo DEPLOY_OK`,
+  ].join("\n");
 
   try {
-    const shell = isLocal
-      ? `bash -c '${steps}'`
-      : `ssh -o ConnectTimeout=10 ${remoteHost} '${steps}'`;
-    const output = execSync(shell, {
+    const args = isLocal
+      ? ["bash"]
+      : ["ssh", "-o", "ConnectTimeout=10", remoteHost, "bash"];
+    const { execFileSync } = await import("child_process");
+    const output = execFileSync(args[0], args.slice(1), {
+      input: script,
       encoding: "utf-8",
       timeout: 120000,
     });
