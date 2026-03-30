@@ -164,11 +164,22 @@ function buildPlannerPrompt(handoff) {
     ? `\n## Project Rules\nThe following rules are defined by the project owner and MUST be followed:\n\n${projectRules}\n`
     : "";
 
+  const userComments = handoff.context.plan?.userComments || "";
+  let userFeedbackSection = "";
+  if (userComments) {
+    userFeedbackSection = `
+## User Feedback
+The following feedback was provided by the user on the previous plan. Address these notes in your revised plan:
+
+${userComments}
+`;
+  }
+
   return `You are a planner agent. Your job is to create an implementation plan.
 
 Task: ${handoff.instruction}
 Project path: ${handoff.projectPath}
-
+${userFeedbackSection}
 First, explore the project directory to understand its structure, framework, and conventions.
 Detect the framework from actual project files (package.json, .csproj, go.mod, etc.) — do NOT assume any framework that isn't evidenced in the codebase.
 Then write a plan following this template:
@@ -346,7 +357,7 @@ Steps:
 3. Use the create_pr tool to create the PR
 
 When you are done, you MUST call the report_result tool with:
-{"status": "complete", "prUrl": "<the PR URL>", "branchName": "${branchName}"}
+{"status": "complete", "prUrl": "<the PR URL>", "branchName": "${branchName}", "prTitle": "<the PR title>"}
 or if it fails:
 {"status": "failed", "error": "<what went wrong>"}`;
 }

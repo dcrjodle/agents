@@ -89,6 +89,7 @@ function AuthenticatedApp({ user, onLogout }) {
     pendingReviews,
     clearPendingReview,
     reviewAction,
+    planAction,
     updateTask,
     launchIvyStudio,
     ivyStudioRunningBranches,
@@ -169,6 +170,14 @@ function AuthenticatedApp({ user, onLogout }) {
       setViewingPlanTaskId(null);
     }
   }, [viewingPlanTaskId, sendEvent, clearPendingPlan]);
+
+  const handleRevisePlan = useCallback((comments) => {
+    if (viewingPlanTaskId) {
+      planAction(viewingPlanTaskId, "revise", comments);
+      clearPendingPlan(viewingPlanTaskId);
+      setViewingPlanTaskId(null);
+    }
+  }, [viewingPlanTaskId, planAction, clearPendingPlan]);
 
   const handleClosePlan = useCallback(() => {
     setViewingPlanTaskId(null);
@@ -608,6 +617,7 @@ function AuthenticatedApp({ user, onLogout }) {
           taskDescription={viewingTask?.description || ""}
           onApprove={handleApprovePlan}
           onReject={handleRejectPlan}
+          onRevise={handleRevisePlan}
           onClose={handleClosePlan}
           onApproveAll={handleApproveAllPlans}
           pendingPlanCount={Object.keys(pendingPlans).length}

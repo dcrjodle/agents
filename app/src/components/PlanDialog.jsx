@@ -4,7 +4,7 @@ import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
-export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose, onApproveAll, pendingPlanCount }) {
+export function PlanDialog({ plan, taskDescription, onApprove, onReject, onRevise, onClose, onApproveAll, pendingPlanCount }) {
   const contentRef = useRef(null);
   const [showNotes, setShowNotes] = useState(false);
   const [reviewComments, setReviewComments] = useState("");
@@ -107,7 +107,7 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
             </div>
           )}
 
-          {/* Reviewer notes toggle */}
+          {/* Notes for planner toggle */}
           <div style={{ marginTop: 16 }}>
             <button
               onClick={() => setShowNotes((v) => !v)}
@@ -124,13 +124,13 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
               }}
             >
               <MessageSquarePlus size={13} />
-              {showNotes ? "hide reviewer notes" : "add reviewer notes"}
+              {showNotes ? "hide notes" : "add notes for planner"}
             </button>
             {showNotes && (
               <textarea
                 value={reviewComments}
                 onChange={(e) => setReviewComments(e.target.value)}
-                placeholder="Add notes for the developer agent (markdown supported)..."
+                placeholder="Send notes back to the planner agent..."
                 rows={5}
                 style={{
                   display: "block",
@@ -160,8 +160,16 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onClose
           borderTop: "1px solid var(--border-light)",
           flexShrink: 0,
         }}>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => onRevise(reviewComments)}
+            disabled={!reviewComments.trim()}
+          >
+            send back to planner
+          </Button>
           <Button variant="secondary" size="md" onClick={onReject}>
-            reject
+            request changes
           </Button>
           {pendingPlanCount > 1 && (
             <Button variant="secondary" size="md" onClick={() => onApproveAll(reviewComments || undefined)}>
