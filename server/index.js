@@ -640,6 +640,73 @@ app.post("/config/browse", async (req, res) => {
   }
 });
 
+// --- Deploy: pull latest on production and restart ---
+app.post("/deploy", async (req, res) => {
+  const remoteHost = "joel.bystedt@35.228.54.40";
+  const remoteDir = "/home/joel.bystedt/agents";
+  const { execSync } = await import("child_process");
+  const { hostname } = await import("os");
+  const isLocal = hostname() === "joel-linux-monstrosity";
+
+  const steps = [
+    `cd ${remoteDir}`,
+    "git pull origin main",
+    "npm install --omit=dev",
+    "cd app && npm install && npm run build",
+    `cd ${remoteDir}`,
+    "pkill -f 'node.*server/index.js' || true",
+    "sleep 1",
+    "nohup node server/index.js > /tmp/agents-server.log 2>&1 &",
+    "echo DEPLOY_OK",
+  ].join(" && ");
+
+  try {
+    const shell = isLocal
+      ? `bash -c '${steps}'`
+      : `ssh -o ConnectTimeout=10 ${remoteHost} '${steps}'`;
+    const output = execSync(shell, {
+      encoding: "utf-8",
+      timeout: 120000,
+    });
+    const success = output.includes("DEPLOY_OK");
+    res.json({ success, output: output.trim() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, output: err.stdout || "" });
+  }
+});
+
+// --- Clone a GitHub repo to a local path ---
+app.post("/config/clone-repo", async (req, res) => {
+  const { githubUrl, targetPath } = req.body;
+  if (!githubUrl) return res.status(400).json({ error: "githubUrl required" });
+  if (!targetPath) return res.status(400).json({ error: "targetPath required" });
+
+  // Validate it looks like a GitHub URL
+  const match = githubUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+  if (!match) return res.status(400).json({ error: "Invalid GitHub URL" });
+
+  try {
+    if (existsSync(targetPath)) {
+      return res.status(409).json({ error: "Directory already exists", path: targetPath });
+    }
+    const { execSync } = await import("child_process");
+    // Ensure parent directory exists
+    const parentDir = targetPath.substring(0, targetPath.lastIndexOf("/"));
+    if (parentDir && !existsSync(parentDir)) {
+      mkdirSync(parentDir, { recursive: true });
+    }
+    // Normalize to HTTPS clone URL
+    const cloneUrl = `https://github.com/${match[1]}/${match[2]}.git`;
+    execSync(`git clone ${cloneUrl} "${targetPath}"`, {
+      encoding: "utf-8",
+      timeout: 120000,
+    });
+    res.json({ success: true, path: targetPath });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get("/tasks", async (req, res) => {
   // Return live snapshots for active actors, db records for completed/failed
   const dbTasks = await dbGetAllTasks();

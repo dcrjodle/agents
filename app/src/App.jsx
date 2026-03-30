@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Settings, LogOut } from "lucide-react";
+import { Settings, LogOut, Rocket } from "lucide-react";
 import { useWorkflow, stateKey } from "./hooks/useWorkflow.js";
 import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
@@ -58,6 +58,8 @@ function AuthenticatedApp({ user, onLogout }) {
     return saved === "dark";
   });
   const approvedPlanIds = useRef(new Set());
+  const [deploying, setDeploying] = useState(false);
+  const [deployResult, setDeployResult] = useState(null);
 
   const {
     tasks,
@@ -88,6 +90,8 @@ function AuthenticatedApp({ user, onLogout }) {
     reviewAction,
     updateTask,
     launchIvyStudio,
+    deploy,
+    cloneRepo,
   } = useWorkflow();
 
   useEffect(() => {
@@ -477,6 +481,29 @@ function AuthenticatedApp({ user, onLogout }) {
             {connected ? "connected" : "disconnected"}
           </span>
           <IconButton
+            icon={Rocket}
+            onClick={async () => {
+              if (deploying) return;
+              setDeploying(true);
+              setDeployResult(null);
+              try {
+                const result = await deploy();
+                setDeployResult(result.success ? "deployed" : "failed");
+              } catch {
+                setDeployResult("failed");
+              } finally {
+                setDeploying(false);
+                setTimeout(() => setDeployResult(null), 4000);
+              }
+            }}
+            title={deploying ? "deploying..." : deployResult === "deployed" ? "deployed!" : deployResult === "failed" ? "deploy failed" : "deploy to production"}
+            className="app-header-settings-btn"
+            style={{
+              opacity: deploying ? 0.5 : 1,
+              color: deployResult === "deployed" ? "var(--accent-green, #22c55e)" : deployResult === "failed" ? "var(--accent-red, #ef4444)" : undefined,
+            }}
+          />
+          <IconButton
             icon={LogOut}
             onClick={onLogout}
             title="logout"
@@ -611,6 +638,7 @@ function AuthenticatedApp({ user, onLogout }) {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onClose={() => setShowSettings(false)}
+          onCloneRepo={cloneRepo}
         />
       )}
 

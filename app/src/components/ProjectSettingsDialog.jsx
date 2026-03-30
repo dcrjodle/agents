@@ -13,6 +13,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [skipTesting, setSkipTesting] = useState(settings.skipTesting === true);
   const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
   const [maxRetries, setMaxRetries] = useState(settings.maxRetries ?? 5);
+  const [githubUrl, setGithubUrl] = useState(settings.githubUrl || "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries } }),
+        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries, githubUrl: githubUrl.trim() || undefined } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -91,6 +92,29 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           whiteSpace: "nowrap",
         }} title={project.path}>
           {project.path}
+        </div>
+
+        {/* GitHub URL */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, marginBottom: 6 }}>
+            repository
+          </div>
+          <input
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              fontSize: 11,
+              padding: "6px 8px",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              background: "var(--bg-input, var(--bg))",
+              color: "var(--text)",
+              fontFamily: "var(--font-mono)",
+            }}
+          />
         </div>
 
         {/* Workflow settings */}
