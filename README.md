@@ -1,131 +1,65 @@
 # Multi-Agent Workflow
 
-A multi-agent system orchestrated by XState, with a React UI for managing tasks and monitoring agent progress in real time.
+A multi-agent system orchestrated by XState where specialized Claude agents collaborate to plan, develop, test, review, and ship code. React UI for managing tasks and monitoring agent progress in real time.
 
 ## Architecture
 
 ```
-┌─────────────┐   WebSocket   ┌──────────────┐     ┌─────────────────┐
-│  React App  │ ◄────────────►│  Server      │────►│  Agent (claude)  │
-│  (Vite)     │               │  Express+WS  │     │  in isolated dir │
-│  :5173      │               │  :3001       │     └─────────────────┘
-└─────────────┘               └──────────────┘
-                                 │ one XState
-                                 │ actor per task
-                                 │ (parallel workflows)
+React App (Vite :5173) ◄──WebSocket──► Server (Express :3001) ──► Claude Agents (SDK)
+                                          │
+                                     One XState actor per task
 ```
 
 ## Agents
 
-Each agent runs as a **claude code terminal** in an isolated workspace under `memory/runs/<task_id>/`.
+| Agent | Role |
+|-------|------|
+| **planner** | Explores codebase, creates implementation plan |
+| **developer** | Writes code from the plan |
+| **tester** | Runs tests, validates changes |
+| **reviewer** | Reviews code quality and correctness |
+| **githubber** | Creates PRs on GitHub |
+| **merger** | Merges approved PRs |
 
-| Agent | Role | Tools |
-|-------|------|-------|
-| **manager** | Orchestrates workflow, delegates to other agents | delegate, status |
-| **planner** | Decomposes goals into actionable task plans | decompose, estimate |
-| **developer** | Writes code from task specs | read_file, write_file, search |
-| **githubber** | Manages branches, PRs, and issues | branch, pr, issue |
-| **tester** | Writes and runs tests, validates criteria | run_tests, validate |
-| **reviewer** | Reviews code for quality and security | review, security |
+Agents are defined in `agents/<name>/` with an `agent.json` config and `program.md` system prompt. They run via the Claude Agent SDK with workflow MCP tools (`report_result`, `report_status`).
 
-### Agent Structure
-
-```
-agents/<name>/
-├── tools/        # Bash tool scripts sourced at runtime
-├── memory/       # Persistent memory + isolated run workspaces
-│   └── runs/     # One folder per task run
-├── program.md    # System prompt (passed to claude --system-prompt)
-└── start.sh      # Launches claude code with program.md and tools
-```
-
-## Task States
-
-Tasks flow through the XState machine:
+## Task Lifecycle
 
 ```
 idle → planning → developing → testing → reviewing → merging → done
-          │            ↑            │           │
-          │            └────────────┘           │
-          │            (TESTS_FAILED)           │
-          │            ↑                        │
-          │            └────────────────────────┘
-          │            (CHANGES_REQUESTED)
-          ↓
-        failed → (RETRY) → planning
+                      ↑             |           |
+                      └─────────────┘           |
+                      (tests failed)            |
+                      ↑                         |
+                      └─────────────────────────┘
+                      (changes requested)
 ```
-
-Mapped to UI columns: **Todo → Planned → In Progress → Testing → Reviewing → Published**
 
 ## Quick Start
 
 ```bash
-# Install dependencies
 npm install
 cd app && npm install && cd ..
 
-# Run both server and app
-npm run dev
-
-# Or separately:
-npm run server   # Express + WebSocket on :3001
-npm run app      # Vite dev server on :5173
+npm run dev        # Server (:3001) + App (:5173)
 ```
 
-Open http://localhost:5173 — create tasks, and use the simulate buttons to advance them through the workflow.
+## Production
 
-## WebSocket Protocol
+The server auto-resolves project paths — if a project was created on a different machine, it clones the repo to `~/projects/<repo-name>` using the project's configured GitHub URL.
 
-```jsonc
-// Server → Client: initial state on connect
-{ "type": "INIT", "tasks": [...] }
-
-// Server → Client: state change
-{ "type": "STATE_UPDATE", "taskId": "...", "state": "testing", "label": "testing", "context": {...} }
-
-// Server → Client: new task
-{ "type": "TASK_CREATED", "task": {...} }
-
-// Server → Client: task removed
-{ "type": "TASK_DELETED", "taskId": "..." }
-
-// Client → Server: advance a task
-{ "type": "SEND_EVENT", "taskId": "...", "event": { "type": "TESTS_PASSED" } }
+```bash
+pm2 start server/index.js --name agents
 ```
-
-## Future Ideas
-
-### 1. Task detail view with agent message streams
-
-Replace the kanban board with a centered task list showing status icons. Clicking a task expands it to reveal columns to the left — one per agent that has been activated for that task. Each column displays the agent's live message stream (stdout from the claude terminal), so you can watch agents think and work in real time. Agents that haven't started yet don't get a column.
-
-```
-┌─────────┬──────────┬───────────┬────────────────────────┐
-│ planner │developer │  tester   │  ● Build REST API      │
-│         │          │           │  ○ Add auth middleware  │
-│ Done.   │ Writing  │ (waiting) │  ○ Fix login bug       │
-│ 3 tasks │ routes.js│           │  ○ Deploy to staging   │
-│ created │ ...      │           │                        │
-└─────────┴──────────┴───────────┴────────────────────────┘
-```
-
-### 2. Clickable agent labels to open Claude Code terminal
-
-Clicking an agent name label ("planner", "developer", etc.) in the task card should open that agent's Claude Code terminal in a new window/tab, so you can see the full live output and interact with the agent directly. This would give visibility into what Claude is thinking and doing beyond the streamed stderr lines.
-
-### 3. PR preview with concise descriptions
-
-PRs created by the githubber agent should have concise, well-structured descriptions that explain what was implemented and why (derived from the plan and developer summary). Before approving a PR in the `merging.awaitingApproval` state, the UI should show a preview of the PR description, diff summary, and branch details — so the user can review what will be submitted before it goes to GitHub.
-
-### 4. Neo4j-backed agent memory
-
-Replace the flat-file `memory/` directories with a Neo4j graph database per agent. Relationships between tasks, code artifacts, decisions, and errors become first-class edges in the graph. This lets agents query their own history relationally — e.g. "what did I learn last time I worked on auth?" or "which files tend to break together?" — instead of grepping through markdown files.
 
 ## REST API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/tasks` | List all tasks with current state |
-| `POST` | `/tasks` | Create a task `{ description }` |
-| `POST` | `/tasks/:id/event` | Send event to task `{ event: { type } }` |
-| `DELETE` | `/tasks/:id` | Remove a task |
+| `GET` | `/tasks` | List all tasks |
+| `POST` | `/tasks` | Create task `{ description, projectPath }` |
+| `POST` | `/tasks/:id/event` | Send event `{ event: { type } }` |
+| `DELETE` | `/tasks/:id` | Remove task |
+| `GET` | `/config` | Get projects and settings |
+| `POST` | `/config/projects` | Add project `{ name, path }` |
+| `POST` | `/deploy` | Pull latest and restart server |
