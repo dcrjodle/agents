@@ -4,6 +4,7 @@ import { join, dirname, basename } from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
+import { getProjects } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = join(__dirname, "..", "agents");
@@ -31,10 +32,8 @@ async function resolveServerPath(projectPath, log) {
 
   // Try to fetch project settings for the githubUrl
   try {
-    const res = await fetch(`http://localhost:${PORT}/config`);
-    if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
-    const config = await res.json();
-    const project = config.projects?.find((p) => p.path === projectPath);
+    const projects = await getProjects();
+    const project = projects.find((p) => p.path === projectPath);
     const githubUrl = project?.settings?.githubUrl;
     if (!githubUrl) {
       log(`No githubUrl configured for project — trying fallback by directory name`);
