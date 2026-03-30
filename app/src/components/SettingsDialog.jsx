@@ -144,7 +144,25 @@ export function SettingsDialog({
             </Button>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
-            <div
+            <input
+              value={newPath}
+              onChange={(e) => setNewPath(e.target.value)}
+              placeholder="path"
+              style={{
+                flex: 2,
+                fontSize: 11,
+                padding: "4px 8px",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                background: "var(--bg-muted)",
+                color: "var(--text)",
+                fontFamily: "var(--font-mono)",
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={picking}
               onClick={async () => {
                 if (picking) return;
                 setPicking(true);
@@ -158,30 +176,15 @@ export function SettingsDialog({
                     setNewPath(data.path);
                     if (!newName) setNewName(data.name);
                   }
-                } catch {} finally {
+                } catch (err) {
+                  console.error("pick-folder failed:", err);
+                } finally {
                   setPicking(false);
                 }
               }}
-              style={{
-                flex: 1,
-                fontSize: 11,
-                padding: "4px 8px",
-                border: "1px solid var(--border)",
-                borderRadius: 3,
-                background: "var(--bg-muted)",
-                color: newPath ? "var(--text)" : "var(--text-dim)",
-                fontFamily: "var(--font-mono)",
-                cursor: picking ? "wait" : "pointer",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                lineHeight: "20px",
-                opacity: picking ? 0.6 : 1,
-              }}
-              title={newPath || "click to select folder"}
             >
-              {picking ? "opening folder picker..." : newPath || "select folder..."}
-            </div>
+              {picking ? "…" : "browse"}
+            </Button>
           </div>
         </div>
       </div>
