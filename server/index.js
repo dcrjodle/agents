@@ -258,6 +258,11 @@ async function onStateTransition(taskId, stateValue, context) {
   const projectSettings = await getProjectSettings(actor._projectPath);
   const agentMode = projectSettings.agentMode || "sdk";
 
+  // Pass baseline evaluation score to the reviewer so it can check for regressions
+  if (sk === "reviewing") {
+    handoff.context.lastEvaluation = projectSettings.lastEvaluation || null;
+  }
+
   // Spawn script or agent
   const handle = isScript
     ? spawnScript(sk, taskId, handoff, callbacks)
