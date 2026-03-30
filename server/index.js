@@ -18,7 +18,7 @@ import {
   getTaskLogs,
   clearTaskLogs,
 } from "./db.js";
-import { addMemoryEntry, getMemory, getAllMemory } from "./memory-db.js";
+import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
 
 const app = express();
 const server = createServer(app);
@@ -46,10 +46,10 @@ const activeEvaluations = new Map(); // projectPath -> evalId
 // Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
 const evaluationCallbacks = new Map();
 
-// Agent timeout: kill agents that run too long (default 10 minutes)
-const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
-// Stale check: warn if no output for 2 minutes
-const AGENT_STALE_MS = 2 * 60 * 1000;
+// Agent timeout: kill agents that run too long (default 30 minutes)
+const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+// Stale check: warn if no output for 20 minutes
+const AGENT_STALE_MS = 20 * 60 * 1000;
 
 // State label mapping — handles both flat and compound states
 function stateLabel(stateValue) {
@@ -257,6 +257,11 @@ async function onStateTransition(taskId, stateValue, context) {
   // Read agentMode from project settings (defaults to "sdk")
   const projectSettings = await getProjectSettings(actor._projectPath);
   const agentMode = projectSettings.agentMode || "sdk";
+
+  // Pass baseline evaluation score to the reviewer so it can check for regressions
+  if (sk === "reviewing") {
+    handoff.context.lastEvaluation = projectSettings.lastEvaluation || null;
+  }
 
   // Spawn script or agent
   const handle = isScript
@@ -920,7 +925,7 @@ app.get("/internal/task-context/:taskId", (req, res) => {
 });
 
 app.post("/internal/add-memory", async (req, res) => {
-  const { taskId, content, type, agentRole } = req.body;
+  const { taskId, content, category, agentRole } = req.body;
   if (!taskId || !content) return res.status(400).json({ error: "taskId and content required" });
 
   // Resolve the agent role from the active task state, with optional override
@@ -935,7 +940,7 @@ app.post("/internal/add-memory", async (req, res) => {
   const actor = actors.get(taskId);
   const projectPath = actor ? actor._projectPath : null;
 
-  const entry = await addMemoryEntry(role, { content, type: type || "info", taskId, projectPath });
+  const entry = await addMemoryEntry(role, { content, category: category || null, taskId, projectPath });
 
   broadcast({ type: "MEMORY_UPDATED", role, entry });
 
@@ -944,7 +949,7 @@ app.post("/internal/add-memory", async (req, res) => {
     time,
     type: "memory",
     agent: role,
-    data: `[memory:${entry.type}] ${entry.content}`,
+    data: `[memory:${entry.category || "unknown"}] ${entry.content}`,
     entry,
   });
 
@@ -976,12 +981,18 @@ const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "gith
 app.get("/memory/:role", async (req, res) => {
   const { role } = req.params;
   if (!KNOWN_ROLES.has(role)) return res.status(400).json({ error: "Unknown role" });
-  const entries = await getMemory(role);
+  const { projectPath } = req.query;
+  const entries = projectPath
+    ? await getMemoryByProject(role, projectPath)
+    : await getMemory(role);
   res.json(entries);
 });
 
 app.get("/memory", async (req, res) => {
-  const all = await getAllMemory();
+  const { projectPath } = req.query;
+  const all = projectPath
+    ? await getAllMemoryByProject(projectPath)
+    : await getAllMemory();
   res.json(all);
 });
 

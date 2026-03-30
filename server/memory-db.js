@@ -26,10 +26,18 @@ async function getDb(role) {
   return db;
 }
 
+const ALLOWED_CATEGORIES = new Set([
+  "build_test",
+  "architecture",
+  "business",
+  "code_quality",
+  "framework_api",
+]);
+
 /**
  * Add a memory entry for the given agent role.
  * @param {string} role - agent role (e.g. 'developer', 'planner')
- * @param {{ type: string, content: string, taskId: string, projectPath: string }} entry
+ * @param {{ category: string, content: string, taskId: string, projectPath: string }} entry
  * @returns {Promise<object>} the persisted entry with id and timestamp
  */
 export async function addMemoryEntry(role, entry) {
@@ -37,7 +45,7 @@ export async function addMemoryEntry(role, entry) {
   const record = {
     id: uuid(),
     timestamp: new Date().toISOString(),
-    type: entry.type || "info",
+    category: ALLOWED_CATEGORIES.has(entry.category) ? entry.category : (entry.category || null),
     content: entry.content,
     taskId: entry.taskId || null,
     projectPath: entry.projectPath || null,
@@ -55,6 +63,44 @@ export async function addMemoryEntry(role, entry) {
 export async function getMemory(role) {
   const db = await getDb(role);
   return db.data.entries;
+}
+
+/**
+ * Get memory entries for a given agent role filtered by projectPath.
+ * @param {string} role
+ * @param {string} projectPath
+ * @returns {Promise<object[]>}
+ */
+export async function getMemoryByProject(role, projectPath) {
+  const db = await getDb(role);
+  return db.data.entries.filter((e) => e.projectPath === projectPath);
+}
+
+/**
+ * Get all memory entries across all roles filtered by projectPath.
+ * @param {string} projectPath
+ * @returns {Promise<{ [role]: object[] }>}
+ */
+export async function getAllMemoryByProject(projectPath) {
+  const result = {};
+
+  try {
+    const roleDirs = await readdir(AGENTS_DIR, { withFileTypes: true });
+    for (const dirent of roleDirs) {
+      if (!dirent.isDirectory()) continue;
+      const role = dirent.name;
+      const dbPath = join(AGENTS_DIR, role, "memory", "db.json");
+      if (existsSync(dbPath)) {
+        const db = await getDb(role);
+        const filtered = db.data.entries.filter((e) => e.projectPath === projectPath);
+        if (filtered.length > 0) result[role] = filtered;
+      }
+    }
+  } catch {
+    // agents dir may not exist or be unreadable
+  }
+
+  return result;
 }
 
 /**

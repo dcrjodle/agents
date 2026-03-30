@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { ChevronRight } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { useContextMenu } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
@@ -178,7 +179,7 @@ export function TaskList({
                 transform: doneCollapsed ? "rotate(0deg)" : "rotate(90deg)",
               }}
             >
-              ▶
+              <ChevronRight size={14} strokeWidth={1.75} />
             </span>
             <span>done</span>
             <span className="task-list-done-badge">

@@ -37,14 +37,17 @@ export function DetailPanel({
   const ordered = [...agents].reverse();
   if (grouped["_system"]) ordered.push("_system");
 
-  // Collect memory entries relevant to this task
+  // Collect memory entries relevant to this task and project
   const memoryEntries = [];
   if (agentMemory && typeof agentMemory === "object") {
     for (const [, entries] of Object.entries(agentMemory)) {
       if (!Array.isArray(entries)) continue;
       for (const entry of entries) {
         if (entry.taskId === task.id) {
-          memoryEntries.push(entry);
+          // Also filter by projectPath when available to avoid cross-project entries
+          if (!entry.projectPath || !task.projectPath || entry.projectPath === task.projectPath) {
+            memoryEntries.push(entry);
+          }
         }
       }
     }
@@ -176,17 +179,20 @@ export function DetailPanel({
       {memoryEntries.length > 0 && (
         <div className="detail-panel-memory">
           <div className="detail-panel-memory-title">agent memory</div>
-          {memoryEntries.map((entry) => (
-            <div key={entry.id} className="detail-panel-memory-entry">
-              <span className={`detail-panel-memory-badge detail-panel-memory-badge--${entry.type}`}>
-                {entry.type}
-              </span>
-              <span className="detail-panel-memory-content">{entry.content}</span>
-              <span className="detail-panel-memory-time">
-                {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            </div>
-          ))}
+          {memoryEntries.map((entry) => {
+            const badge = entry.category || entry.type || "unknown";
+            return (
+              <div key={entry.id} className="detail-panel-memory-entry">
+                <span className={`detail-panel-memory-badge detail-panel-memory-badge--${badge}`}>
+                  {badge}
+                </span>
+                <span className="detail-panel-memory-content">{entry.content}</span>
+                <span className="detail-panel-memory-time">
+                  {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
