@@ -10,6 +10,7 @@ import { SettingsDialog } from "./components/SettingsDialog.jsx";
 import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import { IconButton } from "./components/IconButton.jsx";
 import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
+import { EvaluatorCharacter } from "./components/EvaluatorCharacter.jsx";
 import "./styles/layout.css";
 
 const API_BASE = "/api";
@@ -36,10 +37,14 @@ export function App() {
     errors,
     agentMemory,
     avatarStates,
+    evaluationResults,
+    evaluatingProjects,
+    triggerEvaluation,
     createTask,
     startTask,
     startAllTasks,
     restartTask,
+    continueTask,
     sendEvent,
     deleteTask,
     approveTask,
@@ -303,12 +308,14 @@ export function App() {
         "start": "start selected task",
         "view plan": "view plan for selected task",
         "approve pr": "approve pull request for selected task",
-        "restart": "restart selected task",
+        "continue": "continue selected task from failure point",
+        "restart": "restart selected task from scratch",
         "delete": "delete selected task",
       };
       const menuItems = buildTaskMenuItems(selectedTask, {
         onStart: startTask,
         onRestart: restartTask,
+        onContinue: continueTask,
         onDelete: deleteTask,
         onViewPlan: handleViewPlan,
         onApprove: approveTask,
@@ -364,6 +371,7 @@ export function App() {
     pendingPlans,
     startTask,
     restartTask,
+    continueTask,
     deleteTask,
     handleViewPlan,
     approveTask,
@@ -407,6 +415,7 @@ export function App() {
             pendingPlans={pendingPlans}
             onStart={startTask}
             onRestart={restartTask}
+            onContinue={continueTask}
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             onSelectTask={setSelectedTaskId}
@@ -431,6 +440,7 @@ export function App() {
             onDelete={deleteTask}
             onStart={startTask}
             onRestart={restartTask}
+            onContinue={continueTask}
             onViewPlan={handleViewPlan}
             onApprove={approveTask}
             onEdit={(taskId, description) => updateTask(taskId, description).catch((err) => console.error("Failed to edit task:", err))}
@@ -484,6 +494,15 @@ export function App() {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {selectedProject && (
+        <EvaluatorCharacter
+          evaluationResult={evaluationResults[selectedProject.path]}
+          isEvaluating={evaluatingProjects.has(selectedProject.path)}
+          onEvaluate={() => triggerEvaluation(selectedProject.path).catch((err) => console.error("Evaluation error:", err))}
+          onAddTask={handleCreateTask}
         />
       )}
     </div>

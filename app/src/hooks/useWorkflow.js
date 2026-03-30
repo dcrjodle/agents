@@ -32,6 +32,10 @@ export function useWorkflow() {
   const [agentMemory, setAgentMemory] = useState({});
   // avatarStates: { [taskId]: { [agent]: { action, message, targetX, direction, timestamp } } }
   const [avatarStates, setAvatarStates] = useState({});
+  // evaluationResults: { [projectPath]: { score, dimensions, suggestions, summary, timestamp } }
+  const [evaluationResults, setEvaluationResults] = useState({});
+  // evaluatingProjects: Set of projectPaths currently being evaluated
+  const [evaluatingProjects, setEvaluatingProjects] = useState(new Set());
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -136,6 +140,21 @@ export function useWorkflow() {
             fetch(`${API_BASE}/memory`)
               .then((r) => r.ok ? r.json() : {})
               .then((all) => { if (all && typeof all === "object") setAgentMemory(all); })
+              .catch(() => {});
+            // Hydrate lastEvaluation from project settings on connect
+            fetch(`${API_BASE}/config`)
+              .then((r) => r.ok ? r.json() : { projects: [] })
+              .then((config) => {
+                const initial = {};
+                for (const p of (config.projects || [])) {
+                  if (p.settings?.lastEvaluation) {
+                    initial[p.path] = p.settings.lastEvaluation;
+                  }
+                }
+                if (Object.keys(initial).length > 0) {
+                  setEvaluationResults((prev) => ({ ...initial, ...prev }));
+                }
+              })
               .catch(() => {});
             break;
 
@@ -324,6 +343,13 @@ export function useWorkflow() {
             });
             break;
 
+          case "TASK_CONTINUED":
+            appendLog(msg.taskId, {
+              type: "system",
+              data: `Continuing from ${msg.fromState}...`,
+            });
+            break;
+
           case "AVATAR_UPDATE":
             if (msg.taskId && msg.agent) {
               setAvatarStates((prev) => ({
@@ -348,6 +374,30 @@ export function useWorkflow() {
                 ...prev,
                 [msg.role]: [...(prev[msg.role] || []), msg.entry],
               }));
+            }
+            break;
+
+          case "EVALUATION_STARTED":
+            if (msg.projectPath) {
+              setEvaluatingProjects((prev) => {
+                const next = new Set(prev);
+                next.add(msg.projectPath);
+                return next;
+              });
+            }
+            break;
+
+          case "EVALUATION_COMPLETE":
+            if (msg.projectPath && msg.result) {
+              setEvaluationResults((prev) => ({
+                ...prev,
+                [msg.projectPath]: msg.result,
+              }));
+              setEvaluatingProjects((prev) => {
+                const next = new Set(prev);
+                next.delete(msg.projectPath);
+                return next;
+              });
             }
             break;
         }
@@ -430,6 +480,17 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const continueTask = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/continue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to continue task: ${res.statusText}`);
+    // Clear errors but keep logs for context
+    setErrors((prev) => { const next = { ...prev }; delete next[taskId]; return next; });
+    return res.json();
+  };
+
   const clearErrors = (taskId) => {
     setErrors((prev) => {
       const next = { ...prev };
@@ -453,7 +514,20 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, createTask, startTask, startAllTasks, restartTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
+  const triggerEvaluation = async (projectPath) => {
+    const res = await fetch(`${API_BASE}/evaluate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectPath }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Failed to start evaluation: ${res.statusText}`);
+    }
+    return res.json();
+  };
+
+  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, createTask, startTask, startAllTasks, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };

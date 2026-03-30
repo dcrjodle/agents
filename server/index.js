@@ -5,7 +5,7 @@ import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { workflowMachine } from "../machine.js";
 import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
-import { clearSession } from "./agent-runner.js";
+import { clearSession, runAgent } from "./agent-runner.js";
 import {
   getAllTasks as dbGetAllTasks,
   getTask as dbGetTask,
@@ -38,6 +38,11 @@ const actors = new Map();
 
 // Track active agent processes per task
 const activeAgents = new Map(); // taskId -> { handle, timeoutTimer, staleTimer }
+
+// Track in-flight evaluations per projectPath
+const activeEvaluations = new Map(); // projectPath -> evalId
+// Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
+const evaluationCallbacks = new Map();
 
 // Agent timeout: kill agents that run too long (default 10 minutes)
 const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -685,6 +690,66 @@ app.post("/tasks/:id/restart", async (req, res) => {
   res.json(getTaskSnapshot(id));
 });
 
+app.post("/tasks/:id/continue", async (req, res) => {
+  const id = req.params.id;
+
+  // Try to get a live actor first; if not, rehydrate from db
+  let actor = actors.get(id);
+  if (!actor) {
+    // Task is in a terminal state — rehydrate from db
+    const dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+
+    const sk = dbTask.stateKey || stateKey(dbTask.state);
+    if (sk !== "failed") {
+      return res.status(400).json({ error: `Task is in state "${sk}", can only continue failed tasks` });
+    }
+
+    if (!dbTask.context?.failedFrom) {
+      return res.status(400).json({ error: "No failedFrom state recorded — use restart instead" });
+    }
+
+    // Create a fresh actor, restore context, and start in "failed" state
+    const restoredMachine = workflowMachine.provide({});
+    actor = createActor(restoredMachine, {
+      snapshot: {
+        value: "failed",
+        context: dbTask.context,
+      },
+    });
+    actor._description = dbTask.description;
+    actor._projectPath = dbTask.projectPath;
+    actor._createdAt = dbTask.createdAt;
+
+    actors.set(id, actor);
+    wireActor(id, actor);
+    actor.start();
+  }
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+  if (sk !== "failed") {
+    return res.status(400).json({ error: `Task is in state "${sk}", can only continue failed tasks` });
+  }
+
+  if (!snap.context.failedFrom) {
+    return res.status(400).json({ error: "No failedFrom state recorded — use restart instead" });
+  }
+
+  // Clean up any lingering agent process but keep worktree
+  cleanupAgent(id);
+
+  // Clear errors from logs (keep other log entries for context)
+  // Don't clear all logs — the user wants to see history
+
+  // Send CONTINUE event — the machine will route to the right state
+  actor.send({ type: "CONTINUE" });
+
+  broadcast({ type: "TASK_CONTINUED", taskId: id, fromState: snap.context.failedFrom });
+
+  res.json(getTaskSnapshot(id));
+});
+
 app.delete("/tasks/:id", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (actor) {
@@ -739,9 +804,21 @@ app.post("/internal/agent-error", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/internal/agent-result", (req, res) => {
+app.post("/internal/agent-result", async (req, res) => {
   const { taskId, ...resultPayload } = req.body;
   if (!taskId) return res.status(400).json({ error: "taskId required" });
+
+  // Handle evaluation results separately (evalIds are not in activeAgents/actors)
+  const evalCb = evaluationCallbacks.get(taskId);
+  if (evalCb) {
+    evaluationCallbacks.delete(taskId);
+    try {
+      if (evalCb.onResult) await evalCb.onResult(resultPayload);
+    } catch (err) {
+      console.error("Evaluation onResult callback error:", err);
+    }
+    return res.json({ ok: true });
+  }
 
   const agentEntry = activeAgents.get(taskId);
   if (agentEntry) {
@@ -868,6 +945,71 @@ app.get("/memory/:role", async (req, res) => {
 app.get("/memory", async (req, res) => {
   const all = await getAllMemory();
   res.json(all);
+});
+
+// --- Evaluate endpoint ---
+
+app.post("/evaluate", async (req, res) => {
+  const { projectPath } = req.body;
+  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
+
+  if (activeEvaluations.has(projectPath)) {
+    return res.status(409).json({ error: "evaluation already running for this project" });
+  }
+
+  const evalId = `eval-${Date.now()}`;
+
+  broadcast({ type: "EVALUATION_STARTED", projectPath, evalId });
+
+  const handoff = {
+    instruction: `Evaluate code quality for project at ${projectPath}`,
+    projectPath,
+    context: {},
+  };
+
+  // Register result callback so /internal/agent-result can call it when the evaluator finishes
+  evaluationCallbacks.set(evalId, {
+    projectPath,
+    async onResult(result) {
+      const timestamp = new Date().toISOString();
+      const lastEvaluation = { ...result, timestamp };
+
+      // Persist to project settings
+      try {
+        const db = await getDb();
+        const project = db.data.config.projects.find((p) => p.path === projectPath);
+        if (project) {
+          project.settings = { ...project.settings, lastEvaluation };
+          await db.write();
+        }
+      } catch (err) {
+        console.error("Failed to persist evaluation result:", err);
+      }
+
+      broadcast({ type: "EVALUATION_COMPLETE", projectPath, result: lastEvaluation });
+      activeEvaluations.delete(projectPath);
+    },
+  });
+
+  runAgent("evaluator", evalId, handoff, {
+    onStdout(data) {
+      broadcast({ type: "AGENT_OUTPUT", taskId: evalId, agent: "evaluator", stream: "stdout", data });
+    },
+    onStderr(data) {
+      broadcast({ type: "AGENT_OUTPUT", taskId: evalId, agent: "evaluator", stream: "stderr", data });
+    },
+    onStatus(status) {
+      broadcast({ type: "AGENT_STATUS", taskId: evalId, agent: "evaluator", status });
+    },
+    onExit() {
+      // Always clean up locks, even if no result was received
+      evaluationCallbacks.delete(evalId);
+      activeEvaluations.delete(projectPath);
+    },
+  });
+
+  activeEvaluations.set(projectPath, evalId);
+  res.status(202).json({ evalId });
 });
 
 // --- WebSocket ---

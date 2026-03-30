@@ -4,7 +4,7 @@ const MAX_RETRIES = 3;
 
 export const workflowMachine = setup({
   types: {
-    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, testingMode: string }} */ ({}),
+    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, testingMode: string, failedFrom: string | null }} */ ({}),
     events: /** @type {
       | { type: "START", task: string, testingMode?: string }
       | { type: "PLAN_READY", plan: object }
@@ -31,12 +31,23 @@ export const workflowMachine = setup({
       | { type: "MERGED", url: string }
       | { type: "PR_FAILED", error: string }
       | { type: "RETRY" }
+      | { type: "CONTINUE" }
     } */ ({}),
   },
   guards: {
     underRetryLimit: ({ context }) => context.retries < MAX_RETRIES,
     needsVisualTest: ({ context }) => context.testingMode === "async" || context.testingMode === "sync",
     isAsyncTesting: ({ context }) => context.testingMode === "async",
+    failedFromPlanning: ({ context }) => context.failedFrom === "planning.running",
+    failedFromBranching: ({ context }) => context.failedFrom === "branching",
+    failedFromDeveloping: ({ context }) => context.failedFrom === "developing",
+    failedFromCommitting: ({ context }) => context.failedFrom === "committing",
+    failedFromTesting: ({ context }) => context.failedFrom === "testing",
+    failedFromVisualTesting: ({ context }) => context.failedFrom === "visualTesting.running",
+    failedFromReviewing: ({ context }) => context.failedFrom === "reviewing",
+    failedFromPushing: ({ context }) => context.failedFrom === "pushing",
+    failedFromDirectMerging: ({ context }) => context.failedFrom === "directMerging",
+    failedFromMerging: ({ context }) => context.failedFrom === "merging.creatingPr",
   },
 }).createMachine({
   id: "workflow",
@@ -48,6 +59,7 @@ export const workflowMachine = setup({
     error: null,
     retries: 0,
     testingMode: "build",
+    failedFrom: null,
   },
 
   states: {
@@ -80,6 +92,7 @@ export const workflowMachine = setup({
               target: "#workflow.failed",
               actions: assign({
                 error: ({ event }) => event.error,
+                failedFrom: () => "planning.running",
               }),
             },
           },
@@ -99,6 +112,7 @@ export const workflowMachine = setup({
               target: "#workflow.failed",
               actions: assign({
                 error: () => "Plan rejected by user",
+                failedFrom: () => "planning.awaitingApproval",
               }),
             },
           },
@@ -122,6 +136,7 @@ export const workflowMachine = setup({
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
+            failedFrom: () => "branching",
           }),
         },
       },
@@ -143,6 +158,7 @@ export const workflowMachine = setup({
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
+            failedFrom: () => "developing",
           }),
         },
       },
@@ -176,6 +192,7 @@ export const workflowMachine = setup({
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
+            failedFrom: () => "committing",
           }),
         },
       },
@@ -211,6 +228,7 @@ export const workflowMachine = setup({
                 target: "#workflow.failed",
                 actions: assign({
                   error: ({ event }) => event.error || "Max retries exceeded (visual test failures)",
+                  failedFrom: () => "visualTesting.running",
                 }),
               },
             ],
@@ -238,6 +256,7 @@ export const workflowMachine = setup({
             target: "failed",
             actions: assign({
               error: ({ event }) => event.error || "Max retries exceeded (test failures)",
+              failedFrom: () => "testing",
             }),
           },
         ],
@@ -263,6 +282,7 @@ export const workflowMachine = setup({
             target: "failed",
             actions: assign({
               error: ({ event }) => event.feedback || "Max retries exceeded (review changes)",
+              failedFrom: () => "reviewing",
             }),
           },
         ],
@@ -296,6 +316,7 @@ export const workflowMachine = setup({
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
+            failedFrom: () => "pushing",
           }),
         },
       },
@@ -312,6 +333,7 @@ export const workflowMachine = setup({
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
+            failedFrom: () => "directMerging",
           }),
         },
       },
@@ -336,6 +358,7 @@ export const workflowMachine = setup({
               target: "#workflow.failed",
               actions: assign({
                 error: ({ event }) => event.error,
+                failedFrom: () => "merging.creatingPr",
               }),
             },
           },
@@ -355,8 +378,21 @@ export const workflowMachine = setup({
           actions: assign({
             error: () => null,
             retries: ({ context }) => context.retries + 1,
+            failedFrom: () => null,
           }),
         },
+        CONTINUE: [
+          { target: "planning", guard: "failedFromPlanning", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "branching", guard: "failedFromBranching", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "developing", guard: "failedFromDeveloping", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "committing", guard: "failedFromCommitting", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "testing", guard: "failedFromTesting", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "visualTesting", guard: "failedFromVisualTesting", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "reviewing", guard: "failedFromReviewing", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "pushing", guard: "failedFromPushing", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "directMerging", guard: "failedFromDirectMerging", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "merging", guard: "failedFromMerging", actions: assign({ error: () => null, failedFrom: () => null }) },
+        ],
       },
     },
   },

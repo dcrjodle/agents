@@ -330,6 +330,9 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
           <div style={{ flex: 1 }}>
             {sk === "failed" && task.context?.error && (
               <div style={{ color: "#fca5a5", fontSize: 12, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                {task.context.failedFrom && (
+                  <span style={{ opacity: 0.7 }}>failed during {task.context.failedFrom}: </span>
+                )}
                 {task.context.error}
               </div>
             )}

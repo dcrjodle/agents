@@ -5,7 +5,7 @@ import { Button } from "./Button.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
 import { useContextMenu } from "../hooks/useContextMenu.js";
 
-export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onViewPlan, onApprove, onSelectTask, onRemoveProject }) {
+export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onContinue, onViewPlan, onApprove, onSelectTask, onRemoveProject }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const dragNode = useRef(null);
@@ -216,6 +216,7 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
           anchorRect={anchorRect}
           onStart={onStart}
           onRestart={onRestart}
+          onContinue={onContinue}
           onViewPlan={onViewPlan}
           onApprove={onApprove}
           onSelectTask={onSelectTask}

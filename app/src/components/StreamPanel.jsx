@@ -101,6 +101,9 @@ export const StreamPanel = forwardRef(function StreamPanel({
         }}>
           {sk === "failed" && task.context?.error && (
             <div style={{ color: "var(--dot-failed)", fontSize: 11 }}>
+              {task.context.failedFrom && (
+                <span style={{ opacity: 0.7 }}>failed during {task.context.failedFrom}: </span>
+              )}
               {task.context.error}
             </div>
           )}

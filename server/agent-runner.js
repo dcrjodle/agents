@@ -24,12 +24,16 @@ const CWD_RESOLVERS = {
 
 // --- Prompt builder registry ---
 
+// buildEvaluatorPrompt is defined in the Prompt Builders section below but referenced here.
+// JS hoisting ensures function declarations are available.
+
 const PROMPT_BUILDERS = {
   planner: buildPlannerPrompt,
   developer: buildDeveloperPrompt,
   reviewer: buildReviewerPrompt,
   githubber: buildGithubberPrompt,
   merger: buildMergerPrompt,
+  evaluator: buildEvaluatorPrompt,
 };
 
 // --- Auto-discovery: load agent configs from agents/*/agent.json ---
@@ -344,6 +348,28 @@ When you are done, you MUST call the report_result tool with:
 {"status": "complete"}
 or if it fails:
 {"status": "failed", "error": "<what went wrong>"}`;
+}
+
+function buildEvaluatorPrompt(handoff) {
+  return `You are a code quality evaluator. Scan the project at the following path and produce a quality report.
+
+Project path: ${handoff.projectPath}
+
+Steps:
+1. Use Glob or Bash to list the project file tree (exclude node_modules, dist, .git, lock files)
+2. Identify key source files — entry points, main components/modules, config files
+3. Read a representative sample of 5–15 files to understand architecture and patterns
+4. Score the project 1–10 across 6 dimensions: quality, maintainability, readability, decomposition, structure, codeHealth
+5. Compute the overall weighted score (quality 25%, maintainability 20%, readability 20%, decomposition 15%, structure 10%, codeHealth 10%)
+6. Write 5–10 concrete, actionable improvement suggestions with priority (high/medium/low)
+
+When you are done, you MUST call the report_result tool with:
+{
+  "score": <number 1-10>,
+  "dimensions": { "quality": <n>, "maintainability": <n>, "readability": <n>, "decomposition": <n>, "structure": <n>, "codeHealth": <n> },
+  "suggestions": [{ "title": "<string>", "description": "<string>", "priority": "high|medium|low" }],
+  "summary": "<1-3 sentence overview>"
+}`;
 }
 
 // --- Resume prompt (for developer retries with existing session) ---
