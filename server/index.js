@@ -656,7 +656,7 @@ app.post("/deploy", async (req, res) => {
     "npm install --omit=dev",
     "cd app && npm install && npm run build",
     `cd ${remoteDir}`,
-    "pkill -f 'node.*server/index.js' || true",
+    "pkill -9 -f 'node.*server/index.js' || true",
     "sleep 1",
     "nohup node server/index.js > /tmp/agents-server.log 2>&1 &",
     "echo DEPLOY_OK",
