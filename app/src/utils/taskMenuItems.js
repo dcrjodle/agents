@@ -105,8 +105,10 @@ export function buildTaskMenuItems(task, handlers = {}) {
     onContinue,
     onDelete,
     onViewPlan,
+    onViewReview,
     onApprove,
     pendingPlans,
+    pendingReviews,
     onStartEditing,
   } = handlers;
 
@@ -145,6 +147,14 @@ export function buildTaskMenuItems(task, handlers = {}) {
       label: "view plan",
       icon: ClipboardList,
       action: () => onViewPlan(task.id),
+    });
+  }
+
+  if (sk === "reviewing.awaitingApproval" && pendingReviews?.[task.id] && onViewReview) {
+    items.push({
+      label: "view review",
+      icon: ClipboardList,
+      action: () => onViewReview(task.id),
     });
   }
 

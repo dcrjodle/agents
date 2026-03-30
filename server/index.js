@@ -70,7 +70,8 @@ function stateLabel(stateValue) {
     "developing": "in_progress",
     "committing": "committing",
     "testing": "testing",
-    "reviewing": "reviewing",
+    "reviewing.running": "reviewing",
+    "reviewing.awaitingApproval": "awaiting_approval",
     "pushing": "pushing",
     "directMerging": "merging",
     "merging.awaitingApproval": "awaiting_approval",
@@ -264,8 +265,10 @@ async function onStateTransition(taskId, stateValue, context) {
   const agentMode = projectSettings.agentMode || "sdk";
 
   // Pass baseline evaluation score to the reviewer so it can check for regressions
-  if (sk === "reviewing") {
+  if (sk === "reviewing.running") {
     handoff.context.lastEvaluation = projectSettings.lastEvaluation || null;
+    // Pass review context (includes userComments if this is a re-run)
+    handoff.context.review = context.review || null;
   }
 
   // Spawn script or agent
@@ -386,6 +389,15 @@ function wireActor(id, actor) {
           type: "PLAN_READY",
           taskId: id,
           plan: snapshot.context.plan,
+        });
+      }
+
+      // Broadcast REVIEW_READY event when entering awaitingApproval in reviewing
+      if (sk === "reviewing.awaitingApproval" && snapshot.context.review) {
+        broadcast({
+          type: "REVIEW_READY",
+          taskId: id,
+          review: snapshot.context.review,
         });
       }
     }
@@ -673,6 +685,21 @@ app.post("/tasks/:id/approve", (req, res) => {
     if (req.body.reviewComments) planApprovedEvent.reviewComments = req.body.reviewComments;
     actor.send(planApprovedEvent);
     broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || "Approved" });
+    return res.json({ ok: true });
+  }
+
+  if (sk === "reviewing.awaitingApproval") {
+    const action = req.body.action; // "approve" | "changes_requested" | "revise"
+    if (action === "approve") {
+      actor.send({ type: "REVIEW_APPROVED" });
+    } else if (action === "changes_requested") {
+      actor.send({ type: "CHANGES_REQUESTED", feedback: req.body.feedback || "" });
+    } else if (action === "revise") {
+      actor.send({ type: "REVIEW_REVISION_REQUESTED", comments: req.body.comments || "" });
+    } else {
+      return res.status(400).json({ error: `Unknown review action: ${action}` });
+    }
+    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "review", message: req.body.message || action });
     return res.json({ ok: true });
   }
 
@@ -1385,6 +1412,7 @@ async function start() {
     const codeComplete = { type: "CODE_COMPLETE", files: task.context?.result?.files || [] };
     const commitComplete = { type: "COMMIT_COMPLETE", files: task.context?.result?.files || [] };
     const testsPassed = { type: "TESTS_PASSED" };
+    const reviewReady = { type: "REVIEW_READY", review: task.context?.review };
     const reviewApproved = { type: "REVIEW_APPROVED" };
     const pushComplete = { type: "PUSH_COMPLETE", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
     const pushCompleteNoPr = { type: "PUSH_COMPLETE_NO_PR", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
@@ -1397,6 +1425,9 @@ async function start() {
       "developing": [planReady, planApproved, branchReady],
       "committing": [planReady, planApproved, branchReady, codeComplete],
       "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
+      "reviewing.running": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
+      "reviewing.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewReady],
+      // Legacy flat state name for backwards compat
       "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
       "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
       "directMerging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushCompleteNoPr],
@@ -1424,12 +1455,27 @@ async function start() {
       onStateTransition(task.id, snap.value, snap.context);
     }
 
+    // For tasks that were mid-flight in reviewing.running, re-spawn the reviewer agent
+    if (sk === "reviewing.running") {
+      const snap = actor.getSnapshot();
+      onStateTransition(task.id, snap.value, snap.context);
+    }
+
     // For tasks awaiting plan approval, broadcast PLAN_READY so connected clients can show the dialog
     if (sk === "planning.awaitingApproval" && task.context?.plan) {
       broadcast({
         type: "PLAN_READY",
         taskId: task.id,
         plan: task.context.plan,
+      });
+    }
+
+    // For tasks awaiting review approval, broadcast REVIEW_READY so connected clients can show the dialog
+    if (sk === "reviewing.awaitingApproval" && task.context?.review) {
+      broadcast({
+        type: "REVIEW_READY",
+        taskId: task.id,
+        review: task.context.review,
       });
     }
   }

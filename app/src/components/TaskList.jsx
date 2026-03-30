@@ -29,9 +29,11 @@ export function TaskList({
   onRestart,
   onContinue,
   onViewPlan,
+  onViewReview,
   onApprove,
   onEdit,
   pendingPlans,
+  pendingReviews,
 }) {
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
   const [doneCollapsed, setDoneCollapsed] = useState(getInitialCollapsed);
@@ -158,6 +160,8 @@ export function TaskList({
           setSelectedTaskIds(new Set());
           if (sk === "planning.awaitingApproval" && pendingPlans[task.id]) {
             onViewPlan(task.id);
+          } else if (sk === "reviewing.awaitingApproval" && pendingReviews?.[task.id] && onViewReview) {
+            onViewReview(task.id);
           } else {
             onSelectTask(isSelected ? null : task.id);
           }
@@ -263,8 +267,10 @@ export function TaskList({
                   onContinue,
                   onDelete,
                   onViewPlan,
+                  onViewReview,
                   onApprove,
                   pendingPlans,
+                  pendingReviews,
                   onStartEditing: onEdit ? startEditing : undefined,
                 })
           }

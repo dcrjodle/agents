@@ -4,7 +4,7 @@ const MAX_RETRIES = 5;
 
 export const workflowMachine = setup({
   types: {
-    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, maxRetries: number, failedFrom: string | null }} */ ({}),
+    context: /** @type {{ task: string, plan: object | null, review: object | null, result: object | null, error: string | null, retries: number, maxRetries: number, failedFrom: string | null }} */ ({}),
     events: /** @type {
       | { type: "START", task: string, maxRetries?: number }
       | { type: "PLAN_READY", plan: object }
@@ -19,7 +19,10 @@ export const workflowMachine = setup({
       | { type: "COMMIT_FAILED", error: string }
       | { type: "TESTS_PASSED" }
       | { type: "TESTS_FAILED", error: string }
+      | { type: "REVIEW_READY", review: object }
+      | { type: "REVIEW_FAILED", error: string }
       | { type: "REVIEW_APPROVED" }
+      | { type: "REVIEW_REVISION_REQUESTED", comments: string }
       | { type: "CHANGES_REQUESTED", feedback: string }
       | { type: "PUSH_COMPLETE", branchName: string, diffSummary: string }
       | { type: "PUSH_COMPLETE_NO_PR", branchName: string, diffSummary: string }
@@ -40,7 +43,7 @@ export const workflowMachine = setup({
     failedFromDeveloping: ({ context }) => context.failedFrom === "developing",
     failedFromCommitting: ({ context }) => context.failedFrom === "committing",
     failedFromTesting: ({ context }) => context.failedFrom === "testing",
-    failedFromReviewing: ({ context }) => context.failedFrom === "reviewing",
+    failedFromReviewing: ({ context }) => context.failedFrom === "reviewing.running",
     failedFromPushing: ({ context }) => context.failedFrom === "pushing",
     failedFromDirectMerging: ({ context }) => context.failedFrom === "directMerging",
     failedFromMerging: ({ context }) => context.failedFrom === "merging.creatingPr",
@@ -51,6 +54,7 @@ export const workflowMachine = setup({
   context: {
     task: "",
     plan: null,
+    review: null,
     result: null,
     error: null,
     retries: 0,
@@ -210,27 +214,58 @@ export const workflowMachine = setup({
 
     reviewing: {
       // Reviewer agent checks code quality
-      on: {
-        REVIEW_APPROVED: {
-          target: "pushing",
+      initial: "running",
+      states: {
+        running: {
+          on: {
+            REVIEW_READY: {
+              target: "awaitingApproval",
+              actions: assign({
+                review: ({ event }) => event.review,
+              }),
+            },
+            REVIEW_FAILED: {
+              target: "#workflow.failed",
+              actions: assign({
+                error: ({ event }) => event.error,
+                failedFrom: () => "reviewing.running",
+              }),
+            },
+          },
         },
-        CHANGES_REQUESTED: [
-          {
-            target: "developing",
-            guard: "underRetryLimit",
-            actions: assign({
-              error: ({ event }) => event.feedback,
-              retries: ({ context }) => context.retries + 1,
-            }),
+        awaitingApproval: {
+          on: {
+            REVIEW_APPROVED: {
+              target: "#workflow.pushing",
+            },
+            CHANGES_REQUESTED: [
+              {
+                target: "#workflow.developing",
+                guard: "underRetryLimit",
+                actions: assign({
+                  error: ({ event }) => event.feedback,
+                  retries: ({ context }) => context.retries + 1,
+                }),
+              },
+              {
+                target: "#workflow.failed",
+                actions: assign({
+                  error: ({ event }) => event.feedback || "Max retries exceeded (review changes)",
+                  failedFrom: () => "reviewing",
+                }),
+              },
+            ],
+            REVIEW_REVISION_REQUESTED: {
+              target: "running",
+              actions: assign({
+                review: ({ context, event }) => ({
+                  ...context.review,
+                  userComments: event.comments,
+                }),
+              }),
+            },
           },
-          {
-            target: "failed",
-            actions: assign({
-              error: ({ event }) => event.feedback || "Max retries exceeded (review changes)",
-              failedFrom: () => "reviewing",
-            }),
-          },
-        ],
+        },
       },
     },
 
@@ -332,7 +367,7 @@ export const workflowMachine = setup({
           { target: "developing", guard: "failedFromDeveloping", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "committing", guard: "failedFromCommitting", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "testing", guard: "failedFromTesting", actions: assign({ error: () => null, failedFrom: () => null }) },
-          { target: "reviewing", guard: "failedFromReviewing", actions: assign({ error: () => null, failedFrom: () => null }) },
+          { target: "reviewing.running", guard: "failedFromReviewing", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "pushing", guard: "failedFromPushing", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "directMerging", guard: "failedFromDirectMerging", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "merging", guard: "failedFromMerging", actions: assign({ error: () => null, failedFrom: () => null }) },

@@ -5,6 +5,7 @@ import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
 import { ProjectTabs } from "./components/ProjectTabs.jsx";
 import { PlanDialog } from "./components/PlanDialog.jsx";
+import { ReviewDialog } from "./components/ReviewDialog.jsx";
 import { DetailPanel } from "./components/DetailPanel.jsx";
 import { SettingsDialog } from "./components/SettingsDialog.jsx";
 import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
@@ -22,6 +23,7 @@ export function App() {
   const [taskInputsByProject, setTaskInputsByProject] = useState({});
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
+  const [viewingReviewTaskId, setViewingReviewTaskId] = useState(null);
   const [viewMode, setViewMode] = useState("stream");
   const [showSettings, setShowSettings] = useState(false);
   const [projectSettingsTarget, setProjectSettingsTarget] = useState(null);
@@ -55,6 +57,9 @@ export function App() {
     deleteTask,
     approveTask,
     clearPendingPlan,
+    pendingReviews,
+    clearPendingReview,
+    reviewAction,
     updateTask,
   } = useWorkflow();
 
@@ -135,6 +140,38 @@ export function App() {
 
   const handleClosePlan = useCallback(() => {
     setViewingPlanTaskId(null);
+  }, []);
+
+  const handleViewReview = useCallback((taskId) => {
+    setViewingReviewTaskId(taskId);
+  }, []);
+
+  const handleApproveReview = useCallback(() => {
+    if (viewingReviewTaskId) {
+      reviewAction(viewingReviewTaskId, "approve");
+      clearPendingReview(viewingReviewTaskId);
+      setViewingReviewTaskId(null);
+    }
+  }, [viewingReviewTaskId, reviewAction, clearPendingReview]);
+
+  const handleRequestChanges = useCallback((feedback) => {
+    if (viewingReviewTaskId) {
+      reviewAction(viewingReviewTaskId, "changes_requested", undefined, feedback);
+      clearPendingReview(viewingReviewTaskId);
+      setViewingReviewTaskId(null);
+    }
+  }, [viewingReviewTaskId, reviewAction, clearPendingReview]);
+
+  const handleReviseReview = useCallback((reviewComments) => {
+    if (viewingReviewTaskId) {
+      reviewAction(viewingReviewTaskId, "revise", reviewComments);
+      clearPendingReview(viewingReviewTaskId);
+      setViewingReviewTaskId(null);
+    }
+  }, [viewingReviewTaskId, reviewAction, clearPendingReview]);
+
+  const handleCloseReview = useCallback(() => {
+    setViewingReviewTaskId(null);
   }, []);
 
   const handleCloseDetail = useCallback(() => {
@@ -249,7 +286,7 @@ export function App() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Skip when a modal/dialog is open
-      if (viewingPlanTaskId || showSettings || projectSettingsTarget) return;
+      if (viewingPlanTaskId || viewingReviewTaskId || showSettings || projectSettingsTarget) return;
       // Skip when focus is inside an input or textarea
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       // Need at least one project
@@ -282,7 +319,7 @@ export function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [projects, selectedProject, showSettings, viewingPlanTaskId, projectSettingsTarget]);
+  }, [projects, selectedProject, showSettings, viewingPlanTaskId, viewingReviewTaskId, projectSettingsTarget]);
 
   const idleTasks = filteredTasks.filter((t) => {
     const sk = t.stateKey || stateKey(t.state);
@@ -461,9 +498,11 @@ export function App() {
             onRestart={restartTask}
             onContinue={continueTask}
             onViewPlan={handleViewPlan}
+            onViewReview={handleViewReview}
             onApprove={approveTask}
             onEdit={(taskId, description) => updateTask(taskId, description).catch((err) => console.error("Failed to edit task:", err))}
             pendingPlans={pendingPlans}
+            pendingReviews={pendingReviews}
           />
         </div>
 
@@ -494,6 +533,17 @@ export function App() {
           onClose={handleClosePlan}
           onApproveAll={handleApproveAllPlans}
           pendingPlanCount={Object.keys(pendingPlans).length}
+        />
+      )}
+
+      {viewingReviewTaskId && pendingReviews[viewingReviewTaskId] && (
+        <ReviewDialog
+          review={pendingReviews[viewingReviewTaskId]}
+          taskDescription={tasks.find((t) => t.id === viewingReviewTaskId)?.description || ""}
+          onApprove={handleApproveReview}
+          onRequestChanges={handleRequestChanges}
+          onRevise={handleReviseReview}
+          onClose={handleCloseReview}
         />
       )}
 

@@ -30,7 +30,7 @@ const STATE_TO_ROLE = {
   "planning.running": "planner",
   "developing": "developer",
   "testing": "tester",
-  "reviewing": "reviewer",
+  "reviewing.running": "reviewer",
   "merging.creatingPr": "githubber",
   "directMerging": "merger",
 };
@@ -60,10 +60,17 @@ const RESULT_TO_EVENT = {
     error: payload.error,
   }),
   reviewer: (payload) => {
-    if (payload.verdict === "approved") {
-      return { type: "REVIEW_APPROVED" };
+    if (payload.status === "complete" || payload.verdict) {
+      return {
+        type: "REVIEW_READY",
+        review: {
+          markdown: payload.markdown || payload.summary || payload.message || "",
+          verdict: payload.verdict || "changes_requested",
+          feedback: payload.summary || payload.comments?.join("\n") || "",
+        },
+      };
     }
-    return { type: "CHANGES_REQUESTED", feedback: payload.summary || payload.comments?.join("\n") || payload.message };
+    return { type: "REVIEW_FAILED", error: payload.error || "Review failed" };
   },
   githubber: (payload) => {
     if (payload.status === "complete") {

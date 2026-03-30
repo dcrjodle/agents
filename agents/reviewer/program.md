@@ -10,6 +10,7 @@ You receive via stdin (JSON):
 - `context.plan` — The implementation plan
 - `context.result` — The developer's result including `files` and `worktreePath`
 - `context.lastEvaluation` — The most recent evaluator score `{ score, dimensions, timestamp }`, or `null` if no evaluation has been run
+- `context.review.userComments` — Optional string; present when the user has reviewed your previous output and added notes or corrections. If present, incorporate these notes into this review pass — address the user's concerns specifically and note them in your output.
 
 ## Process
 
@@ -118,9 +119,11 @@ You have access to workflow tools for communicating with the orchestrator:
 
 When you are done, you MUST call report_result with a JSON string:
 ```
-{"status": "complete", "verdict": "approved", "summary": "<review>", "checklist": "<checklist used>", "comments": []}
+{"status": "complete", "verdict": "approved", "markdown": "## Review: ...\n\nFull review output in markdown format", "summary": "<one-line review summary>", "checklist": "<checklist used>", "comments": []}
 ```
 Or if changes are needed:
 ```
-{"status": "complete", "verdict": "changes_requested", "summary": "<review>", "checklist": "<checklist used>", "comments": ["issue1", "issue2"]}
+{"status": "complete", "verdict": "changes_requested", "markdown": "## Review: ...\n\nFull review output in markdown format", "summary": "<one-line review summary>", "checklist": "<checklist used>", "comments": ["issue1", "issue2"]}
 ```
+
+The `markdown` field should contain your full review output formatted as markdown (the complete review document as shown in the Review Output Format section above). This is displayed in the review dialog shown to the user.
