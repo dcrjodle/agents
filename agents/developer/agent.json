@@ -1,4 +1,5 @@
 {
+  "model": "claude-opus-4-5",
   "tools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
   "cwd": "worktreeOrProject",
   "supportsResume": true

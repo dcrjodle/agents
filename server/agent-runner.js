@@ -101,6 +101,7 @@ async function loadAgentConfigs() {
       buildPrompt,
       supportsResume: config.supportsResume || false,
       mcpTools,
+      model: config.model || "claude-sonnet-4-6",
     });
   }
 
@@ -477,7 +478,7 @@ export function runAgent(role, taskId, handoff, callbacks) {
         tools: config.tools,
         allowedTools: config.tools,
         mcpServers,
-        model: "claude-sonnet-4-6",
+        model: config.model,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         maxTurns: 50,
