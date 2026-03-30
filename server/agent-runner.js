@@ -321,7 +321,7 @@ Steps:
 3. Use the create_pr tool to create the PR
 
 When you are done, you MUST call the report_result tool with:
-{"status": "complete", "prUrl": "<the PR URL>", "branchName": "${branchName}"}
+{"status": "complete", "prUrl": "<the PR URL>", "branchName": "${branchName}", "prTitle": "<the PR title>"}
 or if it fails:
 {"status": "failed", "error": "<what went wrong>"}`;
 }

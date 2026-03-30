@@ -74,7 +74,7 @@ const RESULT_TO_EVENT = {
   },
   githubber: (payload) => {
     if (payload.status === "complete") {
-      return { type: "MERGED", url: payload.prUrl };
+      return { type: "MERGED", url: payload.prUrl, prTitle: payload.prTitle };
     }
     return { type: "PR_FAILED", error: payload.error };
   },
