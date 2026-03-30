@@ -21,6 +21,8 @@
   transition: all 0.15s ease;
   position: relative;
   cursor: pointer;
+  /* Allow vertical scroll during long-press hold on mobile */
+  touch-action: pan-y;
 }
 
 .task-row:hover {

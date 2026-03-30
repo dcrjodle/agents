@@ -496,11 +496,29 @@ function wireActor(id, actor) {
           review: snapshot.context.review,
         });
       }
+
+      // Auto-approve code review if setting is enabled
+      if (sk === "reviewing.awaitingApproval") {
+        getProjectSettings(actor._projectPath).then((projectSettings) => {
+          if (projectSettings.autoApproveReviews === true) {
+            actor.send({ type: "REVIEW_APPROVED" });
+            broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved" });
+          }
+        });
+      }
     }
 
     // Clean up auto-continue counter when task completes successfully
     if (sk === "done") {
       taskAutoContinues.delete(id);
+      const prTitle = snapshot.context.prTitle;
+      if (prTitle) {
+        actor._description = prTitle;
+        dbUpdateTask(id, { description: prTitle }).catch((err) =>
+          console.error(`Failed to rename task to PR title:`, err)
+        );
+        broadcast({ type: "TASK_UPDATED", task: { id, description: prTitle } });
+      }
     }
 
     // Auto-continue from failed state (up to project maxRetries limit)

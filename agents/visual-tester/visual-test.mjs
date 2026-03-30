@@ -27,7 +27,7 @@ const tasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
 let currentTempBranch = null;
 
 function emitStatus(msg) {
-  process.stderr.write(`:::STATUS::: ${JSON.stringify({ currentStep: msg })}\n`);
+  process.stdout.write(`:::STATUS::: ${JSON.stringify({ currentStep: msg })}\n`);
 }
 
 function emitResult(result) {
