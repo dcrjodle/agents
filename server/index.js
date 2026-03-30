@@ -5,7 +5,7 @@ import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { workflowMachine } from "../machine.js";
 import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
-import { clearSession } from "./agent-runner.js";
+import { clearSession, runAgent } from "./agent-runner.js";
 import {
   getAllTasks as dbGetAllTasks,
   getTask as dbGetTask,
@@ -38,6 +38,13 @@ const actors = new Map();
 
 // Track active agent processes per task
 const activeAgents = new Map(); // taskId -> { handle, timeoutTimer, staleTimer }
+
+// Track auto-continue attempts per task (resets on done or delete)
+const taskAutoContinues = new Map(); // taskId -> number
+// Track in-flight evaluations per projectPath
+const activeEvaluations = new Map(); // projectPath -> evalId
+// Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
+const evaluationCallbacks = new Map();
 
 // Agent timeout: kill agents that run too long (default 10 minutes)
 const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -350,6 +357,35 @@ function wireActor(id, actor) {
         plan: snapshot.context.plan,
       });
     }
+
+    // Clean up auto-continue counter when task completes successfully
+    if (sk === "done") {
+      taskAutoContinues.delete(id);
+    }
+
+    // Auto-continue from failed state (up to project maxRetries limit)
+    if (sk === "failed" && snapshot.context.failedFrom) {
+      const count = taskAutoContinues.get(id) ?? 0;
+      getProjectSettings(actor._projectPath).then((projectSettings) => {
+        const maxRetries = projectSettings.maxRetries ?? 5;
+        if (count < maxRetries) {
+          taskAutoContinues.set(id, count + 1);
+          const failedFrom = snapshot.context.failedFrom;
+          broadcastAndLog({
+            type: "AGENT_STATUS",
+            taskId: id,
+            agent: "auto-continue",
+            status: {
+              state: "running",
+              currentStep: `[auto-continue] Retrying from ${failedFrom} (attempt ${count + 1}/${maxRetries})...`,
+            },
+          });
+          setTimeout(() => {
+            if (actors.has(id)) actors.get(id).send({ type: "CONTINUE" });
+          }, 500);
+        }
+      });
+    }
   });
 }
 
@@ -495,7 +531,8 @@ app.post("/tasks", async (req, res) => {
   if (autoStart) {
     const projectSettings = await getProjectSettings(projectPath);
     const testingMode = projectSettings.testingMode || "build";
-    actor.send({ type: "START", task: description, testingMode });
+    const maxRetries = projectSettings.maxRetries ?? 5;
+    actor.send({ type: "START", task: description, testingMode, maxRetries });
   }
 
   const snapshot = getTaskSnapshot(id);
@@ -538,7 +575,8 @@ app.post("/tasks/:id/start", async (req, res) => {
 
   const projectSettings = await getProjectSettings(actor._projectPath);
   const testingMode = projectSettings.testingMode || "build";
-  actor.send({ type: "START", task: actor._description, testingMode });
+  const maxRetries = projectSettings.maxRetries ?? 5;
+  actor.send({ type: "START", task: actor._description, testingMode, maxRetries });
   res.json(getTaskSnapshot(req.params.id));
 });
 
@@ -757,6 +795,7 @@ app.delete("/tasks/:id", async (req, res) => {
     actor.stop();
     actors.delete(req.params.id);
   }
+  taskAutoContinues.delete(req.params.id);
   await clearTaskLogs(req.params.id);
   await dbDeleteTask(req.params.id);
   broadcast({ type: "TASK_DELETED", taskId: req.params.id });
@@ -803,9 +842,21 @@ app.post("/internal/agent-error", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/internal/agent-result", (req, res) => {
+app.post("/internal/agent-result", async (req, res) => {
   const { taskId, ...resultPayload } = req.body;
   if (!taskId) return res.status(400).json({ error: "taskId required" });
+
+  // Handle evaluation results separately (evalIds are not in activeAgents/actors)
+  const evalCb = evaluationCallbacks.get(taskId);
+  if (evalCb) {
+    evaluationCallbacks.delete(taskId);
+    try {
+      if (evalCb.onResult) await evalCb.onResult(resultPayload);
+    } catch (err) {
+      console.error("Evaluation onResult callback error:", err);
+    }
+    return res.json({ ok: true });
+  }
 
   const agentEntry = activeAgents.get(taskId);
   if (agentEntry) {
@@ -932,6 +983,71 @@ app.get("/memory/:role", async (req, res) => {
 app.get("/memory", async (req, res) => {
   const all = await getAllMemory();
   res.json(all);
+});
+
+// --- Evaluate endpoint ---
+
+app.post("/evaluate", async (req, res) => {
+  const { projectPath } = req.body;
+  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
+
+  if (activeEvaluations.has(projectPath)) {
+    return res.status(409).json({ error: "evaluation already running for this project" });
+  }
+
+  const evalId = `eval-${Date.now()}`;
+
+  broadcast({ type: "EVALUATION_STARTED", projectPath, evalId });
+
+  const handoff = {
+    instruction: `Evaluate code quality for project at ${projectPath}`,
+    projectPath,
+    context: {},
+  };
+
+  // Register result callback so /internal/agent-result can call it when the evaluator finishes
+  evaluationCallbacks.set(evalId, {
+    projectPath,
+    async onResult(result) {
+      const timestamp = new Date().toISOString();
+      const lastEvaluation = { ...result, timestamp };
+
+      // Persist to project settings
+      try {
+        const db = await getDb();
+        const project = db.data.config.projects.find((p) => p.path === projectPath);
+        if (project) {
+          project.settings = { ...project.settings, lastEvaluation };
+          await db.write();
+        }
+      } catch (err) {
+        console.error("Failed to persist evaluation result:", err);
+      }
+
+      broadcast({ type: "EVALUATION_COMPLETE", projectPath, result: lastEvaluation });
+      activeEvaluations.delete(projectPath);
+    },
+  });
+
+  runAgent("evaluator", evalId, handoff, {
+    onStdout(data) {
+      broadcast({ type: "AGENT_OUTPUT", taskId: evalId, agent: "evaluator", stream: "stdout", data });
+    },
+    onStderr(data) {
+      broadcast({ type: "AGENT_OUTPUT", taskId: evalId, agent: "evaluator", stream: "stderr", data });
+    },
+    onStatus(status) {
+      broadcast({ type: "AGENT_STATUS", taskId: evalId, agent: "evaluator", status });
+    },
+    onExit() {
+      // Always clean up locks, even if no result was received
+      evaluationCallbacks.delete(evalId);
+      activeEvaluations.delete(projectPath);
+    },
+  });
+
+  activeEvaluations.set(projectPath, evalId);
+  res.status(202).json({ evalId });
 });
 
 // --- WebSocket ---

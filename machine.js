@@ -1,12 +1,12 @@
 import { setup, assign } from "xstate";
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 5;
 
 export const workflowMachine = setup({
   types: {
-    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, testingMode: string, failedFrom: string | null }} */ ({}),
+    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, maxRetries: number, testingMode: string, failedFrom: string | null }} */ ({}),
     events: /** @type {
-      | { type: "START", task: string, testingMode?: string }
+      | { type: "START", task: string, testingMode?: string, maxRetries?: number }
       | { type: "PLAN_READY", plan: object }
       | { type: "PLAN_FAILED", error: string }
       | { type: "PLAN_APPROVED", reviewComments?: string }
@@ -35,7 +35,7 @@ export const workflowMachine = setup({
     } */ ({}),
   },
   guards: {
-    underRetryLimit: ({ context }) => context.retries < MAX_RETRIES,
+    underRetryLimit: ({ context }) => context.retries < (context.maxRetries ?? MAX_RETRIES),
     needsVisualTest: ({ context }) => context.testingMode === "async" || context.testingMode === "sync",
     isAsyncTesting: ({ context }) => context.testingMode === "async",
     failedFromPlanning: ({ context }) => context.failedFrom === "planning.running",
@@ -58,6 +58,7 @@ export const workflowMachine = setup({
     result: null,
     error: null,
     retries: 0,
+    maxRetries: MAX_RETRIES,
     testingMode: "build",
     failedFrom: null,
   },
@@ -70,6 +71,7 @@ export const workflowMachine = setup({
           actions: assign({
             task: ({ event }) => event.task,
             testingMode: ({ event }) => event.testingMode || "build",
+            maxRetries: ({ event }) => event.maxRetries ?? MAX_RETRIES,
             error: () => null,
             retries: () => 0,
           }),

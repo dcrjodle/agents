@@ -6,8 +6,10 @@ import { AgentNode } from "./AgentNode.jsx";
 import { AgentRoom } from "./AgentRoom.jsx";
 import { LogLine } from "./LogLine.jsx";
 import { Button } from "./Button.jsx";
+import { XStateMachineView } from "./XStateMachineView.jsx";
 import "../styles/detail-panel.css";
 import "../styles/agent-node.css";
+import "../styles/xstate-viewer.css";
 
 export function DetailPanel({
   task,
@@ -70,12 +72,12 @@ export function DetailPanel({
             active={viewMode === "stream"}
             size="sm"
             onClick={() => {
-              const modes = ["nodes", "cards", "stream", "room"];
+              const modes = ["nodes", "cards", "stream", "room", "machine"];
               const next = modes[(modes.indexOf(viewMode) + 1) % modes.length];
               onToggleViewMode(next);
             }}
           >
-            {viewMode === "nodes" ? "cards" : viewMode === "cards" ? "stream" : viewMode === "stream" ? "room" : "nodes"}
+            {viewMode === "nodes" ? "cards" : viewMode === "cards" ? "stream" : viewMode === "stream" ? "room" : viewMode === "room" ? "machine" : "nodes"}
           </Button>
           <Button variant="secondary" size="sm" onClick={onClose}>
             close
@@ -148,6 +150,8 @@ export function DetailPanel({
               ))
             )}
           </div>
+        ) : viewMode === "machine" ? (
+          <XStateMachineView activeStateKey={sk} context={task.context} />
         ) : (
           <div className="stream-unified">
             {logs.length === 0 ? (
