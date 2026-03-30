@@ -408,13 +408,13 @@ export function runAgent(role, taskId, handoff, callbacks) {
     return { pid: null, kill: () => {}, gotResult: () => false };
   }
 
+  const cwd = config.getCwd(handoff);
+
   // Determine if we should resume an existing session
   const retries = handoff.context.retries || 0;
   const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
   const prompt = canResume ? buildResumePrompt(handoff) : (config.buildPrompt ? config.buildPrompt(handoff) : handoff.instruction);
   const resumeSessionId = canResume ? sessionStore.get(taskId) : undefined;
-
-  const cwd = config.getCwd(handoff);
 
   const abortController = new AbortController();
   let resultReceived = false;
