@@ -202,10 +202,19 @@ const CANVAS_W = 80;
 const CANVAS_H = 100;
 const CHAR_SCALE = 4;
 
+const COMPACT_CANVAS_W = 40;
+const COMPACT_CANVAS_H = 52;
+const COMPACT_CHAR_SCALE = 2;
+
 /**
- * EvaluatorCharacter — pixel-art evaluator widget fixed in top-right corner.
+ * EvaluatorCharacter — pixel-art evaluator widget.
+ * When compact={true}, renders at half scale to fit inline in a toolbar.
  */
-export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate, onAddTask }) {
+export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate, onAddTask, compact = false }) {
+  const canvasW = compact ? COMPACT_CANVAS_W : CANVAS_W;
+  const canvasH = compact ? COMPACT_CANVAS_H : CANVAS_H;
+  const charScale = compact ? COMPACT_CHAR_SCALE : CHAR_SCALE;
+
   const canvasRef = useRef(null);
   const animFrameRef = useRef(0);
   const frameCountRef = useRef(0);
@@ -258,19 +267,19 @@ export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate,
       const frame = Math.floor(frameCountRef.current / 15);
 
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = CANVAS_W * dpr;
-      canvas.height = CANVAS_H * dpr;
+      canvas.width = canvasW * dpr;
+      canvas.height = canvasH * dpr;
       ctx.scale(dpr, dpr);
 
       // Clear
-      ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.clearRect(0, 0, canvasW, canvasH);
 
-      const scale = CHAR_SCALE;
+      const scale = charScale;
       const charW = 12 * scale;
       const charH = 14 * scale;
-      const cx = CANVAS_W / 2;
+      const cx = canvasW / 2;
       const charX = cx - charW / 2;
-      const charY = CANVAS_H - charH - 4;
+      const charY = canvasH - charH - 4;
 
       // Draw score badge above character
       drawScoreBadge(ctx, cx, charY, score, scale);
@@ -319,7 +328,7 @@ export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate,
       running = false;
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [animAction, score]);
+  }, [animAction, score, canvasW, canvasH, charScale]);
 
   return (
     <div
@@ -338,9 +347,9 @@ export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate,
       <canvas
         ref={canvasRef}
         className="evaluator-character-canvas"
-        width={CANVAS_W}
-        height={CANVAS_H}
-        style={{ width: CANVAS_W, height: CANVAS_H }}
+        width={canvasW}
+        height={canvasH}
+        style={{ width: canvasW, height: canvasH }}
         onClick={handleClick}
         title={tooltipText}
       />

@@ -1,11 +1,7 @@
 .evaluator-character {
-  position: fixed;
-  top: 80px;
-  right: 16px;
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
 }
 
 .evaluator-character-canvas {

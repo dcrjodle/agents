@@ -10,8 +10,7 @@ import { SettingsDialog } from "./components/SettingsDialog.jsx";
 import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import { IconButton } from "./components/IconButton.jsx";
 import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
-import { EvaluatorCharacter } from "./components/EvaluatorCharacter.jsx";
-import { VisualTestButton } from "./components/VisualTestButton.jsx";
+import { ProjectToolbar } from "./components/ProjectToolbar.jsx";
 import "./styles/layout.css";
 
 const API_BASE = "/api";
@@ -414,26 +413,38 @@ export function App() {
       </header>
 
       {projects.length > 0 && selectedProject ? (
-        <>
-          <ProjectTabs
-            projects={projects}
-            selected={selectedProject}
-            onSelect={handleSelectProject}
-            onReorder={handleReorderProjects}
-            onOpenSettings={setProjectSettingsTarget}
-            onStartAll={handleStartAll}
-            idleCount={idleTasks.length}
-            tasks={tasks}
-            pendingPlans={pendingPlans}
-            onStart={startTask}
-            onRestart={restartTask}
-            onContinue={continueTask}
-            onViewPlan={handleViewPlan}
-            onApprove={approveTask}
-            onSelectTask={setSelectedTaskId}
-            onRemoveProject={handleRemoveProject}
+        <div className="project-tabs-row">
+          <div className="project-tabs-scroller">
+            <ProjectTabs
+              projects={projects}
+              selected={selectedProject}
+              onSelect={handleSelectProject}
+              onReorder={handleReorderProjects}
+              onOpenSettings={setProjectSettingsTarget}
+              onStartAll={handleStartAll}
+              idleCount={idleTasks.length}
+              tasks={tasks}
+              pendingPlans={pendingPlans}
+              onStart={startTask}
+              onRestart={restartTask}
+              onContinue={continueTask}
+              onViewPlan={handleViewPlan}
+              onApprove={approveTask}
+              onSelectTask={setSelectedTaskId}
+              onRemoveProject={handleRemoveProject}
+            />
+          </div>
+          <ProjectToolbar
+            evaluationResult={evaluationResults[selectedProject.path]}
+            isEvaluating={evaluatingProjects.has(selectedProject.path)}
+            onEvaluate={() => triggerEvaluation(selectedProject.path).catch((err) => console.error("Evaluation error:", err))}
+            onAddTask={handleCreateTask}
+            visualTestIsRunning={visualTestingProjects.has(selectedProject.path)}
+            visualTestResults={visualTestResults[selectedProject.path]}
+            onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
+            eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
           />
-        </>
+        </div>
       ) : (
         <p className="loading-text">loading projects...</p>
       )}
@@ -516,25 +527,6 @@ export function App() {
         />
       )}
 
-      {selectedProject && (
-        <EvaluatorCharacter
-          evaluationResult={evaluationResults[selectedProject.path]}
-          isEvaluating={evaluatingProjects.has(selectedProject.path)}
-          onEvaluate={() => triggerEvaluation(selectedProject.path).catch((err) => console.error("Evaluation error:", err))}
-          onAddTask={handleCreateTask}
-        />
-      )}
-
-      {selectedProject && (
-        <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 40 }}>
-          <VisualTestButton
-            isRunning={visualTestingProjects.has(selectedProject.path)}
-            results={visualTestResults[selectedProject.path]}
-            onTrigger={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
-            eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
-          />
-        </div>
-      )}
     </div>
   );
 }

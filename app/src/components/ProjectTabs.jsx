@@ -89,8 +89,6 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
     <div style={{
       display: "flex",
       gap: 0,
-      borderBottom: "1px solid var(--border)",
-      marginBottom: 16,
     }}>
       {projects.map((project, index) => {
         const isActive = project.path === selected.path;
