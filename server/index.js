@@ -690,6 +690,66 @@ app.post("/tasks/:id/restart", async (req, res) => {
   res.json(getTaskSnapshot(id));
 });
 
+app.post("/tasks/:id/continue", async (req, res) => {
+  const id = req.params.id;
+
+  // Try to get a live actor first; if not, rehydrate from db
+  let actor = actors.get(id);
+  if (!actor) {
+    // Task is in a terminal state — rehydrate from db
+    const dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+
+    const sk = dbTask.stateKey || stateKey(dbTask.state);
+    if (sk !== "failed") {
+      return res.status(400).json({ error: `Task is in state "${sk}", can only continue failed tasks` });
+    }
+
+    if (!dbTask.context?.failedFrom) {
+      return res.status(400).json({ error: "No failedFrom state recorded — use restart instead" });
+    }
+
+    // Create a fresh actor, restore context, and start in "failed" state
+    const restoredMachine = workflowMachine.provide({});
+    actor = createActor(restoredMachine, {
+      snapshot: {
+        value: "failed",
+        context: dbTask.context,
+      },
+    });
+    actor._description = dbTask.description;
+    actor._projectPath = dbTask.projectPath;
+    actor._createdAt = dbTask.createdAt;
+
+    actors.set(id, actor);
+    wireActor(id, actor);
+    actor.start();
+  }
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+  if (sk !== "failed") {
+    return res.status(400).json({ error: `Task is in state "${sk}", can only continue failed tasks` });
+  }
+
+  if (!snap.context.failedFrom) {
+    return res.status(400).json({ error: "No failedFrom state recorded — use restart instead" });
+  }
+
+  // Clean up any lingering agent process but keep worktree
+  cleanupAgent(id);
+
+  // Clear errors from logs (keep other log entries for context)
+  // Don't clear all logs — the user wants to see history
+
+  // Send CONTINUE event — the machine will route to the right state
+  actor.send({ type: "CONTINUE" });
+
+  broadcast({ type: "TASK_CONTINUED", taskId: id, fromState: snap.context.failedFrom });
+
+  res.json(getTaskSnapshot(id));
+});
+
 app.delete("/tasks/:id", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (actor) {

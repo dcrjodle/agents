@@ -25,6 +25,7 @@ export function TaskList({
   onDelete,
   onStart,
   onRestart,
+  onContinue,
   onViewPlan,
   onApprove,
   onEdit,
@@ -191,6 +192,7 @@ export function TaskList({
           items={buildTaskMenuItems(contextMenu.target, {
             onStart,
             onRestart,
+            onContinue,
             onDelete,
             onViewPlan,
             onApprove,
