@@ -43,15 +43,37 @@ export function TaskList({
 
   // Drag-to-multi-select state
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const isDragging = useRef(false);
 
-  // End drag on mouseup anywhere in the document
+  // Refs for auto-scroll RAF loop
+  const listRef = useRef(null);
+  const rafRef = useRef(null);
+  const mousePos = useRef({ x: 0, y: 0 });
+  const cleanupDragListeners = useRef(null);
+
+  // End drag on mouseup (or window blur) anywhere
   useEffect(() => {
-    const handleMouseUp = () => {
-      isDragging.current = false;
+    const stopDrag = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        setIsDraggingState(false);
+      }
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (cleanupDragListeners.current) {
+        cleanupDragListeners.current();
+        cleanupDragListeners.current = null;
+      }
     };
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => document.removeEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mouseup", stopDrag);
+    window.addEventListener("blur", stopDrag);
+    return () => {
+      document.removeEventListener("mouseup", stopDrag);
+      window.removeEventListener("blur", stopDrag);
+    };
   }, []);
 
   const startEditing = useCallback((task) => {
@@ -141,12 +163,60 @@ export function TaskList({
       <div
         key={task.id}
         className={rowClass}
+        data-task-id={task.id}
         onMouseDown={(e) => {
           if (isEditing) return;
           // Only primary button
           if (e.button !== 0) return;
           isDragging.current = true;
+          setIsDraggingState(true);
           setSelectedTaskIds(new Set([task.id]));
+
+          // Track mouse position during drag
+          const handleMouseMove = (ev) => {
+            mousePos.current = { x: ev.clientX, y: ev.clientY };
+          };
+          document.addEventListener("mousemove", handleMouseMove);
+          cleanupDragListeners.current = () => {
+            document.removeEventListener("mousemove", handleMouseMove);
+          };
+
+          // Start auto-scroll RAF loop
+          const loop = () => {
+            if (!isDragging.current) {
+              rafRef.current = null;
+              return;
+            }
+            const container = listRef.current?.closest(".task-list-container");
+            if (container) {
+              const { x, y } = mousePos.current;
+              const rect = container.getBoundingClientRect();
+              const SCROLL_ZONE = 60;
+              const MAX_SPEED = 15;
+              const distFromTop = y - rect.top;
+              const distFromBottom = rect.bottom - y;
+              let delta = 0;
+              if (distFromTop >= 0 && distFromTop < SCROLL_ZONE) {
+                delta = -Math.round(MAX_SPEED * (1 - distFromTop / SCROLL_ZONE));
+              } else if (distFromBottom >= 0 && distFromBottom < SCROLL_ZONE) {
+                delta = Math.round(MAX_SPEED * (1 - distFromBottom / SCROLL_ZONE));
+              }
+              if (delta !== 0) {
+                container.scrollTop += delta;
+                // Hit-test the element under cursor after scroll
+                const el = document.elementFromPoint(x, y);
+                const row = el?.closest(".task-row");
+                if (row?.dataset.taskId) {
+                  setSelectedTaskIds((prev) => {
+                    if (prev.has(row.dataset.taskId)) return prev;
+                    return new Set([...prev, row.dataset.taskId]);
+                  });
+                }
+              }
+            }
+            rafRef.current = requestAnimationFrame(loop);
+          };
+          rafRef.current = requestAnimationFrame(loop);
         }}
         onMouseEnter={() => {
           if (!isDragging.current) return;
@@ -213,10 +283,8 @@ export function TaskList({
 
   return (
     <div
-      className={`task-list${isDragging.current ? " task-list--dragging" : ""}`}
-      onMouseLeave={() => {
-        if (isDragging.current) isDragging.current = false;
-      }}
+      ref={listRef}
+      className={`task-list${isDraggingState ? " task-list--dragging" : ""}`}
     >
       {activeTasks.map(renderTask)}
 

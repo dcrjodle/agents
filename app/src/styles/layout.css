@@ -113,3 +113,17 @@
   color: var(--text-dim);
   font-size: 12px;
 }
+
+/* Project tabs row — wraps ProjectTabs + ProjectToolbar */
+.project-tabs-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.project-tabs-row > .project-tabs-scroller {
+  flex: 1;
+  overflow-x: auto;
+  min-width: 0;
+}
