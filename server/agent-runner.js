@@ -24,8 +24,10 @@ export function clearSession(taskId) {
  * If it doesn't (e.g. a Mac path on a Linux server), clone the repo
  * to ~/projects/<repo-name> using the project's githubUrl setting.
  */
-async function resolveServerPath(projectPath) {
+async function resolveServerPath(projectPath, log) {
   if (existsSync(projectPath)) return projectPath;
+
+  log(`Path ${projectPath} not found on server, resolving...`);
 
   // Try to fetch project settings for the githubUrl
   try {
@@ -35,9 +37,12 @@ async function resolveServerPath(projectPath) {
     const project = config.projects?.find((p) => p.path === projectPath);
     const githubUrl = project?.settings?.githubUrl;
     if (!githubUrl) {
-      console.warn(`Project path ${projectPath} does not exist and no githubUrl configured — using project dir name as fallback`);
+      log(`No githubUrl configured for project — trying fallback by directory name`);
       const fallback = join(SERVER_PROJECTS_DIR, basename(projectPath));
-      if (existsSync(fallback)) return fallback;
+      if (existsSync(fallback)) {
+        log(`Using fallback path: ${fallback}`);
+        return fallback;
+      }
       throw new Error(`No githubUrl and fallback ${fallback} does not exist`);
     }
 
@@ -48,20 +53,19 @@ async function resolveServerPath(projectPath) {
     const clonePath = join(SERVER_PROJECTS_DIR, repoName);
 
     if (existsSync(clonePath)) {
-      console.log(`Using existing clone at ${clonePath} for ${projectPath}`);
+      log(`Using existing clone at ${clonePath}`);
       return clonePath;
     }
 
     // Clone the repo
-    console.log(`Cloning ${githubUrl} to ${clonePath} (original path ${projectPath} not found on server)`);
+    log(`Cloning ${githubUrl} to ${clonePath}...`);
     mkdirSync(SERVER_PROJECTS_DIR, { recursive: true });
     const cloneUrl = `https://github.com/${match[1]}/${match[2]}.git`;
     execSync(`git clone ${cloneUrl} "${clonePath}"`, { encoding: "utf-8", timeout: 120000 });
-    console.log(`Cloned successfully to ${clonePath}`);
+    log(`Clone complete: ${clonePath}`);
     return clonePath;
   } catch (err) {
-    console.error(`Failed to resolve server path for ${projectPath}:`, err.message);
-    // Last resort: return the original path (will fail with a clearer error downstream)
+    log(`Failed to resolve project path: ${err.message}`);
     return projectPath;
   }
 }
@@ -69,8 +73,8 @@ async function resolveServerPath(projectPath) {
 // --- CWD resolvers ---
 
 const CWD_RESOLVERS = {
-  projectPath: (h) => resolveServerPath(h.projectPath),
-  worktreeOrProject: (h) => resolveServerPath(h.context.result?.worktreePath || h.projectPath),
+  projectPath: (h, log) => resolveServerPath(h.projectPath, log),
+  worktreeOrProject: (h, log) => resolveServerPath(h.context.result?.worktreePath || h.projectPath, log),
 };
 
 // --- Prompt builder registry ---
@@ -496,7 +500,11 @@ export function runAgent(role, taskId, handoff, callbacks) {
   const run = async () => {
     try {
       // Resolve CWD (may clone repo if path doesn't exist on this server)
-      const cwd = await config.getCwd(handoff);
+      const log = (msg) => {
+        console.log(`[${role}] ${msg}`);
+        if (callbacks.onStdout) callbacks.onStdout(`[system] ${msg}\n`);
+      };
+      const cwd = await config.getCwd(handoff, log);
 
       const options = {
         abortController,
