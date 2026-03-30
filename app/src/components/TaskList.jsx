@@ -25,6 +25,7 @@ export function TaskList({
   onSelectTask,
   onDelete,
   onStart,
+  onStop,
   onRestart,
   onContinue,
   onViewPlan,
@@ -250,12 +251,14 @@ export function TaskList({
             contextMenu.target?._bulk
               ? buildBulkTaskMenuItems(contextMenu.target.tasks, {
                   onStart,
+                  onStop,
                   onRestart,
                   onContinue,
                   onDelete,
                 })
               : buildTaskMenuItems(contextMenu.target, {
                   onStart,
+                  onStop,
                   onRestart,
                   onContinue,
                   onDelete,

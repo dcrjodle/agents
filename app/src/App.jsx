@@ -48,6 +48,7 @@ export function App() {
     createTask,
     startTask,
     startAllTasks,
+    stopTask,
     restartTask,
     continueTask,
     sendEvent,
@@ -327,6 +328,7 @@ export function App() {
     if (selectedTask) {
       const descriptionMap = {
         "start": "start selected task",
+        "stop": "stop running task",
         "view plan": "view plan for selected task",
         "approve pr": "approve pull request for selected task",
         "continue": "continue selected task from failure point",
@@ -335,6 +337,7 @@ export function App() {
       };
       const menuItems = buildTaskMenuItems(selectedTask, {
         onStart: startTask,
+        onStop: stopTask,
         onRestart: restartTask,
         onContinue: continueTask,
         onDelete: deleteTask,
@@ -454,6 +457,7 @@ export function App() {
             onSelectTask={setSelectedTaskId}
             onDelete={deleteTask}
             onStart={startTask}
+            onStop={stopTask}
             onRestart={restartTask}
             onContinue={continueTask}
             onViewPlan={handleViewPlan}

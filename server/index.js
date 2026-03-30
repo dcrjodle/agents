@@ -355,8 +355,18 @@ function wireActor(id, actor) {
 
     // Skip side-effects (agent spawning, auto-approvals, broadcasts) during rehydration replay
     if (!actor._rehydrating) {
-      // Spawn agent or script if state has one
-      if (STATE_TO_ROLE[sk] || STATE_TO_SCRIPT[sk]) {
+      // Skip testing if project setting is enabled — check before spawning agent
+      if (sk === "testing") {
+        getProjectSettings(actor._projectPath).then((projectSettings) => {
+          if (projectSettings.skipTesting) {
+            broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "skipped", currentStep: "Skipping tests (project setting)" } });
+            actor.send({ type: "TESTS_PASSED" });
+          } else if (STATE_TO_ROLE[sk] || STATE_TO_SCRIPT[sk]) {
+            onStateTransition(id, snapshot.value, snapshot.context);
+          }
+        });
+      } else if (STATE_TO_ROLE[sk] || STATE_TO_SCRIPT[sk]) {
+        // Spawn agent or script if state has one
         onStateTransition(id, snapshot.value, snapshot.context);
       }
 
@@ -755,6 +765,60 @@ app.post("/tasks/:id/restart", async (req, res) => {
   });
 
   broadcast({ type: "TASK_RESTARTED", taskId: id });
+
+  res.json(getTaskSnapshot(id));
+});
+
+app.post("/tasks/:id/stop", async (req, res) => {
+  const id = req.params.id;
+  const actor = actors.get(id);
+  if (!actor) return res.status(404).json({ error: "task not found or not running" });
+
+  const snap = actor.getSnapshot();
+  const sk = stateKey(snap.value);
+
+  if (sk === "idle" || sk === "done" || sk === "failed") {
+    return res.status(400).json({ error: `Task is in state "${sk}", nothing to stop` });
+  }
+
+  // Kill any running agent process
+  cleanupAgent(id);
+  clearSession(id);
+
+  // Stop the current actor and recreate in failed state so user can continue later
+  actor.stop();
+  actors.delete(id);
+  taskAutoContinues.delete(id);
+
+  const restoredMachine = workflowMachine.provide({});
+  const newActor = createActor(restoredMachine, {
+    snapshot: {
+      value: "failed",
+      context: {
+        ...snap.context,
+        error: "Stopped by user",
+        failedFrom: sk,
+      },
+    },
+  });
+  newActor._description = actor._description;
+  newActor._projectPath = actor._projectPath;
+  newActor._createdAt = actor._createdAt;
+
+  actors.set(id, newActor);
+  wireActor(id, newActor);
+  newActor.start();
+
+  const newSnap = newActor.getSnapshot();
+  await dbUpdateTask(id, {
+    state: newSnap.value,
+    stateKey: stateKey(newSnap.value),
+    label: stateLabel(newSnap.value),
+    context: newSnap.context,
+  });
+
+  broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "stopped", currentStep: `Stopped by user (was ${sk})` } });
+  broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
 
   res.json(getTaskSnapshot(id));
 });

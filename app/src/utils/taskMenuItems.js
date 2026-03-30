@@ -1,4 +1,4 @@
-import { Play, Pencil, ClipboardList, Check, RotateCcw, X } from "lucide-react";
+import { Play, Pencil, ClipboardList, Check, RotateCcw, X, Square } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 
 /**
@@ -13,7 +13,7 @@ import { stateKey } from "../hooks/useWorkflow.js";
  * @returns {Array} Menu items
  */
 export function buildBulkTaskMenuItems(tasks, handlers = {}) {
-  const { onStart, onRestart, onContinue, onDelete } = handlers;
+  const { onStart, onStop, onRestart, onContinue, onDelete } = handlers;
 
   const idleTasks = tasks.filter((t) => {
     const sk = t.stateKey || stateKey(t.state);
@@ -22,6 +22,10 @@ export function buildBulkTaskMenuItems(tasks, handlers = {}) {
   const nonIdleTasks = tasks.filter((t) => {
     const sk = t.stateKey || stateKey(t.state);
     return sk !== "idle";
+  });
+  const runningTasks = tasks.filter((t) => {
+    const sk = t.stateKey || stateKey(t.state);
+    return sk !== "idle" && sk !== "done" && sk !== "failed";
   });
   const continuableTasks = tasks.filter((t) => {
     const sk = t.stateKey || stateKey(t.state);
@@ -35,6 +39,15 @@ export function buildBulkTaskMenuItems(tasks, handlers = {}) {
       label: `start ${idleTasks.length}`,
       icon: Play,
       action: () => idleTasks.forEach((t) => onStart(t.id)),
+    });
+  }
+
+  if (runningTasks.length > 0 && onStop) {
+    items.push({
+      label: `stop ${runningTasks.length}`,
+      icon: Square,
+      danger: true,
+      action: () => runningTasks.forEach((t) => onStop(t.id)),
     });
   }
 
@@ -87,6 +100,7 @@ export function buildBulkTaskMenuItems(tasks, handlers = {}) {
 export function buildTaskMenuItems(task, handlers = {}) {
   const {
     onStart,
+    onStop,
     onRestart,
     onContinue,
     onDelete,
@@ -113,6 +127,16 @@ export function buildTaskMenuItems(task, handlers = {}) {
       label: "edit",
       icon: Pencil,
       action: () => onStartEditing(task),
+    });
+  }
+
+  const isRunning = !isIdle && sk !== "done" && sk !== "failed";
+  if (isRunning && onStop) {
+    items.push({
+      label: "stop",
+      icon: Square,
+      danger: true,
+      action: () => onStop(task.id),
     });
   }
 

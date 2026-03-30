@@ -497,6 +497,15 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const stopTask = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to stop task: ${res.statusText}`);
+    return res.json();
+  };
+
   const restartTask = async (taskId) => {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/restart`, {
       method: "POST",
@@ -570,7 +579,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, createTask, startTask, startAllTasks, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };
