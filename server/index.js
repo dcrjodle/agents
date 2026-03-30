@@ -45,7 +45,8 @@ app.use((req, res, next) => {
 });
 
 // Serve static frontend build (production)
-const distPath = join(__dirname, "..", "app", "dist");
+const __dirname_root = dirname(fileURLToPath(import.meta.url));
+const distPath = join(__dirname_root, "..", "app", "dist");
 if (existsSync(distPath)) {
   app.use(express.static(distPath));
 }
