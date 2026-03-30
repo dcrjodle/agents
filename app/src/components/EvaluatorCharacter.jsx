@@ -97,12 +97,11 @@ function drawEvalChar(ctx, x, y, scale, frame, action, direction) {
 }
 
 /**
- * Draw score badge above the character.
+ * Draw score badge at the given centre coordinates.
  */
-function drawScoreBadge(ctx, cx, y, score, scale) {
+function drawScoreBadge(ctx, cx, cy, score, scale) {
   const text = score != null ? String(score) : "?";
   const radius = scale * 4.5;
-  const badgeY = y - radius - scale * 2;
 
   // Ring colour
   let ringColor = "#888";
@@ -114,7 +113,7 @@ function drawScoreBadge(ctx, cx, y, score, scale) {
 
   // Ring
   ctx.beginPath();
-  ctx.arc(cx, badgeY, radius, 0, Math.PI * 2);
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(10,10,20,0.85)";
   ctx.fill();
   ctx.lineWidth = scale * 0.7;
@@ -126,7 +125,7 @@ function drawScoreBadge(ctx, cx, y, score, scale) {
   ctx.font = `bold ${Math.max(9, scale * 2.8)}px "SF Mono", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, cx, badgeY);
+  ctx.fillText(text, cx, cy);
   ctx.textAlign = "start";
   ctx.textBaseline = "alphabetic";
 }
@@ -202,8 +201,8 @@ const CANVAS_W = 80;
 const CANVAS_H = 100;
 const CHAR_SCALE = 4;
 
-const COMPACT_CANVAS_W = 40;
-const COMPACT_CANVAS_H = 52;
+const COMPACT_CANVAS_W = 50;
+const COMPACT_CANVAS_H = 34;
 const COMPACT_CHAR_SCALE = 2;
 
 /**
@@ -277,17 +276,32 @@ export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate,
       const scale = charScale;
       const charW = 12 * scale;
       const charH = 14 * scale;
-      const cx = canvasW / 2;
-      const charX = cx - charW / 2;
-      const charY = canvasH - charH - 4;
 
-      // Draw score badge above character
-      drawScoreBadge(ctx, cx, charY, score, scale);
+      let charX, charY, badgeCx, badgeCy;
+      if (compact) {
+        // Badge to the left of the character
+        const badgeAreaW = 22;
+        charX = badgeAreaW;
+        charY = Math.round((canvasH - charH) / 2);
+        badgeCx = badgeAreaW / 2;
+        badgeCy = charY + charH / 2;
+      } else {
+        const cx = canvasW / 2;
+        charX = cx - charW / 2;
+        charY = canvasH - charH - 4;
+        const badgeRadius = scale * 4.5;
+        badgeCx = cx;
+        badgeCy = charY - badgeRadius - scale * 2;
+      }
+      const charCx = charX + charW / 2;
+
+      // Draw score badge
+      drawScoreBadge(ctx, badgeCx, badgeCy, score, scale);
 
       // Shadow
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.beginPath();
-      ctx.ellipse(cx, charY + charH + 2, charW / 2.5, 3, 0, 0, Math.PI * 2);
+      ctx.ellipse(charCx, charY + charH + 2, charW / 2.5, 3, 0, 0, Math.PI * 2);
       ctx.fill();
 
       // Character
@@ -299,7 +313,7 @@ export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate,
         for (let i = 0; i < 5; i++) {
           const angle = (frame * 0.5 + i * 1.2) % (Math.PI * 2);
           const radius = 15 + Math.sin(frame * 0.3 + i) * 8;
-          const sx = cx + Math.cos(angle) * radius;
+          const sx = charCx + Math.cos(angle) * radius;
           const sy = charY + charH / 2 + Math.sin(angle) * radius;
           ctx.fillStyle = sparkleColors[i % sparkleColors.length];
           ctx.fillRect(sx - 1, sy - 1, 3, 3);
@@ -328,7 +342,7 @@ export function EvaluatorCharacter({ evaluationResult, isEvaluating, onEvaluate,
       running = false;
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [animAction, score, canvasW, canvasH, charScale]);
+  }, [animAction, score, canvasW, canvasH, charScale, compact]);
 
   return (
     <div
