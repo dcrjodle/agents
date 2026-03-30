@@ -1555,6 +1555,72 @@ async function start() {
     }
   }
 
+  // --- Ivy Studio launcher endpoint ---
+
+  const activeStudioProcesses = new Map();
+
+  app.post("/ivy-studio", async (req, res) => {
+    const { branch } = req.body;
+    if (!branch) return res.status(400).json({ error: "branch required" });
+
+    const studioId = `studio-${Date.now()}`;
+    const scriptPath = join(process.env.HOME, "scripts", "ivy-studio-local.sh");
+
+    if (!existsSync(scriptPath)) {
+      return res.status(500).json({ error: `Script not found: ${scriptPath}` });
+    }
+
+    const child = spawn("bash", [scriptPath, `--branch=${branch}`], {
+      stdio: ["pipe", "pipe", "pipe"],
+      detached: true,
+    });
+
+    activeStudioProcesses.set(studioId, { child, branch });
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+      broadcast({ type: "IVY_STUDIO_OUTPUT", studioId, data: chunk.toString() });
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+      broadcast({ type: "IVY_STUDIO_OUTPUT", studioId, data: chunk.toString() });
+    });
+    child.on("close", (code) => {
+      activeStudioProcesses.delete(studioId);
+      broadcast({ type: "IVY_STUDIO_STOPPED", studioId, code });
+    });
+
+    broadcast({ type: "IVY_STUDIO_STARTED", studioId, branch });
+    res.status(202).json({ studioId, branch });
+  });
+
+  app.post("/ivy-studio/stop", async (req, res) => {
+    const { studioId } = req.body;
+    const entry = studioId ? activeStudioProcesses.get(studioId) : null;
+
+    if (!entry) {
+      // Stop all
+      for (const [id, e] of activeStudioProcesses) {
+        try { process.kill(-e.child.pid, "SIGTERM"); } catch { e.child.kill("SIGTERM"); }
+      }
+      activeStudioProcesses.clear();
+      return res.json({ stopped: "all" });
+    }
+
+    try { process.kill(-entry.child.pid, "SIGTERM"); } catch { entry.child.kill("SIGTERM"); }
+    activeStudioProcesses.delete(studioId);
+    res.json({ stopped: studioId });
+  });
+
+  app.get("/ivy-studio/status", (req, res) => {
+    const running = [];
+    for (const [id, entry] of activeStudioProcesses) {
+      running.push({ studioId: id, branch: entry.branch });
+    }
+    res.json({ running });
+  });
+
   // SPA catch-all: serve index.html for non-API routes (production)
   if (existsSync(distPath)) {
     app.get("/{*splat}", (req, res) => {
@@ -1563,9 +1629,10 @@ async function start() {
   }
 
   const PORT = process.env.PORT || 3001;
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log(`WebSocket on ws://0.0.0.0:${PORT}`);
+  const HOST = process.env.HOST || "localhost";
+  server.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
+    console.log(`WebSocket on ws://${HOST}:${PORT}`);
   });
 }
 
