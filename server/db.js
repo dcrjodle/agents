@@ -205,6 +205,13 @@ export async function updateProjectPath(oldPath, newPath) {
     .select()
     .single();
   if (error) throw error;
+
+  // Update all tasks referencing the old path
+  await supabase
+    .from("tasks")
+    .update({ project_path: newPath })
+    .eq("project_path", oldPath);
+
   return { name: data.name, path: data.path, settings: data.settings || {} };
 }
 
