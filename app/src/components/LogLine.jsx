@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ClipboardList } from "lucide-react";
 import { STATE_COLORS } from "../constants.js";
 
 const TYPE_STYLES = {
@@ -94,7 +95,7 @@ export function LogLine({ entry, onViewPlan }) {
           fontWeight: 600,
           textDecoration: hovered ? "underline" : "none",
         }}>
-          {"\uD83D\uDCCB"} {text}
+          <ClipboardList size={14} strokeWidth={1.75} style={{ verticalAlign: 'middle', marginRight: 4 }} />{text}
         </span>
       </div>
     );

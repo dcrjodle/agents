@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { Button } from "./Button.jsx";
 
@@ -260,7 +261,7 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
           borderBottom: expanded ? "1px solid #2d2d2d" : "none",
         }}
       >
-        <span style={{ color: "#6b7280", fontSize: 12, flexShrink: 0 }}>{expanded ? "▼" : "▶"}</span>
+        <span style={{ color: "#6b7280", flexShrink: 0, display: "inline-flex" }}>{expanded ? <ChevronDown size={14} strokeWidth={1.75} /> : <ChevronRight size={14} strokeWidth={1.75} />}</span>
 
         {/* Status badge */}
         <span
@@ -326,7 +327,7 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
             gap: 8,
           }}
         >
-          <span style={{ color: "#fca5a5", fontSize: 14, flexShrink: 0 }}>⚠</span>
+          <span style={{ color: "#fca5a5", flexShrink: 0, display: "inline-flex" }}><AlertTriangle size={14} strokeWidth={1.75} /></span>
           <div style={{ flex: 1 }}>
             {sk === "failed" && task.context?.error && (
               <div style={{ color: "#fca5a5", fontSize: 12, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { ChevronRight } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { useContextMenu } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
@@ -119,7 +120,14 @@ export function TaskList({
       <div
         key={task.id}
         className={`task-row${isSelected ? " selected" : ""}`}
-        onClick={() => !isEditing && onSelectTask(isSelected ? null : task.id)}
+        onClick={() => {
+          if (isEditing) return;
+          if (sk === "planning.awaitingApproval" && pendingPlans[task.id]) {
+            onViewPlan(task.id);
+          } else {
+            onSelectTask(isSelected ? null : task.id);
+          }
+        }}
         onContextMenu={(e) => !isEditing && openContextMenu(e, task)}
       >
         <div className="task-row-header">
@@ -171,7 +179,7 @@ export function TaskList({
                 transform: doneCollapsed ? "rotate(0deg)" : "rotate(90deg)",
               }}
             >
-              ▶
+              <ChevronRight size={14} strokeWidth={1.75} />
             </span>
             <span>done</span>
             <span className="task-list-done-badge">
