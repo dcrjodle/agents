@@ -32,6 +32,7 @@ import {
   clearTaskLogs,
 } from "./db.js";
 import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
+import { resolveServerPath } from "./resolve-path.js";
 
 const app = express();
 const server = createServer(app);
@@ -248,9 +249,17 @@ function cleanupAgent(taskId) {
 
 /**
  * Get project settings from the config by path.
+ * Falls back to matching by directory basename if exact path not found
+ * (handles resolved server paths vs original client paths).
  */
 async function getProjectSettings(projectPath) {
-  const project = await getProject(projectPath);
+  let project = await getProject(projectPath);
+  if (!project) {
+    // Try matching by basename (e.g. resolved ~/projects/repo vs stored /Users/joel/repo)
+    const dirName = projectPath.split("/").pop();
+    const allProjects = await getProjects();
+    project = allProjects.find((p) => p.path.split("/").pop() === dirName);
+  }
   return project?.settings || {};
 }
 
@@ -731,10 +740,11 @@ app.post("/tasks", async (req, res) => {
   if (!projectPath) return res.status(400).json({ error: "projectPath required" });
 
   const id = uuid();
+  const resolvedPath = await resolveServerPath(projectPath);
   const actor = createActor(workflowMachine);
   // Stash metadata on the actor for easy access
   actor._description = description;
-  actor._projectPath = projectPath;
+  actor._projectPath = resolvedPath;
   actor._createdAt = new Date().toISOString();
 
   actors.set(id, actor);
@@ -748,7 +758,7 @@ app.post("/tasks", async (req, res) => {
   await dbCreateTask({
     id,
     description,
-    projectPath,
+    projectPath: resolvedPath,
     state: snap.value,
     stateKey: stateKey(snap.value),
     label: stateLabel(snap.value),
@@ -758,7 +768,7 @@ app.post("/tasks", async (req, res) => {
 
   // Only start the workflow if autoStart is explicitly true
   if (autoStart) {
-    const projectSettings = await getProjectSettings(projectPath);
+    const projectSettings = await getProjectSettings(resolvedPath);
     const maxRetries = projectSettings.maxRetries ?? 5;
     actor.send({ type: "START", task: description, maxRetries });
   }
@@ -1555,9 +1565,10 @@ async function start() {
     const sk = typeof task.state === "string" ? task.state : stateKey(task.state);
 
     console.log(`Rehydrating task ${task.id} (state: ${sk})`);
+    const resolvedPath = await resolveServerPath(task.projectPath);
     const actor = createActor(workflowMachine);
     actor._description = task.description;
-    actor._projectPath = task.projectPath;
+    actor._projectPath = resolvedPath;
     actor._createdAt = task.createdAt;
 
     actors.set(task.id, actor);

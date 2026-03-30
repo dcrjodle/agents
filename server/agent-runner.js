@@ -1,72 +1,18 @@
 import { query, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, existsSync, readdirSync, mkdirSync } from "fs";
-import { join, dirname, basename } from "path";
+import { readFileSync, existsSync, readdirSync } from "fs";
+import { join, dirname } from "path";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
-import { homedir } from "os";
-import { getProjects } from "./db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENTS_DIR = join(__dirname, "..", "agents");
 const PORT = process.env.PORT || 3001;
-const SERVER_PROJECTS_DIR = join(homedir(), "projects");
 
 // Session store for resume support: taskId -> sessionId
 const sessionStore = new Map();
 
 export function clearSession(taskId) {
   sessionStore.delete(taskId);
-}
-
-// --- Server-side project path resolution ---
-
-/**
- * Ensure the project path exists on this machine.
- * If it doesn't (e.g. a Mac path on a Linux server), clone the repo
- * to ~/projects/<repo-name> using the project's githubUrl setting.
- */
-async function resolveServerPath(projectPath, log) {
-  if (existsSync(projectPath)) return projectPath;
-
-  log(`Path ${projectPath} not found on server, resolving...`);
-
-  // Try to fetch project settings for the githubUrl
-  try {
-    const projects = await getProjects();
-    const project = projects.find((p) => p.path === projectPath);
-    const githubUrl = project?.settings?.githubUrl;
-    if (!githubUrl) {
-      log(`No githubUrl configured for project — trying fallback by directory name`);
-      const fallback = join(SERVER_PROJECTS_DIR, basename(projectPath));
-      if (existsSync(fallback)) {
-        log(`Using fallback path: ${fallback}`);
-        return fallback;
-      }
-      throw new Error(`No githubUrl and fallback ${fallback} does not exist`);
-    }
-
-    // Derive clone target from repo name
-    const match = githubUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-    if (!match) throw new Error(`Cannot parse githubUrl: ${githubUrl}`);
-    const repoName = match[2];
-    const clonePath = join(SERVER_PROJECTS_DIR, repoName);
-
-    if (existsSync(clonePath)) {
-      log(`Using existing clone at ${clonePath}`);
-      return clonePath;
-    }
-
-    // Clone the repo
-    log(`Cloning ${githubUrl} to ${clonePath}...`);
-    mkdirSync(SERVER_PROJECTS_DIR, { recursive: true });
-    const cloneUrl = `https://github.com/${match[1]}/${match[2]}.git`;
-    execSync(`git clone ${cloneUrl} "${clonePath}"`, { encoding: "utf-8", timeout: 120000 });
-    log(`Clone complete: ${clonePath}`);
-    return clonePath;
-  } catch (err) {
-    log(`Failed to resolve project path: ${err.message}`);
-    return projectPath;
-  }
 }
 
 // --- CWD resolvers ---
@@ -462,6 +408,14 @@ export function runAgent(role, taskId, handoff, callbacks) {
     return { pid: null, kill: () => {}, gotResult: () => false };
   }
 
+  // Determine if we should resume an existing session
+  const retries = handoff.context.retries || 0;
+  const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
+  const prompt = canResume ? buildResumePrompt(handoff) : (config.buildPrompt ? config.buildPrompt(handoff) : handoff.instruction);
+  const resumeSessionId = canResume ? sessionStore.get(taskId) : undefined;
+
+  const cwd = config.getCwd(handoff);
+
   const abortController = new AbortController();
   let resultReceived = false;
   const fakePid = pidCounter++;
@@ -492,27 +446,6 @@ export function runAgent(role, taskId, handoff, callbacks) {
   // Start the query in the background
   const run = async () => {
     try {
-      // Resolve project path first (may clone repo if path doesn't exist on this server)
-      const log = (msg) => {
-        console.log(`[${role}] ${msg}`);
-        if (callbacks.onStdout) callbacks.onStdout(`[system] ${msg}\n`);
-      };
-      const resolvedPath = await resolveServerPath(handoff.projectPath, log);
-      handoff.projectPath = resolvedPath;
-
-      // Also resolve worktree path if present
-      if (handoff.context.result?.worktreePath) {
-        handoff.context.result.worktreePath = await resolveServerPath(handoff.context.result.worktreePath, log);
-      }
-
-      const cwd = config.getCwd(handoff);
-
-      // Build prompt after path resolution so all paths are correct
-      const retries = handoff.context.retries || 0;
-      const canResume = config.supportsResume && retries > 0 && sessionStore.has(taskId);
-      const prompt = canResume ? buildResumePrompt(handoff) : (config.buildPrompt ? config.buildPrompt(handoff) : handoff.instruction);
-      const resumeSessionId = canResume ? sessionStore.get(taskId) : undefined;
-
       const options = {
         abortController,
         cwd,
