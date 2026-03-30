@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
+import { randomUUID } from "crypto";
 import { spawn } from "child_process";
 import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs";
 import { tmpdir } from "os";
@@ -11,6 +12,7 @@ import { fileURLToPath } from "url";
 import { workflowMachine } from "../machine.js";
 import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
 import { clearSession, runAgent } from "./agent-runner.js";
+import { supabase } from "./supabase.js";
 import {
   getAllTasks as dbGetAllTasks,
   getTask as dbGetTask,
@@ -50,6 +52,79 @@ const distPath = join(__dirname_root, "..", "app", "dist");
 if (existsSync(distPath)) {
   app.use(express.static(distPath));
 }
+
+// --- Auth: session store and cookie helpers ---
+const sessions = new Map(); // token -> { email, createdAt }
+
+function parseCookies(cookieHeader) {
+  const cookies = {};
+  if (!cookieHeader) return cookies;
+  for (const pair of cookieHeader.split(";")) {
+    const [key, ...rest] = pair.trim().split("=");
+    if (key) cookies[key.trim()] = rest.join("=").trim();
+  }
+  return cookies;
+}
+
+function getSessionFromReq(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies.session;
+  return token ? sessions.get(token) : undefined;
+}
+
+// Login endpoint (before auth middleware)
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+
+  const { data, error } = await supabase
+    .from("admin_users")
+    .select("id, email, password_hash")
+    .eq("email", email)
+    .single();
+
+  if (error || !data || data.password_hash !== password) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  const token = randomUUID();
+  sessions.set(token, { email: data.email, createdAt: Date.now() });
+  res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+  res.json({ ok: true, email: data.email });
+});
+
+// Auth check endpoint
+app.get("/api/auth/check", (req, res) => {
+  const session = getSessionFromReq(req);
+  if (session) return res.json({ authenticated: true, email: session.email });
+  res.json({ authenticated: false });
+});
+
+// Logout endpoint
+app.post("/api/logout", (req, res) => {
+  const cookies = parseCookies(req.headers.cookie);
+  if (cookies.session) sessions.delete(cookies.session);
+  res.setHeader("Set-Cookie", "session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  res.json({ ok: true });
+});
+
+// Strip /api prefix (Vite proxy does this in dev, but in production we need it)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    req.url = req.url.replace(/^\/api/, "");
+  }
+  next();
+});
+
+// Auth middleware — protect all remaining routes
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return next();
+  // Internal agent-to-server calls (localhost only, no auth needed)
+  if (req.path.startsWith("/internal/")) return next();
+  const session = getSessionFromReq(req);
+  if (!session) return res.status(401).json({ error: "Unauthorized" });
+  next();
+});
 
 // In-memory XState actors keyed by task id
 const actors = new Map();
@@ -1314,7 +1389,15 @@ app.post("/evaluate", async (req, res) => {
 
 // --- WebSocket ---
 
-wss.on("connection", async (ws) => {
+wss.on("connection", async (ws, req) => {
+  // Auth check for WebSocket
+  const cookies = parseCookies(req.headers.cookie);
+  const session = cookies.session ? sessions.get(cookies.session) : undefined;
+  if (!session) {
+    ws.close(4001, "Unauthorized");
+    return;
+  }
+
   // Send current state of all tasks on connect
   const dbTasks = await dbGetAllTasks();
   const list = dbTasks.map((t) => {

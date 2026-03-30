@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Settings } from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
 import { useWorkflow, stateKey } from "./hooks/useWorkflow.js";
 import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
@@ -12,11 +12,38 @@ import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import { IconButton } from "./components/IconButton.jsx";
 import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
 import { ProjectToolbar } from "./components/ProjectToolbar.jsx";
+import { LoginPage } from "./components/LoginPage.jsx";
 import "./styles/layout.css";
+import "./styles/login.css";
 
 const API_BASE = "/api";
 
 export function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/auth/check`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.authenticated) setUser(data.email);
+        setAuthChecked(true);
+      })
+      .catch(() => setAuthChecked(true));
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch(`${API_BASE}/logout`, { method: "POST" });
+    setUser(null);
+  };
+
+  if (!authChecked) return null;
+  if (!user) return <LoginPage onLogin={(email) => setUser(email)} />;
+
+  return <AuthenticatedApp user={user} onLogout={handleLogout} />;
+}
+
+function AuthenticatedApp({ user, onLogout }) {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [taskInputsByProject, setTaskInputsByProject] = useState({});
@@ -443,10 +470,18 @@ export function App() {
             className="app-header-settings-btn"
           />
         </div>
-        <span className={`app-connection-status ${connected ? "connected" : "disconnected"}`}>
-          <span className={`app-connection-dot ${connected ? "connected" : "disconnected"}`} />
-          {connected ? "connected" : "disconnected"}
-        </span>
+        <div className="app-header-right">
+          <span className={`app-connection-status ${connected ? "connected" : "disconnected"}`}>
+            <span className={`app-connection-dot ${connected ? "connected" : "disconnected"}`} />
+            {connected ? "connected" : "disconnected"}
+          </span>
+          <IconButton
+            icon={LogOut}
+            onClick={onLogout}
+            title="logout"
+            className="app-header-settings-btn"
+          />
+        </div>
       </header>
 
       {projects.length > 0 && selectedProject ? (

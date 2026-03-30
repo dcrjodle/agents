@@ -32,6 +32,12 @@
   color: var(--text-dim);
 }
 
+.app-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .app-connection-status {
   font-size: 10px;
   display: flex;
