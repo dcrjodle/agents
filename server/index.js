@@ -39,6 +39,9 @@ const actors = new Map();
 // Track active agent processes per task
 const activeAgents = new Map(); // taskId -> { handle, timeoutTimer, staleTimer }
 
+// Track auto-continue attempts per task (resets on done or delete)
+const taskAutoContinues = new Map(); // taskId -> number
+
 // Agent timeout: kill agents that run too long (default 10 minutes)
 const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
 // Stale check: warn if no output for 2 minutes
@@ -346,6 +349,35 @@ function wireActor(id, actor) {
         plan: snapshot.context.plan,
       });
     }
+
+    // Clean up auto-continue counter when task completes successfully
+    if (sk === "done") {
+      taskAutoContinues.delete(id);
+    }
+
+    // Auto-continue from failed state (up to project maxRetries limit)
+    if (sk === "failed" && snapshot.context.failedFrom) {
+      const count = taskAutoContinues.get(id) ?? 0;
+      getProjectSettings(actor._projectPath).then((projectSettings) => {
+        const maxRetries = projectSettings.maxRetries ?? 5;
+        if (count < maxRetries) {
+          taskAutoContinues.set(id, count + 1);
+          const failedFrom = snapshot.context.failedFrom;
+          broadcastAndLog({
+            type: "AGENT_STATUS",
+            taskId: id,
+            agent: "auto-continue",
+            status: {
+              state: "running",
+              currentStep: `[auto-continue] Retrying from ${failedFrom} (attempt ${count + 1}/${maxRetries})...`,
+            },
+          });
+          setTimeout(() => {
+            if (actors.has(id)) actors.get(id).send({ type: "CONTINUE" });
+          }, 500);
+        }
+      });
+    }
   });
 }
 
@@ -491,7 +523,8 @@ app.post("/tasks", async (req, res) => {
   if (autoStart) {
     const projectSettings = await getProjectSettings(projectPath);
     const testingMode = projectSettings.testingMode || "build";
-    actor.send({ type: "START", task: description, testingMode });
+    const maxRetries = projectSettings.maxRetries ?? 5;
+    actor.send({ type: "START", task: description, testingMode, maxRetries });
   }
 
   const snapshot = getTaskSnapshot(id);
@@ -534,7 +567,8 @@ app.post("/tasks/:id/start", async (req, res) => {
 
   const projectSettings = await getProjectSettings(actor._projectPath);
   const testingMode = projectSettings.testingMode || "build";
-  actor.send({ type: "START", task: actor._description, testingMode });
+  const maxRetries = projectSettings.maxRetries ?? 5;
+  actor.send({ type: "START", task: actor._description, testingMode, maxRetries });
   res.json(getTaskSnapshot(req.params.id));
 });
 
@@ -753,6 +787,7 @@ app.delete("/tasks/:id", async (req, res) => {
     actor.stop();
     actors.delete(req.params.id);
   }
+  taskAutoContinues.delete(req.params.id);
   await clearTaskLogs(req.params.id);
   await dbDeleteTask(req.params.id);
   broadcast({ type: "TASK_DELETED", taskId: req.params.id });

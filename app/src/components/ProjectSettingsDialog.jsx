@@ -10,6 +10,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [testingMode, setTestingMode] = useState(settings.testingMode || "build");
+  const [maxRetries, setMaxRetries] = useState(settings.maxRetries ?? 5);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePlans, testingMode } }),
+        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePlans, testingMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -121,6 +122,41 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           <Button variant="toggle" active={autoApprovePlans} size="sm" onClick={() => setAutoApprovePlans((v) => !v)}>
             {autoApprovePlans ? "on" : "off"}
           </Button>
+        </label>
+
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            borderBottom: "1px solid var(--border-light)",
+            cursor: "default",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text)" }}>max retries</div>
+            <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
+              auto-continue limit for failed agents (1–10)
+            </div>
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={maxRetries}
+            onChange={(e) => setMaxRetries(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))}
+            style={{
+              width: 48,
+              textAlign: "center",
+              background: "var(--bg-input, var(--bg))",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text)",
+              fontSize: 12,
+              padding: "4px 6px",
+            }}
+          />
         </label>
 
         {/* Testing mode */}
