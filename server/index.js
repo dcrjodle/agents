@@ -24,6 +24,7 @@ import {
   getProjects,
   addProject,
   updateProjectSettings as dbUpdateProjectSettings,
+  updateProjectPath as dbUpdateProjectPath,
   removeProject,
   reorderProjects,
   seedConfig,
@@ -598,6 +599,20 @@ app.patch("/config/projects/settings", async (req, res) => {
   res.json(project);
 });
 
+app.patch("/config/projects/path", async (req, res) => {
+  const { oldPath, newPath } = req.body;
+  if (!oldPath || !newPath) return res.status(400).json({ error: "oldPath and newPath required" });
+  const existing = await getProject(oldPath);
+  if (!existing) return res.status(404).json({ error: "project not found" });
+  try {
+    const project = await dbUpdateProjectPath(oldPath, newPath);
+    res.json(project);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "a project with that path already exists" });
+    throw err;
+  }
+});
+
 app.delete("/config/projects", async (req, res) => {
   const { path } = req.body;
   if (!path) return res.status(400).json({ error: "path required" });
@@ -676,38 +691,6 @@ app.post("/deploy", async (req, res) => {
     res.json({ success, output: output.trim() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message, output: err.stdout || "" });
-  }
-});
-
-// --- Clone a GitHub repo to a local path ---
-app.post("/config/clone-repo", async (req, res) => {
-  const { githubUrl, targetPath } = req.body;
-  if (!githubUrl) return res.status(400).json({ error: "githubUrl required" });
-  if (!targetPath) return res.status(400).json({ error: "targetPath required" });
-
-  // Validate it looks like a GitHub URL
-  const match = githubUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-  if (!match) return res.status(400).json({ error: "Invalid GitHub URL" });
-
-  try {
-    if (existsSync(targetPath)) {
-      return res.status(409).json({ error: "Directory already exists", path: targetPath });
-    }
-    const { execSync } = await import("child_process");
-    // Ensure parent directory exists
-    const parentDir = targetPath.substring(0, targetPath.lastIndexOf("/"));
-    if (parentDir && !existsSync(parentDir)) {
-      mkdirSync(parentDir, { recursive: true });
-    }
-    // Normalize to HTTPS clone URL
-    const cloneUrl = `https://github.com/${match[1]}/${match[2]}.git`;
-    execSync(`git clone ${cloneUrl} "${targetPath}"`, {
-      encoding: "utf-8",
-      timeout: 120000,
-    });
-    res.json({ success: true, path: targetPath });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
   }
 });
 

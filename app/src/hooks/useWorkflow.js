@@ -653,20 +653,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  const cloneRepo = async (githubUrl, targetPath) => {
-    const res = await fetch(`${API_BASE}/config/clone-repo`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ githubUrl, targetPath }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || `Clone failed: ${res.statusText}`);
-    }
-    return res.json();
-  };
-
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, cloneRepo, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
 }
 
 export { stateKey };

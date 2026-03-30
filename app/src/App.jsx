@@ -91,7 +91,6 @@ function AuthenticatedApp({ user, onLogout }) {
     updateTask,
     launchIvyStudio,
     deploy,
-    cloneRepo,
   } = useWorkflow();
 
   useEffect(() => {
@@ -638,7 +637,6 @@ function AuthenticatedApp({ user, onLogout }) {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onClose={() => setShowSettings(false)}
-          onCloneRepo={cloneRepo}
         />
       )}
 

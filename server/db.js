@@ -197,6 +197,17 @@ export async function updateProjectSettings(path, settings) {
   return { name: data.name, path: data.path, settings: data.settings || {} };
 }
 
+export async function updateProjectPath(oldPath, newPath) {
+  const { data, error } = await supabase
+    .from("projects")
+    .update({ path: newPath })
+    .eq("path", oldPath)
+    .select()
+    .single();
+  if (error) throw error;
+  return { name: data.name, path: data.path, settings: data.settings || {} };
+}
+
 export async function removeProject(path) {
   const { error } = await supabase
     .from("projects")

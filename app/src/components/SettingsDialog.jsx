@@ -4,13 +4,6 @@ import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
 const API_BASE = "/api";
-const DEFAULT_CLONE_ROOT = "/home/joel.bystedt/projects";
-
-function parseGithubUrl(url) {
-  const match = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-  if (!match) return null;
-  return { owner: match[1], repo: match[2] };
-}
 
 export function SettingsDialog({
   darkMode,
@@ -19,13 +12,9 @@ export function SettingsDialog({
   onAddProject,
   onRemoveProject,
   onClose,
-  onCloneRepo,
 }) {
   const [newName, setNewName] = useState("");
   const [newPath, setNewPath] = useState("");
-  const [githubUrl, setGithubUrl] = useState("");
-  const [cloning, setCloning] = useState(false);
-  const [cloneError, setCloneError] = useState(null);
   const [picking, setPicking] = useState(false);
 
   useEffect(() => {
@@ -36,40 +25,11 @@ export function SettingsDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const handleGithubUrlChange = (url) => {
-    setGithubUrl(url);
-    setCloneError(null);
-    const parsed = parseGithubUrl(url);
-    if (parsed) {
-      setNewName(parsed.repo);
-      setNewPath(`${DEFAULT_CLONE_ROOT}/${parsed.repo}`);
-    }
-  };
-
   const handleAdd = async () => {
     if (!newName.trim() || !newPath.trim()) return;
-    setCloneError(null);
-
-    // If a GitHub URL is provided, clone first
-    if (githubUrl.trim() && onCloneRepo) {
-      setCloning(true);
-      try {
-        await onCloneRepo(githubUrl.trim(), newPath.trim());
-      } catch (err) {
-        // If directory already exists, that's fine — just add the project
-        if (!err.message.includes("already exists")) {
-          setCloneError(err.message);
-          setCloning(false);
-          return;
-        }
-      }
-      setCloning(false);
-    }
-
     await onAddProject(newName.trim(), newPath.trim());
     setNewName("");
     setNewPath("");
-    setGithubUrl("");
   };
 
   return (
@@ -151,20 +111,6 @@ export function SettingsDialog({
 
         {/* Add project */}
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-          <input
-            value={githubUrl}
-            onChange={(e) => handleGithubUrlChange(e.target.value)}
-            placeholder="github url (auto-fills name & path)"
-            style={{
-              fontSize: 11,
-              padding: "4px 8px",
-              border: "1px solid var(--border)",
-              borderRadius: 3,
-              background: "var(--bg-muted)",
-              color: "var(--text)",
-              fontFamily: "var(--font-mono)",
-            }}
-          />
           <div style={{ display: "flex", gap: 6 }}>
             <input
               value={newName}
@@ -181,8 +127,8 @@ export function SettingsDialog({
                 fontFamily: "var(--font-mono)",
               }}
             />
-            <Button variant="secondary" size="sm" disabled={cloning} onClick={handleAdd}>
-              {cloning ? "cloning..." : githubUrl.trim() ? "clone & add" : "add"}
+            <Button variant="secondary" size="sm" onClick={handleAdd}>
+              add
             </Button>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
@@ -228,11 +174,6 @@ export function SettingsDialog({
               {picking ? "…" : "browse"}
             </Button>
           </div>
-          {cloneError && (
-            <div style={{ fontSize: 10, color: "var(--accent-red, #ef4444)" }}>
-              {cloneError}
-            </div>
-          )}
         </div>
       </div>
     </div>

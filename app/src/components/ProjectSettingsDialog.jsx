@@ -7,13 +7,13 @@ const API_BASE = "/api";
 
 export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const settings = project.settings || {};
+  const [projectPath, setProjectPath] = useState(project.path);
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [autoApprovePr, setAutoApprovePr] = useState(settings.autoApprovePr !== false);
   const [skipTesting, setSkipTesting] = useState(settings.skipTesting === true);
   const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
   const [maxRetries, setMaxRetries] = useState(settings.maxRetries ?? 5);
-  const [githubUrl, setGithubUrl] = useState(settings.githubUrl || "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -27,10 +27,27 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const trimmedPath = projectPath.trim();
+
+      // Update path if changed
+      if (trimmedPath && trimmedPath !== project.path) {
+        const pathRes = await fetch(`${API_BASE}/config/projects/path`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ oldPath: project.path, newPath: trimmedPath }),
+        });
+        if (!pathRes.ok) {
+          const err = await pathRes.json().catch(() => ({}));
+          alert(err.error || "Failed to update project path");
+          setSaving(false);
+          return;
+        }
+      }
+
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries, githubUrl: githubUrl.trim() || undefined } }),
+        body: JSON.stringify({ path: trimmedPath || project.path, settings: { createPr, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -79,30 +96,14 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
         </div>
 
         {/* Project path */}
-        <div style={{
-          padding: "6px 8px",
-          marginBottom: 16,
-          background: "var(--bg-muted)",
-          borderRadius: 4,
-          fontSize: 10,
-          fontFamily: "var(--font-mono)",
-          color: "var(--text-dim)",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }} title={project.path}>
-          {project.path}
-        </div>
-
-        {/* GitHub URL */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, marginBottom: 6 }}>
-            repository
+            project path
           </div>
           <input
-            value={githubUrl}
-            onChange={(e) => setGithubUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo"
+            value={projectPath}
+            onChange={(e) => setProjectPath(e.target.value)}
+            placeholder="/path/to/project"
             style={{
               width: "100%",
               boxSizing: "border-box",
@@ -115,6 +116,9 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
               fontFamily: "var(--font-mono)",
             }}
           />
+          <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
+            working directory for agents on the server
+          </div>
         </div>
 
         {/* Workflow settings */}
