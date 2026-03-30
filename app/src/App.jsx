@@ -21,7 +21,7 @@ export function App() {
   const [taskInputsByProject, setTaskInputsByProject] = useState({});
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [viewingPlanTaskId, setViewingPlanTaskId] = useState(null);
-  const [viewMode, setViewMode] = useState("nodes");
+  const [viewMode, setViewMode] = useState("stream");
   const [showSettings, setShowSettings] = useState(false);
   const [projectSettingsTarget, setProjectSettingsTarget] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
