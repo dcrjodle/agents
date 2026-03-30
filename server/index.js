@@ -72,8 +72,16 @@ function getSessionFromReq(req) {
   return token ? sessions.get(token) : undefined;
 }
 
+// Strip /api prefix (Vite proxy does this in dev, but in production we need it)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    req.url = req.url.replace(/^\/api/, "");
+  }
+  next();
+});
+
 // Login endpoint (before auth middleware)
-app.post("/api/login", async (req, res) => {
+app.post("/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
@@ -94,26 +102,18 @@ app.post("/api/login", async (req, res) => {
 });
 
 // Auth check endpoint
-app.get("/api/auth/check", (req, res) => {
+app.get("/auth/check", (req, res) => {
   const session = getSessionFromReq(req);
   if (session) return res.json({ authenticated: true, email: session.email });
   res.json({ authenticated: false });
 });
 
 // Logout endpoint
-app.post("/api/logout", (req, res) => {
+app.post("/logout", (req, res) => {
   const cookies = parseCookies(req.headers.cookie);
   if (cookies.session) sessions.delete(cookies.session);
   res.setHeader("Set-Cookie", "session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
   res.json({ ok: true });
-});
-
-// Strip /api prefix (Vite proxy does this in dev, but in production we need it)
-app.use((req, res, next) => {
-  if (req.path.startsWith("/api/")) {
-    req.url = req.url.replace(/^\/api/, "");
-  }
-  next();
 });
 
 // Auth middleware — protect all remaining routes
