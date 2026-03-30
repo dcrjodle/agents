@@ -18,7 +18,7 @@ import {
   getTaskLogs,
   clearTaskLogs,
 } from "./db.js";
-import { addMemoryEntry, getMemory, getAllMemory } from "./memory-db.js";
+import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
 
 const app = express();
 const server = createServer(app);
@@ -920,7 +920,7 @@ app.get("/internal/task-context/:taskId", (req, res) => {
 });
 
 app.post("/internal/add-memory", async (req, res) => {
-  const { taskId, content, type, agentRole } = req.body;
+  const { taskId, content, category, agentRole } = req.body;
   if (!taskId || !content) return res.status(400).json({ error: "taskId and content required" });
 
   // Resolve the agent role from the active task state, with optional override
@@ -935,7 +935,7 @@ app.post("/internal/add-memory", async (req, res) => {
   const actor = actors.get(taskId);
   const projectPath = actor ? actor._projectPath : null;
 
-  const entry = await addMemoryEntry(role, { content, type: type || "info", taskId, projectPath });
+  const entry = await addMemoryEntry(role, { content, category: category || null, taskId, projectPath });
 
   broadcast({ type: "MEMORY_UPDATED", role, entry });
 
@@ -944,7 +944,7 @@ app.post("/internal/add-memory", async (req, res) => {
     time,
     type: "memory",
     agent: role,
-    data: `[memory:${entry.type}] ${entry.content}`,
+    data: `[memory:${entry.category || "unknown"}] ${entry.content}`,
     entry,
   });
 
@@ -976,12 +976,18 @@ const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "gith
 app.get("/memory/:role", async (req, res) => {
   const { role } = req.params;
   if (!KNOWN_ROLES.has(role)) return res.status(400).json({ error: "Unknown role" });
-  const entries = await getMemory(role);
+  const { projectPath } = req.query;
+  const entries = projectPath
+    ? await getMemoryByProject(role, projectPath)
+    : await getMemory(role);
   res.json(entries);
 });
 
 app.get("/memory", async (req, res) => {
-  const all = await getAllMemory();
+  const { projectPath } = req.query;
+  const all = projectPath
+    ? await getAllMemoryByProject(projectPath)
+    : await getAllMemory();
   res.json(all);
 });
 

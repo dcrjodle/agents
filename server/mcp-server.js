@@ -84,15 +84,22 @@ server.registerTool("get_task_context", {
   return { content: [{ type: "text", text: JSON.stringify(ctx, null, 2) }] };
 });
 
-// add_memory — save a useful discovery to persistent memory
+// add_memory — save a project-relevant discovery to persistent memory
 server.registerTool("add_memory", {
-  description: "Save a useful discovery (problem, error, warning, rule or pattern) to this agent's persistent memory so it can be referenced in future runs.",
+  description: "Save a useful discovery to this agent's persistent memory so it can be referenced in future runs. Only store information relevant to one of the five allowed categories.",
   inputSchema: {
     content: z.string().describe("The useful information to remember (one concise sentence)"),
-    type: z.enum(["problem", "error", "warning", "rule", "pattern", "info"]).describe("Category of the memory entry"),
+    category: z.enum(["build_test", "architecture", "business", "code_quality", "framework_api"]).describe(
+      "Category of the memory entry. " +
+      "build_test: how to build, run, or test this project (commands, scripts, env vars). " +
+      "architecture: project structure, major modules, data flow, key design decisions. " +
+      "business: product goals, domain rules, feature intent, user-facing requirements. " +
+      "code_quality: coding conventions, style rules, patterns to follow or avoid in this codebase. " +
+      "framework_api: framework/library API details discovered during work (so they don't need to be looked up again)."
+    ),
   },
-}, async ({ content, type }) => {
-  await post("/internal/add-memory", { content, type });
+}, async ({ content, category }) => {
+  await post("/internal/add-memory", { content, category });
   return { content: [{ type: "text", text: "Memory entry saved." }] };
 });
 
@@ -112,12 +119,20 @@ server.registerTool("update_avatar", {
 
 // get_memory — retrieve entries from agent memory database
 server.registerTool("get_memory", {
-  description: "Retrieve entries from this agent's memory database (or another role's memory).",
+  description: "Retrieve entries from this agent's memory database (or another role's memory). Always call this with projectPath at the start of a task to load project-specific knowledge.",
   inputSchema: {
     role: z.string().optional().describe("Agent role to fetch memory for. Omit to fetch all memory entries."),
+    projectPath: z.string().optional().describe("Absolute path to the project. When supplied, only entries for that project are returned. Pass this at the start of every task to load project-scoped knowledge."),
   },
-}, async ({ role } = {}) => {
-  const path = role ? `/memory/${encodeURIComponent(role)}` : "/memory";
+}, async ({ role, projectPath } = {}) => {
+  let path;
+  if (role) {
+    path = `/memory/${encodeURIComponent(role)}`;
+    if (projectPath) path += `?projectPath=${encodeURIComponent(projectPath)}`;
+  } else {
+    path = "/memory";
+    if (projectPath) path += `?projectPath=${encodeURIComponent(projectPath)}`;
+  }
   const data = await get(path);
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
 });

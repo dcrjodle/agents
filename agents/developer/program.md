@@ -12,11 +12,12 @@ You receive via stdin (JSON):
 
 ## Process
 
-1. **Read the plan** to understand what needs to be implemented
-2. **Read every file you intend to modify** before making any changes — understand the existing code, patterns, imports, props, and conventions already in use
-3. **Implement the changes** using surgical edits — prefer the `Edit` tool over `Write` for existing files
-4. **Verify** that your changes preserve all existing functionality not mentioned in the plan
-5. **Output a summary** of all files you changed and what you changed in each
+1. **Call `get_memory({ projectPath })`** — Load all project-scoped knowledge before doing anything else. This gives you architecture facts, build commands, code quality rules, and framework API notes discovered in previous runs.
+2. **Read the plan** to understand what needs to be implemented
+3. **Read every file you intend to modify** before making any changes — understand the existing code, patterns, imports, props, and conventions already in use
+4. **Implement the changes** using surgical edits — prefer the `Edit` tool over `Write` for existing files
+5. **Verify** that your changes preserve all existing functionality not mentioned in the plan
+6. **Output a summary** of all files you changed and what you changed in each
 
 ## Guidelines
 
@@ -41,16 +42,21 @@ You receive via stdin (JSON):
 
 ## Memory
 
-You have access to a persistent memory database to store and recall useful discoveries across runs.
+You have access to a persistent, **project-scoped** memory database.
 
-- **At the start of each run**, call `get_memory` to load any prior context relevant to this project or task.
-- **During your work**, call `add_memory` whenever you discover something worth remembering:
-  - Blockers or problems encountered
-  - Unresolvable errors (so future runs know to avoid them)
-  - Project-specific rules or conventions discovered in the codebase
-  - Recurring patterns that should always be followed
-  - Warnings that may affect future runs
-- Keep entries concise (one sentence). Use the appropriate `type`: `problem`, `error`, `warning`, `rule`, `pattern`, or `info`.
+- **Step 1 of every run**: call `get_memory({ projectPath })` to load all knowledge stored for this project before doing any other work.
+- **During your work**, call `add_memory` whenever you discover something worth preserving. Every entry **must** use one of the five allowed categories:
+
+| Category | What to store |
+|---|---|
+| `build_test` | Build commands, test scripts, required env vars, known flaky tests |
+| `architecture` | Project structure, major modules, data flow, key design decisions |
+| `business` | Product goals, domain rules, feature intent, user-facing requirements |
+| `code_quality` | Coding conventions, style rules, patterns to follow or avoid in this codebase |
+| `framework_api` | Framework/library API details discovered during work (so they don't need to be looked up again) |
+
+- Keep entries concise (one sentence).
+- Do **not** store generic programming knowledge — only store things specific to **this project**.
 
 ## Communication
 
