@@ -1,0 +1,152 @@
+/* XState Machine Viewer — statechart visualisation for the workflow machine */
+
+.xstate-viewer {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  position: relative;
+  background: var(--bg);
+  cursor: grab;
+  user-select: none;
+}
+
+.xstate-viewer:active {
+  cursor: grabbing;
+}
+
+/* SVG canvas */
+.xstate-viewer-svg {
+  display: block;
+  font-family: var(--font-mono);
+}
+
+/* ── Compound state containers ── */
+.xsv-compound-rect {
+  fill: var(--bg-muted);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  rx: 8;
+}
+
+.xsv-compound-rect--active {
+  fill: color-mix(in srgb, var(--dot-planning) 8%, var(--bg-muted));
+  stroke: color-mix(in srgb, var(--dot-planning) 40%, var(--border));
+}
+
+.xsv-compound-label {
+  font-size: 9px;
+  fill: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* ── Atomic state nodes ── */
+.xsv-node-rect {
+  fill: var(--bg-surface);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  rx: 6;
+  transition: filter 0.15s ease;
+}
+
+.xsv-node-rect--active {
+  stroke-width: 2.5;
+}
+
+.xsv-node-rect--hover {
+  filter: brightness(0.95);
+  cursor: pointer;
+}
+
+.xsv-node-label {
+  font-size: 10px;
+  fill: var(--text);
+  pointer-events: none;
+  font-weight: 500;
+}
+
+.xsv-node-label--active {
+  fill: var(--bg-surface);
+  font-weight: 600;
+}
+
+/* ── Edges ── */
+.xsv-edge {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.xsv-edge--main {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.xsv-edge--guard {
+  stroke: var(--text-dim);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.xsv-edge--failure {
+  stroke: color-mix(in srgb, var(--dot-failed) 45%, var(--border));
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: 0.5;
+}
+
+.xsv-edge--retry {
+  stroke: color-mix(in srgb, var(--dot-awaiting) 60%, var(--border));
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+
+/* Arrowhead markers */
+.xsv-arrow-main { fill: var(--border); }
+.xsv-arrow-guard { fill: var(--text-dim); }
+.xsv-arrow-failure { fill: color-mix(in srgb, var(--dot-failed) 45%, var(--border)); opacity: 0.5; }
+.xsv-arrow-retry { fill: color-mix(in srgb, var(--dot-awaiting) 60%, var(--border)); }
+
+/* ── Tooltip ── */
+.xsv-tooltip {
+  position: fixed;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 240px;
+  line-height: 1.6;
+}
+
+.xsv-tooltip-title {
+  font-weight: 600;
+  font-size: 11px;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.xsv-tooltip-event {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.xsv-tooltip-event + .xsv-tooltip-event {
+  margin-top: 1px;
+}
+
+/* ── Empty / loading state ── */
+.xsv-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-dim);
+  font-size: 11px;
+}
