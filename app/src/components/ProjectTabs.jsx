@@ -173,7 +173,7 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                     cursor: "pointer",
                   }}
                 >
-                  <Settings size={11} />
+                  <Settings size={14} strokeWidth={1.75} />
                 </span>
               )}
               {isActive && onStartAll && (
@@ -199,7 +199,7 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                     cursor: idleCount === 0 ? "default" : "pointer",
                   }}
                 >
-                  <Play size={11} />
+                  <Play size={14} strokeWidth={1.75} />
                 </span>
               )}
             </Button>
