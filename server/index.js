@@ -1474,7 +1474,7 @@ async function start() {
 
   // SPA catch-all: serve index.html for non-API routes (production)
   if (existsSync(distPath)) {
-    app.get("*", (req, res) => {
+    app.get("/{*splat}", (req, res) => {
       res.sendFile(join(distPath, "index.html"));
     });
   }
