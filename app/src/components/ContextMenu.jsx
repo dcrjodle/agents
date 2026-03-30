@@ -3,8 +3,11 @@ import "../styles/context-menu.css";
 
 export function ContextMenu({ x, y, items, onClose }) {
   const menuRef = useRef(null);
+  const isMobile = window.innerWidth <= 768;
 
   useEffect(() => {
+    // Skip floating-menu boundary detection on mobile — it uses a bottom sheet instead
+    if (isMobile) return;
     if (!menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
     const vw = window.innerWidth;
@@ -16,12 +19,20 @@ export function ContextMenu({ x, y, items, onClose }) {
     if (rect.bottom > vh) {
       menuRef.current.style.top = `${y - rect.height}px`;
     }
-  }, [x, y]);
+  }, [x, y, isMobile]);
 
   return (
     <>
-      <div className="context-menu-overlay" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
-      <div ref={menuRef} className="context-menu" style={{ left: x, top: y }}>
+      <div
+        className="context-menu-overlay"
+        onClick={onClose}
+        onContextMenu={(e) => { e.preventDefault(); onClose(); }}
+      />
+      <div
+        ref={menuRef}
+        className={`context-menu${isMobile ? " context-menu--sheet" : ""}`}
+        style={isMobile ? undefined : { left: x, top: y }}
+      >
         {items.map((item, i) => {
           if (item.separator) {
             return <div key={i} className="context-menu-separator" />;

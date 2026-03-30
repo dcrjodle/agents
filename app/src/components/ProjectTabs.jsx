@@ -155,6 +155,7 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                   role="button"
                   tabIndex={0}
                   title="project settings"
+                  className="tab-icon-btn"
                   onClick={(e) => {
                     e.stopPropagation();
                     onOpenSettings(project);
@@ -181,6 +182,7 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
                   role="button"
                   tabIndex={idleCount === 0 ? -1 : 0}
                   title={idleCount > 0 ? `Start all ${idleCount} idle task${idleCount !== 1 ? "s" : ""}` : "No idle tasks"}
+                  className="tab-icon-btn"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (idleCount > 0) onStartAll();
