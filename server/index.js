@@ -46,10 +46,10 @@ const activeEvaluations = new Map(); // projectPath -> evalId
 // Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
 const evaluationCallbacks = new Map();
 
-// Agent timeout: kill agents that run too long (default 10 minutes)
-const AGENT_TIMEOUT_MS = 10 * 60 * 1000;
-// Stale check: warn if no output for 2 minutes
-const AGENT_STALE_MS = 2 * 60 * 1000;
+// Agent timeout: kill agents that run too long (default 30 minutes)
+const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+// Stale check: warn if no output for 20 minutes
+const AGENT_STALE_MS = 20 * 60 * 1000;
 
 // State label mapping — handles both flat and compound states
 function stateLabel(stateValue) {
