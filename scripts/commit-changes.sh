@@ -20,11 +20,22 @@ echo "[committing] Working in: $WORKTREE_PATH" >&2
 
 cd "$WORKTREE_PATH"
 
+# Ensure git identity is configured (required on servers without global git config)
+if ! git config user.name >/dev/null 2>&1; then
+  git config user.name "Agent"
+fi
+if ! git config user.email >/dev/null 2>&1; then
+  git config user.email "agent@automated"
+fi
+
 # Get the main branch name
 MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
 
 # Stage all changes
-git add -A 2>&1 >&2
+if ! git add -A 2>&1 >&2; then
+  emit_result '{"status":"failed","error":"git add failed"}'
+  exit 1
+fi
 
 # Check if there are changes to commit
 if git diff --cached --quiet 2>/dev/null; then
@@ -32,7 +43,10 @@ if git diff --cached --quiet 2>/dev/null; then
 else
   # Commit with task description
   COMMIT_MSG="[agent] ${TASK_DESCRIPTION:-Automated changes}"
-  git commit -m "$COMMIT_MSG" 2>&1 >&2
+  if ! git commit -m "$COMMIT_MSG" 2>&1 >&2; then
+    emit_result '{"status":"failed","error":"git commit failed"}'
+    exit 1
+  fi
   echo "[committing] Committed: $COMMIT_MSG" >&2
 fi
 

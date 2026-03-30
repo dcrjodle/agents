@@ -133,3 +133,56 @@
   overflow-x: auto;
   min-width: 0;
 }
+
+/* ============================================================
+   Mobile responsiveness — viewports ≤ 768 px
+   ============================================================ */
+@media (max-width: 768px) {
+  .app-root {
+    padding: 12px;
+  }
+
+  /* Task list fills the full width on mobile */
+  .task-list-container {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+  /* When detail panel is open the task list stays mounted but hidden behind overlay */
+  .task-list-container.shifted {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Detail panel becomes a full-screen overlay on mobile */
+  .detail-panel-container {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    overflow-y: auto;
+    animation: slide-in-up 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Project tabs row wraps on small screens so toolbar is always visible */
+  .project-tabs-row {
+    flex-wrap: wrap;
+  }
+
+  /* Smooth momentum scrolling for tabs on iOS */
+  .project-tabs-row > .project-tabs-scroller {
+    -webkit-overflow-scrolling: touch;
+    max-width: calc(100% - 80px);
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

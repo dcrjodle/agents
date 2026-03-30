@@ -506,11 +506,29 @@ function wireActor(id, actor) {
           review: snapshot.context.review,
         });
       }
+
+      // Auto-approve code review if setting is enabled
+      if (sk === "reviewing.awaitingApproval") {
+        getProjectSettings(actor._projectPath).then((projectSettings) => {
+          if (projectSettings.autoApproveReviews === true) {
+            actor.send({ type: "REVIEW_APPROVED" });
+            broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved" });
+          }
+        });
+      }
     }
 
     // Clean up auto-continue counter when task completes successfully
     if (sk === "done") {
       taskAutoContinues.delete(id);
+      const prTitle = snapshot.context.prTitle;
+      if (prTitle) {
+        actor._description = prTitle;
+        dbUpdateTask(id, { description: prTitle }).catch((err) =>
+          console.error(`Failed to rename task to PR title:`, err)
+        );
+        broadcast({ type: "TASK_UPDATED", task: { id, description: prTitle } });
+      }
     }
 
     // Auto-continue from failed state (up to project maxRetries limit)
@@ -833,10 +851,17 @@ app.post("/tasks/:id/approve", (req, res) => {
   const sk = stateKey(snap.value);
 
   if (sk === "planning.awaitingApproval") {
-    const planApprovedEvent = { type: "PLAN_APPROVED" };
-    if (req.body.reviewComments) planApprovedEvent.reviewComments = req.body.reviewComments;
-    actor.send(planApprovedEvent);
-    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || "Approved" });
+    const action = req.body.action; // "revise" | "reject" | undefined (treat as approve)
+    if (action === "revise") {
+      actor.send({ type: "PLAN_REVISION_REQUESTED", comments: req.body.comments || "" });
+    } else if (action === "reject") {
+      actor.send({ type: "PLAN_REJECTED" });
+    } else {
+      const planApprovedEvent = { type: "PLAN_APPROVED" };
+      if (req.body.reviewComments) planApprovedEvent.reviewComments = req.body.reviewComments;
+      actor.send(planApprovedEvent);
+    }
+    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "plan", message: req.body.message || action || "Approved" });
     return res.json({ ok: true });
   }
 

@@ -10,6 +10,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [projectPath, setProjectPath] = useState(project.path);
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
+  const [autoApproveReviews, setAutoApproveReviews] = useState(settings.autoApproveReviews === true);
   const [autoApprovePr, setAutoApprovePr] = useState(settings.autoApprovePr !== false);
   const [skipTesting, setSkipTesting] = useState(settings.skipTesting === true);
   const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
@@ -47,7 +48,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: trimmedPath || project.path, settings: { createPr, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries } }),
+        body: JSON.stringify({ path: trimmedPath || project.path, settings: { createPr, autoApprovePr, autoApprovePlans, autoApproveReviews, skipTesting, agentMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -191,6 +192,27 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           </div>
           <Button variant="toggle" active={autoApprovePlans} size="sm" onClick={() => setAutoApprovePlans((v) => !v)}>
             {autoApprovePlans ? "on" : "off"}
+          </Button>
+        </label>
+
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 0",
+            borderBottom: "1px solid var(--border-light)",
+            cursor: "pointer",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text)" }}>auto-approve reviews</div>
+            <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
+              {autoApproveReviews ? "reviews are approved automatically, overriding the reviewer's verdict" : "reviews require manual approval before pushing"}
+            </div>
+          </div>
+          <Button variant="toggle" active={autoApproveReviews} size="sm" onClick={() => setAutoApproveReviews((v) => !v)}>
+            {autoApproveReviews ? "on" : "off"}
           </Button>
         </label>
 

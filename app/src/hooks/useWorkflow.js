@@ -44,6 +44,8 @@ export function useWorkflow() {
   const [visualTestResults, setVisualTestResults] = useState({});
   // visualTestingProjects: Set of projectPaths currently being visual-tested
   const [visualTestingProjects, setVisualTestingProjects] = useState(new Set());
+  // visualTestProgress: { [projectPath]: string } — current step text while a test is running
+  const [visualTestProgress, setVisualTestProgress] = useState({});
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -475,6 +477,20 @@ export function useWorkflow() {
                 next.add(msg.projectPath);
                 return next;
               });
+              setVisualTestProgress((prev) => {
+                const next = { ...prev };
+                delete next[msg.projectPath];
+                return next;
+              });
+            }
+            break;
+
+          case "VISUAL_TEST_PROGRESS":
+            if (msg.projectPath && msg.status?.currentStep) {
+              setVisualTestProgress((prev) => ({
+                ...prev,
+                [msg.projectPath]: msg.status.currentStep,
+              }));
             }
             break;
 
@@ -487,6 +503,11 @@ export function useWorkflow() {
               setVisualTestingProjects((prev) => {
                 const next = new Set(prev);
                 next.delete(msg.projectPath);
+                return next;
+              });
+              setVisualTestProgress((prev) => {
+                const next = { ...prev };
+                delete next[msg.projectPath];
                 return next;
               });
             }
@@ -574,6 +595,16 @@ export function useWorkflow() {
       body: JSON.stringify({ action, comments, feedback, message: `Review: ${action}` }),
     });
     if (!res.ok) throw new Error(`Failed to perform review action: ${res.statusText}`);
+    return res.json();
+  };
+
+  const planAction = async (taskId, action, comments) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, comments, message: `Plan: ${action}` }),
+    });
+    if (!res.ok) throw new Error(`Failed to perform plan action: ${res.statusText}`);
     return res.json();
   };
 
@@ -695,7 +726,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, planAction, clearErrors, updateTask };
 }
 
 export { stateKey };

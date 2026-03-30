@@ -76,6 +76,7 @@ function AuthenticatedApp({ user, onLogout }) {
     triggerEvaluation,
     visualTestResults,
     visualTestingProjects,
+    visualTestProgress,
     triggerVisualTest,
     createTask,
     startTask,
@@ -92,6 +93,7 @@ function AuthenticatedApp({ user, onLogout }) {
     pendingPrs,
     clearPendingPr,
     reviewAction,
+    planAction,
     updateTask,
     launchIvyStudio,
     deploy,
@@ -171,6 +173,14 @@ function AuthenticatedApp({ user, onLogout }) {
       setViewingPlanTaskId(null);
     }
   }, [viewingPlanTaskId, sendEvent, clearPendingPlan]);
+
+  const handleRevisePlan = useCallback((comments) => {
+    if (viewingPlanTaskId) {
+      planAction(viewingPlanTaskId, "revise", comments);
+      clearPendingPlan(viewingPlanTaskId);
+      setViewingPlanTaskId(null);
+    }
+  }, [viewingPlanTaskId, planAction, clearPendingPlan]);
 
   const handleClosePlan = useCallback(() => {
     setViewingPlanTaskId(null);
@@ -560,6 +570,7 @@ function AuthenticatedApp({ user, onLogout }) {
             onAddTask={handleCreateTask}
             visualTestIsRunning={visualTestingProjects.has(selectedProject.path)}
             visualTestResults={visualTestResults[selectedProject.path]}
+            visualTestProgress={visualTestProgress[selectedProject.path]}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
@@ -626,6 +637,7 @@ function AuthenticatedApp({ user, onLogout }) {
           taskDescription={viewingTask?.description || ""}
           onApprove={handleApprovePlan}
           onReject={handleRejectPlan}
+          onRevise={handleRevisePlan}
           onClose={handleClosePlan}
           onApproveAll={handleApproveAllPlans}
           pendingPlanCount={Object.keys(pendingPlans).length}
