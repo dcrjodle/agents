@@ -1,3 +1,4 @@
+import { Play, Pencil, ClipboardList, Check, RotateCcw, X } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 
 /**
@@ -33,7 +34,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (isIdle && onStart) {
     items.push({
       label: "start",
-      icon: "\u25B6",
+      icon: Play,
       action: () => onStart(task.id),
     });
   }
@@ -41,7 +42,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (isIdle && onStartEditing) {
     items.push({
       label: "edit",
-      icon: "\u270E",
+      icon: Pencil,
       action: () => onStartEditing(task),
     });
   }
@@ -49,7 +50,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (sk === "planning.awaitingApproval" && pendingPlans?.[task.id] && onViewPlan) {
     items.push({
       label: "view plan",
-      icon: "\uD83D\uDCCB",
+      icon: ClipboardList,
       action: () => onViewPlan(task.id),
     });
   }
@@ -57,7 +58,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (sk === "merging.awaitingApproval" && onApprove) {
     items.push({
       label: "approve pr",
-      icon: "\u2714",
+      icon: Check,
       action: () => onApprove(task.id),
     });
   }
@@ -70,7 +71,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (sk === "failed" && task.context?.failedFrom && onContinue) {
     items.push({
       label: "continue",
-      icon: "\u25B6",
+      icon: Play,
       action: () => onContinue(task.id),
     });
   }
@@ -78,7 +79,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (!isIdle && onRestart) {
     items.push({
       label: "restart",
-      icon: "\u21BA",
+      icon: RotateCcw,
       action: () => onRestart(task.id),
     });
   }
@@ -86,7 +87,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
   if (onDelete) {
     items.push({
       label: "delete",
-      icon: "\u00D7",
+      icon: X,
       danger: true,
       action: () => onDelete(task.id),
     });

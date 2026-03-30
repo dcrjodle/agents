@@ -32,7 +32,7 @@ export function ContextMenu({ x, y, items, onClose }) {
               className={`context-menu-item${item.danger ? " danger" : ""}`}
               onClick={() => { item.action(); onClose(); }}
             >
-              {item.icon && <span className="context-menu-item-icon">{item.icon}</span>}
+              {item.icon && <span className="context-menu-item-icon"><item.icon size={14} strokeWidth={1.75} /></span>}
               {item.label}
             </button>
           );
