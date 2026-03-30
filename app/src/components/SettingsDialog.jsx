@@ -14,6 +14,8 @@ import { Button } from "./Button.jsx";
  * @param {Function} props.onRemoveProject - Remove project callback
  * @param {Function} props.onClose - Close dialog callback
  */
+const API_BASE = "/api";
+
 export function SettingsDialog({
   darkMode,
   onToggleDark,
@@ -24,6 +26,7 @@ export function SettingsDialog({
 }) {
   const [newName, setNewName] = useState("");
   const [newPath, setNewPath] = useState("");
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -119,40 +122,67 @@ export function SettingsDialog({
         ))}
 
         {/* Add project */}
-        <div style={{ marginTop: 12, display: "flex", gap: 6 }}>
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="name"
-            style={{
-              flex: 1,
-              fontSize: 11,
-              padding: "4px 8px",
-              border: "1px solid var(--border)",
-              borderRadius: 3,
-              background: "var(--bg-muted)",
-              color: "var(--text)",
-              fontFamily: "var(--font-mono)",
-            }}
-          />
-          <input
-            value={newPath}
-            onChange={(e) => setNewPath(e.target.value)}
-            placeholder="path"
-            style={{
-              flex: 2,
-              fontSize: 11,
-              padding: "4px 8px",
-              border: "1px solid var(--border)",
-              borderRadius: 3,
-              background: "var(--bg-muted)",
-              color: "var(--text)",
-              fontFamily: "var(--font-mono)",
-            }}
-          />
-          <Button variant="secondary" size="sm" onClick={handleAdd}>
-            add
-          </Button>
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="name"
+              style={{
+                flex: 1,
+                fontSize: 11,
+                padding: "4px 8px",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                background: "var(--bg-muted)",
+                color: "var(--text)",
+                fontFamily: "var(--font-mono)",
+              }}
+            />
+            <Button variant="secondary" size="sm" onClick={handleAdd}>
+              add
+            </Button>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <div
+              onClick={async () => {
+                if (picking) return;
+                setPicking(true);
+                try {
+                  const res = await fetch(`${API_BASE}/config/pick-folder`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    setNewPath(data.path);
+                    if (!newName) setNewName(data.name);
+                  }
+                } catch {} finally {
+                  setPicking(false);
+                }
+              }}
+              style={{
+                flex: 1,
+                fontSize: 11,
+                padding: "4px 8px",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                background: "var(--bg-muted)",
+                color: newPath ? "var(--text)" : "var(--text-dim)",
+                fontFamily: "var(--font-mono)",
+                cursor: picking ? "wait" : "pointer",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                lineHeight: "20px",
+                opacity: picking ? 0.6 : 1,
+              }}
+              title={newPath || "click to select folder"}
+            >
+              {picking ? "opening folder picker..." : newPath || "select folder..."}
+            </div>
+          </div>
         </div>
       </div>
     </div>
