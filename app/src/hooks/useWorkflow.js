@@ -42,6 +42,8 @@ export function useWorkflow() {
   const [visualTestResults, setVisualTestResults] = useState({});
   // visualTestingProjects: Set of projectPaths currently being visual-tested
   const [visualTestingProjects, setVisualTestingProjects] = useState(new Set());
+  // ivyStudioRunningBranches: Set of branch names currently running ivy studio
+  const [ivyStudioRunningBranches, setIvyStudioRunningBranches] = useState(new Set());
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -458,6 +460,26 @@ export function useWorkflow() {
               });
             }
             break;
+
+          case "IVY_STUDIO_STARTED":
+            if (msg.branch) {
+              setIvyStudioRunningBranches((prev) => {
+                const next = new Set(prev);
+                next.add(msg.branch);
+                return next;
+              });
+            }
+            break;
+
+          case "IVY_STUDIO_STOPPED":
+            if (msg.branch) {
+              setIvyStudioRunningBranches((prev) => {
+                const next = new Set(prev);
+                next.delete(msg.branch);
+                return next;
+              });
+            }
+            break;
         }
       };
     }
@@ -653,7 +675,7 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, launchIvyStudio, ivyStudioRunningBranches, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, reviewAction, clearErrors, updateTask };
 }
 
 export { stateKey };

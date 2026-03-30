@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Play } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
 
-export function LaunchStudioButton({ onLaunch }) {
+export function LaunchStudioButton({ onLaunch, isRunning }) {
   const [showInput, setShowInput] = useState(false);
   const [branch, setBranch] = useState("");
   const [error, setError] = useState(null);
@@ -31,11 +31,30 @@ export function LaunchStudioButton({ onLaunch }) {
     <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
       <IconButton
         icon={Play}
-        title="Launch Ivy Studio on a branch"
-        onClick={() => setShowInput(!showInput)}
+        title={isRunning ? "Ivy Studio is running..." : "Launch Ivy Studio on a branch"}
+        disabled={isRunning}
+        onClick={() => !isRunning && setShowInput(!showInput)}
+        style={{
+          opacity: isRunning ? 1 : undefined,
+          animation: isRunning ? "pulse 1.5s ease-in-out infinite" : undefined,
+        }}
       />
 
-      {showInput && (
+      {isRunning && (
+        <span style={{
+          position: "absolute",
+          top: -2,
+          right: -2,
+          background: "var(--dot-developing, #3b82f6)",
+          borderRadius: "50%",
+          width: 10,
+          height: 10,
+          animation: "pulse 1s ease-in-out infinite",
+          pointerEvents: "none",
+        }} />
+      )}
+
+      {showInput && !isRunning && (
         <div style={{
           position: "absolute",
           top: "100%",

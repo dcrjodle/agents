@@ -90,6 +90,7 @@ function AuthenticatedApp({ user, onLogout }) {
     reviewAction,
     updateTask,
     launchIvyStudio,
+    ivyStudioRunningBranches,
     deploy,
   } = useWorkflow();
 
@@ -543,6 +544,7 @@ function AuthenticatedApp({ user, onLogout }) {
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
+            ivyStudioIsRunning={ivyStudioRunningBranches.size > 0}
           />
         </div>
       ) : (

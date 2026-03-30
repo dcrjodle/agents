@@ -19,6 +19,7 @@ export function ProjectToolbar({
   onVisualTest,
   eligibleTaskCount,
   onLaunchStudio,
+  ivyStudioIsRunning,
 }) {
   return (
     <div className="project-toolbar">
@@ -39,6 +40,7 @@ export function ProjectToolbar({
       <div className="project-toolbar-separator" />
       <LaunchStudioButton
         onLaunch={onLaunchStudio}
+        isRunning={ivyStudioIsRunning}
       />
     </div>
   );

@@ -1645,16 +1645,16 @@ async function start() {
       return res.status(500).json({ error: `Script not found: ${scriptPath}` });
     }
 
-    // Use osascript to open a new Terminal.app window running the script
-    const appleScript = `tell application "Terminal"
-  activate
-  do script "bash ${scriptPath} --branch=${branch}"
-end tell`;
-
-    spawn("osascript", ["-e", appleScript], {
+    const child = spawn("bash", [scriptPath, `--branch=${branch}`], {
       stdio: "ignore",
       detached: true,
-    }).unref();
+    });
+
+    broadcast({ type: "IVY_STUDIO_STARTED", branch });
+
+    child.on("close", (code) => {
+      broadcast({ type: "IVY_STUDIO_STOPPED", branch, exitCode: code });
+    });
 
     res.json({ launched: true, branch });
   });
