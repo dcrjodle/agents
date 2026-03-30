@@ -24,6 +24,7 @@ const STATE_ICONS = {
   "committing": GitCommit,
   "testing": ClipboardCheck,
   "reviewing": Eye,
+  "reviewing.awaitingApproval": HelpCircle,
   "pushing": Upload,
   "merging.awaitingApproval": HelpCircle,
   "merging.creatingPr": GitPullRequest,

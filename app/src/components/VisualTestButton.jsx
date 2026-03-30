@@ -2,15 +2,16 @@ import { useState } from "react";
 import { Camera } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
 
-export function VisualTestButton({ isRunning, results, onTrigger, eligibleTaskCount }) {
+export function VisualTestButton({ isRunning, results, onTrigger, eligibleTaskCount, progress }) {
   const [showResults, setShowResults] = useState(false);
 
   const hasResults = results && results.results && results.results.length > 0;
   const passedCount = hasResults ? results.results.filter((r) => r.status === "complete").length : 0;
   const totalCount = hasResults ? results.results.length : 0;
+  const hasError = results && results.error;
 
   return (
-    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 4 }}>
       <IconButton
         icon={Camera}
         title={
@@ -26,7 +27,7 @@ export function VisualTestButton({ isRunning, results, onTrigger, eligibleTaskCo
             onTrigger();
           }
         }}
-        onMouseEnter={() => hasResults && setShowResults(true)}
+        onMouseEnter={() => (hasResults || hasError) && setShowResults(true)}
         onMouseLeave={() => setShowResults(false)}
         style={{
           opacity: isRunning ? 1 : eligibleTaskCount > 0 ? 1 : 0.4,
@@ -70,8 +71,23 @@ export function VisualTestButton({ isRunning, results, onTrigger, eligibleTaskCo
         }} />
       )}
 
+      {/* Progress text while running */}
+      {isRunning && (
+        <span style={{
+          fontSize: 10,
+          color: "var(--text-dim)",
+          maxWidth: 140,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+        }}>
+          {progress || "running..."}
+        </span>
+      )}
+
       {/* Results popover */}
-      {showResults && hasResults && !isRunning && (
+      {showResults && (hasResults || hasError) && !isRunning && (
         <div style={{
           position: "absolute",
           top: "100%",
@@ -86,46 +102,64 @@ export function VisualTestButton({ isRunning, results, onTrigger, eligibleTaskCo
           fontSize: 11,
           boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
         }}>
-          <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
-            Visual Test Results ({passedCount}/{totalCount} passed)
-          </div>
-          <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 8 }}>
-            {results.timestamp ? new Date(results.timestamp).toLocaleString() : ""}
-          </div>
-          {results.results.map((r) => (
-            <div key={r.taskId} style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "3px 0",
-              borderBottom: "1px solid var(--border-light)",
+          {hasError && (
+            <div style={{
+              background: "rgba(239,68,68,0.12)",
+              border: "1px solid var(--dot-failed, #ef4444)",
+              borderRadius: 4,
+              padding: "6px 8px",
+              color: "var(--dot-failed, #ef4444)",
+              marginBottom: hasResults ? 8 : 0,
+              fontSize: 10,
+              wordBreak: "break-word",
             }}>
-              <span style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: r.status === "complete" ? "var(--dot-done, #22c55e)" : "var(--dot-failed, #ef4444)",
-                flexShrink: 0,
-              }} />
-              <span style={{
-                color: "var(--text)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                flex: 1,
-              }}>
-                {r.taskId.slice(0, 8)}...
-              </span>
-              {r.error && (
-                <span style={{ color: "var(--dot-failed, #ef4444)", fontSize: 10 }}>
-                  {r.error.slice(0, 30)}
-                </span>
-              )}
-              {r.screenshot && (
-                <span style={{ color: "var(--dot-done, #22c55e)", fontSize: 10 }}>screenshot</span>
-              )}
+              {results.error}
             </div>
-          ))}
+          )}
+          {hasResults && (
+            <>
+              <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+                Visual Test Results ({passedCount}/{totalCount} passed)
+              </div>
+              <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 8 }}>
+                {results.timestamp ? new Date(results.timestamp).toLocaleString() : ""}
+              </div>
+              {results.results.map((r) => (
+                <div key={r.taskId} style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 0",
+                  borderBottom: "1px solid var(--border-light)",
+                }}>
+                  <span style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: r.status === "complete" ? "var(--dot-done, #22c55e)" : "var(--dot-failed, #ef4444)",
+                    flexShrink: 0,
+                  }} />
+                  <span style={{
+                    color: "var(--text)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                  }}>
+                    {r.taskId.slice(0, 8)}...
+                  </span>
+                  {r.error && (
+                    <span style={{ color: "var(--dot-failed, #ef4444)", fontSize: 10 }}>
+                      {r.error.slice(0, 30)}
+                    </span>
+                  )}
+                  {r.screenshot && (
+                    <span style={{ color: "var(--dot-done, #22c55e)", fontSize: 10 }}>screenshot</span>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
