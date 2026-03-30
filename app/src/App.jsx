@@ -92,6 +92,16 @@ export function App() {
     setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
   };
 
+  const handleCreateAndStartTask = async (description) => {
+    if (!selectedProject) return;
+    try {
+      await createTask(description, selectedProject.path, { autoStart: true });
+      setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
+    } catch (err) {
+      console.error("Failed to create and start task:", err);
+    }
+  };
+
   const handleTaskInputChange = useCallback((newValue) => {
     if (!selectedProject) return;
     setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: newValue }));
@@ -432,6 +442,7 @@ export function App() {
           {projects.length > 0 && selectedProject && (
             <CreateTask
               onCreate={handleCreateTask}
+              onCreateAndStart={handleCreateAndStartTask}
               commands={commands}
               value={taskInputsByProject[selectedProject?.path] ?? ""}
               onValueChange={handleTaskInputChange}
