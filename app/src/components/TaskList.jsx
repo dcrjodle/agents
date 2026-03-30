@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { useContextMenu } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
-import { buildTaskMenuItems } from "../utils/taskMenuItems.js";
+import { buildTaskMenuItems, buildBulkTaskMenuItems } from "../utils/taskMenuItems.js";
 import "../styles/task-list.css";
 
 const DONE_COLLAPSED_KEY = "taskList.doneCollapsed";
@@ -37,6 +37,19 @@ export function TaskList({
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editValue, setEditValue] = useState("");
   const editInputRef = useRef(null);
+
+  // Drag-to-multi-select state
+  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
+  const isDragging = useRef(false);
+
+  // End drag on mouseup anywhere in the document
+  useEffect(() => {
+    const handleMouseUp = () => {
+      isDragging.current = false;
+    };
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
+  }, []);
 
   const startEditing = useCallback((task) => {
     setEditingTaskId(task.id);
@@ -108,6 +121,7 @@ export function TaskList({
     const sk = task.stateKey || stateKey(task.state);
     const label = STATE_LABELS[sk] || sk;
     const isSelected = task.id === selectedTaskId;
+    const isMultiSelected = selectedTaskIds.has(task.id);
     const isDone = sk === "done";
     const isFailed = sk === "failed";
     const isEditing = task.id === editingTaskId;
@@ -116,19 +130,49 @@ export function TaskList({
     if (isDone) descClass += " done";
     if (isFailed) descClass += " failed";
 
+    let rowClass = "task-row";
+    if (isSelected) rowClass += " selected";
+    if (isMultiSelected) rowClass += " multi-selected";
+
     return (
       <div
         key={task.id}
-        className={`task-row${isSelected ? " selected" : ""}`}
-        onClick={() => {
+        className={rowClass}
+        onMouseDown={(e) => {
           if (isEditing) return;
+          // Only primary button
+          if (e.button !== 0) return;
+          isDragging.current = true;
+          setSelectedTaskIds(new Set([task.id]));
+        }}
+        onMouseEnter={() => {
+          if (!isDragging.current) return;
+          setSelectedTaskIds((prev) => new Set([...prev, task.id]));
+        }}
+        onClick={(e) => {
+          if (isEditing) return;
+          // If we were dragging and selected multiple, don't trigger single-select
+          if (selectedTaskIds.size > 1) return;
+          // Clear multi-selection on plain click
+          setSelectedTaskIds(new Set());
           if (sk === "planning.awaitingApproval" && pendingPlans[task.id]) {
             onViewPlan(task.id);
           } else {
             onSelectTask(isSelected ? null : task.id);
           }
         }}
-        onContextMenu={(e) => !isEditing && openContextMenu(e, task)}
+        onContextMenu={(e) => {
+          if (isEditing) return;
+          // If right-clicking inside a multi-selection, show bulk menu
+          if (selectedTaskIds.size > 1 && selectedTaskIds.has(task.id)) {
+            const selectedTasks = tasks.filter((t) => selectedTaskIds.has(t.id));
+            openContextMenu(e, { _bulk: true, tasks: selectedTasks });
+          } else {
+            // Clear multi-selection and show normal single-task menu
+            setSelectedTaskIds(new Set());
+            openContextMenu(e, task);
+          }
+        }}
       >
         <div className="task-row-header">
           <StatusIcon stateKey={sk} size={16} />
@@ -163,7 +207,12 @@ export function TaskList({
   };
 
   return (
-    <div className="task-list">
+    <div
+      className={`task-list${isDragging.current ? " task-list--dragging" : ""}`}
+      onMouseLeave={() => {
+        if (isDragging.current) isDragging.current = false;
+      }}
+    >
       {activeTasks.map(renderTask)}
 
       {doneTasks.length > 0 && (
@@ -197,16 +246,25 @@ export function TaskList({
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildTaskMenuItems(contextMenu.target, {
-            onStart,
-            onRestart,
-            onContinue,
-            onDelete,
-            onViewPlan,
-            onApprove,
-            pendingPlans,
-            onStartEditing: onEdit ? startEditing : undefined,
-          })}
+          items={
+            contextMenu.target?._bulk
+              ? buildBulkTaskMenuItems(contextMenu.target.tasks, {
+                  onStart,
+                  onRestart,
+                  onContinue,
+                  onDelete,
+                })
+              : buildTaskMenuItems(contextMenu.target, {
+                  onStart,
+                  onRestart,
+                  onContinue,
+                  onDelete,
+                  onViewPlan,
+                  onApprove,
+                  pendingPlans,
+                  onStartEditing: onEdit ? startEditing : undefined,
+                })
+          }
           onClose={closeContextMenu}
         />
       )}

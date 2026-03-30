@@ -2,6 +2,75 @@ import { Play, Pencil, ClipboardList, Check, RotateCcw, X } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 
 /**
+ * Build bulk context menu items for a set of selected tasks.
+ *
+ * @param {Array} tasks - Array of selected task objects
+ * @param {object} handlers - Handler functions:
+ *   - onStart(taskId)
+ *   - onRestart(taskId)
+ *   - onContinue(taskId)
+ *   - onDelete(taskId)
+ * @returns {Array} Menu items
+ */
+export function buildBulkTaskMenuItems(tasks, handlers = {}) {
+  const { onStart, onRestart, onContinue, onDelete } = handlers;
+
+  const idleTasks = tasks.filter((t) => {
+    const sk = t.stateKey || stateKey(t.state);
+    return sk === "idle";
+  });
+  const nonIdleTasks = tasks.filter((t) => {
+    const sk = t.stateKey || stateKey(t.state);
+    return sk !== "idle";
+  });
+  const continuableTasks = tasks.filter((t) => {
+    const sk = t.stateKey || stateKey(t.state);
+    return sk === "failed" && t.context?.failedFrom;
+  });
+
+  const items = [];
+
+  if (idleTasks.length > 0 && onStart) {
+    items.push({
+      label: `start ${idleTasks.length}`,
+      icon: Play,
+      action: () => idleTasks.forEach((t) => onStart(t.id)),
+    });
+  }
+
+  if (continuableTasks.length > 0 && onContinue) {
+    items.push({
+      label: `continue ${continuableTasks.length}`,
+      icon: Play,
+      action: () => continuableTasks.forEach((t) => onContinue(t.id)),
+    });
+  }
+
+  if (nonIdleTasks.length > 0 && onRestart) {
+    items.push({
+      label: `restart ${nonIdleTasks.length}`,
+      icon: RotateCcw,
+      action: () => nonIdleTasks.forEach((t) => onRestart(t.id)),
+    });
+  }
+
+  if (items.length > 0) {
+    items.push({ separator: true });
+  }
+
+  if (onDelete) {
+    items.push({
+      label: `delete ${tasks.length}`,
+      icon: X,
+      danger: true,
+      action: () => tasks.forEach((t) => onDelete(t.id)),
+    });
+  }
+
+  return items;
+}
+
+/**
  * Build context menu items for a task.
  *
  * @param {object} task - The task object

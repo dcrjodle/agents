@@ -32,6 +32,22 @@
   border-left-color: var(--accent);
 }
 
+.task-row.multi-selected {
+  background: var(--bg-selected, rgba(124, 106, 247, 0.12));
+  border-left-color: var(--accent);
+  opacity: 0.9;
+}
+
+/* Prevent text selection and show default cursor during drag */
+.task-list--dragging {
+  user-select: none;
+  cursor: default;
+}
+
+.task-list--dragging .task-row {
+  cursor: default;
+}
+
 /* Task header with status icon and label */
 .task-row-header {
   display: flex;
