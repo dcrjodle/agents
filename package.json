@@ -25,7 +25,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.85",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "express": "^5.2.1",
-    "lowdb": "^7.0.1",
+    "@supabase/supabase-js": "^2.49.1",
     "uuid": "^13.0.0",
     "ws": "^8.20.0",
     "playwright": "^1.52.0",
