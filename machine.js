@@ -4,9 +4,9 @@ const MAX_RETRIES = 5;
 
 export const workflowMachine = setup({
   types: {
-    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, maxRetries: number, testingMode: string, failedFrom: string | null }} */ ({}),
+    context: /** @type {{ task: string, plan: object | null, result: object | null, error: string | null, retries: number, maxRetries: number, failedFrom: string | null }} */ ({}),
     events: /** @type {
-      | { type: "START", task: string, testingMode?: string, maxRetries?: number }
+      | { type: "START", task: string, maxRetries?: number }
       | { type: "PLAN_READY", plan: object }
       | { type: "PLAN_FAILED", error: string }
       | { type: "PLAN_APPROVED", reviewComments?: string }
@@ -19,7 +19,6 @@ export const workflowMachine = setup({
       | { type: "COMMIT_FAILED", error: string }
       | { type: "TESTS_PASSED" }
       | { type: "TESTS_FAILED", error: string }
-      | { type: "VISUAL_TEST_START" }
       | { type: "REVIEW_APPROVED" }
       | { type: "CHANGES_REQUESTED", feedback: string }
       | { type: "PUSH_COMPLETE", branchName: string, diffSummary: string }
@@ -36,14 +35,11 @@ export const workflowMachine = setup({
   },
   guards: {
     underRetryLimit: ({ context }) => context.retries < (context.maxRetries ?? MAX_RETRIES),
-    needsVisualTest: ({ context }) => context.testingMode === "async" || context.testingMode === "sync",
-    isAsyncTesting: ({ context }) => context.testingMode === "async",
     failedFromPlanning: ({ context }) => context.failedFrom === "planning.running",
     failedFromBranching: ({ context }) => context.failedFrom === "branching",
     failedFromDeveloping: ({ context }) => context.failedFrom === "developing",
     failedFromCommitting: ({ context }) => context.failedFrom === "committing",
     failedFromTesting: ({ context }) => context.failedFrom === "testing",
-    failedFromVisualTesting: ({ context }) => context.failedFrom === "visualTesting.running",
     failedFromReviewing: ({ context }) => context.failedFrom === "reviewing",
     failedFromPushing: ({ context }) => context.failedFrom === "pushing",
     failedFromDirectMerging: ({ context }) => context.failedFrom === "directMerging",
@@ -59,7 +55,6 @@ export const workflowMachine = setup({
     error: null,
     retries: 0,
     maxRetries: MAX_RETRIES,
-    testingMode: "build",
     failedFrom: null,
   },
 
@@ -70,7 +65,6 @@ export const workflowMachine = setup({
           target: "planning",
           actions: assign({
             task: ({ event }) => event.task,
-            testingMode: ({ event }) => event.testingMode || "build",
             maxRetries: ({ event }) => event.maxRetries ?? MAX_RETRIES,
             error: () => null,
             retries: () => 0,
@@ -169,72 +163,21 @@ export const workflowMachine = setup({
     committing: {
       // Deterministic script commits changes — no Claude involved
       on: {
-        COMMIT_COMPLETE: [
-          {
-            target: "visualTesting",
-            guard: "needsVisualTest",
-            actions: assign({
-              result: ({ context, event }) => ({
-                ...context.result,
-                files: event.files,
-              }),
+        COMMIT_COMPLETE: {
+          target: "testing",
+          actions: assign({
+            result: ({ context, event }) => ({
+              ...context.result,
+              files: event.files,
             }),
-          },
-          {
-            target: "testing",
-            actions: assign({
-              result: ({ context, event }) => ({
-                ...context.result,
-                files: event.files,
-              }),
-            }),
-          },
-        ],
+          }),
+        },
         COMMIT_FAILED: {
           target: "failed",
           actions: assign({
             error: ({ event }) => event.error,
             failedFrom: () => "committing",
           }),
-        },
-      },
-    },
-
-    visualTesting: {
-      initial: "preparing",
-      states: {
-        preparing: {
-          always: [
-            { target: "awaitingTrigger", guard: "isAsyncTesting" },
-            { target: "running" },
-          ],
-        },
-        awaitingTrigger: {
-          on: {
-            VISUAL_TEST_START: { target: "running" },
-          },
-        },
-        running: {
-          on: {
-            TESTS_PASSED: { target: "#workflow.reviewing" },
-            TESTS_FAILED: [
-              {
-                target: "#workflow.developing",
-                guard: "underRetryLimit",
-                actions: assign({
-                  error: ({ event }) => event.error,
-                  retries: ({ context }) => context.retries + 1,
-                }),
-              },
-              {
-                target: "#workflow.failed",
-                actions: assign({
-                  error: ({ event }) => event.error || "Max retries exceeded (visual test failures)",
-                  failedFrom: () => "visualTesting.running",
-                }),
-              },
-            ],
-          },
         },
       },
     },
@@ -389,7 +332,6 @@ export const workflowMachine = setup({
           { target: "developing", guard: "failedFromDeveloping", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "committing", guard: "failedFromCommitting", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "testing", guard: "failedFromTesting", actions: assign({ error: () => null, failedFrom: () => null }) },
-          { target: "visualTesting", guard: "failedFromVisualTesting", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "reviewing", guard: "failedFromReviewing", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "pushing", guard: "failedFromPushing", actions: assign({ error: () => null, failedFrom: () => null }) },
           { target: "directMerging", guard: "failedFromDirectMerging", actions: assign({ error: () => null, failedFrom: () => null }) },

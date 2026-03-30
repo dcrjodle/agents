@@ -9,7 +9,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const settings = project.settings || {};
   const [createPr, setCreatePr] = useState(settings.createPr !== false);
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
-  const [testingMode, setTestingMode] = useState(settings.testingMode || "build");
+  const [autoApprovePr, setAutoApprovePr] = useState(settings.autoApprovePr !== false);
   const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
   const [maxRetries, setMaxRetries] = useState(settings.maxRetries ?? 5);
   const [saving, setSaving] = useState(false);
@@ -28,7 +28,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePlans, testingMode, agentMode, maxRetries } }),
+        body: JSON.stringify({ path: project.path, settings: { createPr, autoApprovePr, autoApprovePlans, agentMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -76,6 +76,22 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
           <IconButton icon={X} onClick={onClose} title="close" />
         </div>
 
+        {/* Project path */}
+        <div style={{
+          padding: "6px 8px",
+          marginBottom: 16,
+          background: "var(--bg-muted)",
+          borderRadius: 4,
+          fontSize: 10,
+          fontFamily: "var(--font-mono)",
+          color: "var(--text-dim)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }} title={project.path}>
+          {project.path}
+        </div>
+
         {/* Workflow settings */}
         <div style={{ marginBottom: 16 }}>
           <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>
@@ -103,6 +119,30 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             {createPr ? "on" : "off"}
           </Button>
         </label>
+
+        {createPr && (
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "8px 0",
+              paddingLeft: 16,
+              borderBottom: "1px solid var(--border-light)",
+              cursor: "pointer",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text)" }}>auto-approve PR creation</div>
+              <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
+                {autoApprovePr ? "PR is created automatically after push" : "wait for user approval before creating PR"}
+              </div>
+            </div>
+            <Button variant="toggle" active={autoApprovePr} size="sm" onClick={() => setAutoApprovePr((v) => !v)}>
+              {autoApprovePr ? "on" : "off"}
+            </Button>
+          </label>
+        )}
 
         <label
           style={{
@@ -159,29 +199,6 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             }}
           />
         </label>
-
-        {/* Testing mode */}
-        <div style={{ marginTop: 16, marginBottom: 8 }}>
-          <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6 }}>testing mode</div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {["build", "sync", "async"].map((mode) => (
-              <Button
-                key={mode}
-                variant="seg"
-                active={testingMode === mode}
-                onClick={() => setTestingMode(mode)}
-                style={{ flex: 1 }}
-              >
-                {mode}
-              </Button>
-            ))}
-          </div>
-          <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
-            {testingMode === "build" && "run build + tests only (default)"}
-            {testingMode === "sync" && "visual test all tasks in parallel with browser screenshots"}
-            {testingMode === "async" && "queue tasks for one-at-a-time visual testing"}
-          </div>
-        </div>
 
         {/* Agent mode */}
         <div style={{ marginTop: 16, marginBottom: 8 }}>

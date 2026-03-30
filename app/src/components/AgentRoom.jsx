@@ -9,7 +9,6 @@ const AGENT_POSITIONS = {
   tester: 70,
   githubber: 85,
   merger: 50,
-  "visual-tester": 70,
   script: 50,
   _system: 5,
 };
@@ -28,7 +27,6 @@ const HAIR_COLORS = {
   tester: "#ffb74d",
   githubber: "#ce93d8",
   merger: "#4dd0e1",
-  "visual-tester": "#ffb74d",
   script: "#90a4ae",
   _system: "#78909c",
 };
@@ -40,7 +38,6 @@ const BODY_COLORS = {
   tester: "#e65100",
   githubber: "#7b1fa2",
   merger: "#00838f",
-  "visual-tester": "#e65100",
   script: "#455a64",
   _system: "#546e7a",
 };

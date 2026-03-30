@@ -11,6 +11,7 @@ import { ProjectSettingsDialog } from "./components/ProjectSettingsDialog.jsx";
 import { IconButton } from "./components/IconButton.jsx";
 import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
 import { EvaluatorCharacter } from "./components/EvaluatorCharacter.jsx";
+import { VisualTestButton } from "./components/VisualTestButton.jsx";
 import "./styles/layout.css";
 
 const API_BASE = "/api";
@@ -41,6 +42,9 @@ export function App() {
     evaluationResults,
     evaluatingProjects,
     triggerEvaluation,
+    visualTestResults,
+    visualTestingProjects,
+    triggerVisualTest,
     createTask,
     startTask,
     startAllTasks,
@@ -351,18 +355,6 @@ export function App() {
         action: () => patchProjectSetting("createPr", s.createPr === false),
       });
 
-      // testingMode enum — one command per non-active mode
-      const currentMode = s.testingMode || "build";
-      for (const mode of ["build", "sync", "async"]) {
-        if (mode !== currentMode) {
-          projectCommands.push({
-            label: `set testing ${mode}`,
-            description: `set testing mode to ${mode}`,
-            action: () => patchProjectSetting("testingMode", mode),
-          });
-        }
-      }
-
       // autoApprovePlans boolean toggle
       projectCommands.push({
         label: s.autoApprovePlans ? "deactivate auto approve" : "activate auto approve",
@@ -516,6 +508,17 @@ export function App() {
           onEvaluate={() => triggerEvaluation(selectedProject.path).catch((err) => console.error("Evaluation error:", err))}
           onAddTask={handleCreateTask}
         />
+      )}
+
+      {selectedProject && (
+        <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 40 }}>
+          <VisualTestButton
+            isRunning={visualTestingProjects.has(selectedProject.path)}
+            results={visualTestResults[selectedProject.path]}
+            onTrigger={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
+            eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
+          />
+        </div>
       )}
     </div>
   );

@@ -3,6 +3,11 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
+import { spawn } from "child_process";
+import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs";
+import { tmpdir } from "os";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { workflowMachine } from "../machine.js";
 import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
 import { clearSession, runAgent } from "./agent-runner.js";
@@ -45,6 +50,9 @@ const taskAutoContinues = new Map(); // taskId -> number
 const activeEvaluations = new Map(); // projectPath -> evalId
 // Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
 const evaluationCallbacks = new Map();
+// Track in-flight visual tests per projectPath
+const activeVisualTests = new Map(); // projectPath -> vtId
+const visualTestCallbacks = new Map(); // vtId -> { onResult, projectPath }
 
 // Agent timeout: kill agents that run too long (default 30 minutes)
 const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -61,9 +69,6 @@ function stateLabel(stateValue) {
     "branching": "branching",
     "developing": "in_progress",
     "committing": "committing",
-    "visualTesting.awaitingTrigger": "queued_for_testing",
-    "visualTesting.preparing": "preparing_test",
-    "visualTesting.running": "visual_testing",
     "testing": "testing",
     "reviewing": "reviewing",
     "pushing": "pushing",
@@ -282,9 +287,8 @@ async function onStateTransition(taskId, stateValue, context) {
 
   broadcastAndLog({ type: "AGENT_SPAWNED", taskId, agent: label, pid: handle.pid });
 
-  // Scripts get a shorter timeout (60s), visual-tester gets 3 minutes, other agents get 10 minutes
-  const role = STATE_TO_ROLE[sk];
-  const timeoutMs = isScript ? 60_000 : role === "visual-tester" ? 3 * 60_000 : AGENT_TIMEOUT_MS;
+  // Scripts get a shorter timeout (60s), agents get 10 minutes
+  const timeoutMs = isScript ? 60_000 : AGENT_TIMEOUT_MS;
 
   const timeoutTimer = setTimeout(() => {
     const agentEntry = activeAgents.get(taskId);
@@ -354,6 +358,16 @@ function wireActor(id, actor) {
       onStateTransition(id, snapshot.value, snapshot.context);
     }
 
+    // Auto-approve PR creation if setting is enabled
+    if (sk === "merging.awaitingApproval") {
+      getProjectSettings(actor._projectPath).then((projectSettings) => {
+        if (projectSettings.autoApprovePr !== false) {
+          actor.send({ type: "PR_APPROVED" });
+          broadcast({ type: "APPROVAL", taskId: id, approval: "pr", message: "Auto-approved" });
+        }
+      });
+    }
+
     // Broadcast PLAN_READY event when entering awaitingApproval in planning
     if (sk === "planning.awaitingApproval" && snapshot.context.plan) {
       broadcast({
@@ -399,6 +413,32 @@ function wireActor(id, actor) {
 app.get("/config", async (req, res) => {
   const config = await getConfig();
   res.json(config);
+});
+
+app.post("/config/pick-folder", async (req, res) => {
+  const platform = process.platform;
+  try {
+    let cmd;
+    if (platform === "darwin") {
+      cmd = `osascript -e 'POSIX path of (choose folder with prompt "Select project folder")'`;
+    } else if (platform === "linux") {
+      cmd = `zenity --file-selection --directory --title="Select project folder" 2>/dev/null || kdialog --getexistingdirectory ~ 2>/dev/null`;
+    } else if (platform === "win32") {
+      cmd = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Select project folder'; if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath } else { exit 1 }"`;
+    } else {
+      return res.status(400).json({ error: `Unsupported platform: ${platform}` });
+    }
+    const { execSync } = await import("child_process");
+    const result = execSync(cmd, { encoding: "utf-8", timeout: 60000 }).trim();
+    if (!result) return res.status(400).json({ error: "No folder selected" });
+    // Remove trailing slash if present (macOS osascript adds one)
+    const folderPath = result.replace(/\/+$/, "");
+    const name = folderPath.split(/[/\\]/).pop();
+    res.json({ path: folderPath, name });
+  } catch (err) {
+    // User cancelled the dialog
+    res.status(400).json({ error: "Folder selection cancelled" });
+  }
 });
 
 app.post("/config/projects", async (req, res) => {
@@ -535,9 +575,8 @@ app.post("/tasks", async (req, res) => {
   // Only start the workflow if autoStart is explicitly true
   if (autoStart) {
     const projectSettings = await getProjectSettings(projectPath);
-    const testingMode = projectSettings.testingMode || "build";
     const maxRetries = projectSettings.maxRetries ?? 5;
-    actor.send({ type: "START", task: description, testingMode, maxRetries });
+    actor.send({ type: "START", task: description, maxRetries });
   }
 
   const snapshot = getTaskSnapshot(id);
@@ -579,9 +618,8 @@ app.post("/tasks/:id/start", async (req, res) => {
   }
 
   const projectSettings = await getProjectSettings(actor._projectPath);
-  const testingMode = projectSettings.testingMode || "build";
   const maxRetries = projectSettings.maxRetries ?? 5;
-  actor.send({ type: "START", task: actor._description, testingMode, maxRetries });
+  actor.send({ type: "START", task: actor._description, maxRetries });
   res.json(getTaskSnapshot(req.params.id));
 });
 
@@ -632,20 +670,6 @@ app.post("/tasks/:id/approve", (req, res) => {
   }
 
   return res.status(400).json({ error: `Current state ${sk} is not an approval gate` });
-});
-
-app.post("/tasks/:id/visual-test", (req, res) => {
-  const actor = actors.get(req.params.id);
-  if (!actor) return res.status(404).json({ error: "task not found" });
-
-  const snap = actor.getSnapshot();
-  const sk = stateKey(snap.value);
-  if (sk !== "visualTesting.awaitingTrigger") {
-    return res.status(400).json({ error: `Task is in state "${sk}", visual test can only be triggered from awaitingTrigger` });
-  }
-
-  actor.send({ type: "VISUAL_TEST_START" });
-  res.json(getTaskSnapshot(req.params.id));
 });
 
 app.post("/tasks/:id/restart", async (req, res) => {
@@ -976,7 +1000,7 @@ app.post("/internal/avatar-update", (req, res) => {
   res.json({ ok: true });
 });
 
-const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "githubber", "merger", "visual-tester"]);
+const KNOWN_ROLES = new Set(["developer", "planner", "reviewer", "tester", "githubber", "merger"]);
 
 app.get("/memory/:role", async (req, res) => {
   const { role } = req.params;
@@ -994,6 +1018,144 @@ app.get("/memory", async (req, res) => {
     ? await getAllMemoryByProject(projectPath)
     : await getAllMemory();
   res.json(all);
+});
+
+// --- Visual test endpoint (standalone, like evaluator) ---
+
+const __filename_idx = fileURLToPath(import.meta.url);
+const __dirname_idx = dirname(__filename_idx);
+const VISUAL_TESTER_DIR = join(__dirname_idx, "..", "agents", "visual-tester");
+
+app.post("/visual-test", async (req, res) => {
+  const { projectPath } = req.body;
+  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
+
+  if (activeVisualTests.has(projectPath)) {
+    return res.status(409).json({ error: "visual test already running for this project" });
+  }
+
+  // Discover tasks in merging.awaitingApproval for this project
+  const eligibleTasks = [];
+  for (const [id, actor] of actors) {
+    if (actor._projectPath !== projectPath) continue;
+    const snap = actor.getSnapshot();
+    const sk = stateKey(snap.value);
+    if (sk === "merging.awaitingApproval") {
+      eligibleTasks.push({
+        id,
+        branchName: snap.context.result?.branchName,
+        worktreePath: snap.context.result?.worktreePath,
+        description: actor._description,
+      });
+    }
+  }
+
+  if (eligibleTasks.length === 0) {
+    return res.status(400).json({ error: "No tasks awaiting PR approval" });
+  }
+
+  const vtId = `vt-${Date.now()}`;
+
+  broadcast({ type: "VISUAL_TEST_STARTED", projectPath, vtId, taskCount: eligibleTasks.length });
+
+  // Write tasks to a temp file for the script to read
+  const tmpDir = join(tmpdir(), "agents-vt");
+  mkdirSync(tmpDir, { recursive: true });
+  const tasksFile = join(tmpDir, `tasks-${vtId}.json`);
+  writeFileSync(tasksFile, JSON.stringify(eligibleTasks));
+
+  // Spawn visual-test.mjs as child process
+  const child = spawn("node", [
+    join(VISUAL_TESTER_DIR, "visual-test.mjs"),
+    "--projectPath", projectPath,
+    "--tasksFile", tasksFile,
+  ], {
+    cwd: projectPath,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let resultParsed = false;
+
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk.toString();
+    broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stdout", data: chunk.toString() });
+
+    // Parse status updates
+    const lines = stdout.split("\n");
+    for (const line of lines) {
+      if (line.startsWith(":::STATUS:::")) {
+        try {
+          const status = JSON.parse(line.replace(":::STATUS:::", "").trim());
+          broadcast({ type: "VISUAL_TEST_PROGRESS", projectPath, vtId, status });
+        } catch {}
+      }
+    }
+
+    // Parse final result
+    const startIdx = stdout.indexOf(":::RESULT_START:::");
+    const endIdx = stdout.indexOf(":::RESULT_END:::");
+    if (startIdx >= 0 && endIdx > startIdx && !resultParsed) {
+      resultParsed = true;
+      const resultStr = stdout.substring(startIdx + ":::RESULT_START:::".length, endIdx).trim();
+      try {
+        const result = JSON.parse(resultStr);
+        const timestamp = new Date().toISOString();
+        const lastVisualTest = { ...result, timestamp };
+
+        // Persist to project settings
+        getDb().then(async (db) => {
+          const project = db.data.config.projects.find((p) => p.path === projectPath);
+          if (project) {
+            project.settings = { ...project.settings, lastVisualTest };
+            await db.write();
+          }
+        }).catch((err) => console.error("Failed to persist visual test result:", err));
+
+        broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: lastVisualTest });
+      } catch (err) {
+        console.error("Failed to parse visual test result:", err);
+      }
+    }
+  });
+
+  child.stderr.on("data", (chunk) => {
+    broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stderr", data: chunk.toString() });
+  });
+
+  child.on("close", () => {
+    activeVisualTests.delete(projectPath);
+    // Clean up temp file
+    try { unlinkSync(tasksFile); } catch {}
+
+    if (!resultParsed) {
+      broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: { status: "failed", error: "Visual test exited without result", results: [], timestamp: new Date().toISOString() } });
+    }
+  });
+
+  activeVisualTests.set(projectPath, { vtId, child });
+  res.status(202).json({ vtId, taskCount: eligibleTasks.length });
+});
+
+// --- Screenshot serving ---
+
+app.get("/screenshots", (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath || typeof filePath !== "string") {
+    return res.status(400).json({ error: "path query param required" });
+  }
+
+  // Validate the path is under a known project directory
+  const isUnderProject = Array.from(actors.values()).some((a) => filePath.startsWith(a._projectPath));
+  if (!isUnderProject) {
+    return res.status(403).json({ error: "path not under a known project" });
+  }
+
+  if (!existsSync(filePath)) {
+    return res.status(404).json({ error: "file not found" });
+  }
+
+  res.sendFile(filePath);
 });
 
 // --- Evaluate endpoint ---
@@ -1166,9 +1328,6 @@ async function start() {
       "branching": [planReady, planApproved],
       "developing": [planReady, planApproved, branchReady],
       "committing": [planReady, planApproved, branchReady, codeComplete],
-      "visualTesting.preparing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
-      "visualTesting.awaitingTrigger": [planReady, planApproved, branchReady, codeComplete, commitComplete],
-      "visualTesting.running": [planReady, planApproved, branchReady, codeComplete, commitComplete],
       "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
       "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
       "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],

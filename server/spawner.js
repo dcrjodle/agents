@@ -33,7 +33,6 @@ const STATE_TO_ROLE = {
   "reviewing": "reviewer",
   "merging.creatingPr": "githubber",
   "directMerging": "merger",
-  "visualTesting.running": "visual-tester",
 };
 
 // Map XState states to deterministic scripts (no Claude)
@@ -97,10 +96,6 @@ const RESULT_TO_EVENT = {
     }
     return { type: "DIRECT_MERGE_FAILED", error: payload.error };
   },
-  "visual-tester": (payload) => ({
-    type: payload.status === "complete" ? "TESTS_PASSED" : "TESTS_FAILED",
-    error: payload.error,
-  }),
 };
 
 /**

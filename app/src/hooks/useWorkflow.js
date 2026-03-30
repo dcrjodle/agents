@@ -36,6 +36,10 @@ export function useWorkflow() {
   const [evaluationResults, setEvaluationResults] = useState({});
   // evaluatingProjects: Set of projectPaths currently being evaluated
   const [evaluatingProjects, setEvaluatingProjects] = useState(new Set());
+  // visualTestResults: { [projectPath]: { status, results: [{ taskId, status, screenshot?, error? }], timestamp } }
+  const [visualTestResults, setVisualTestResults] = useState({});
+  // visualTestingProjects: Set of projectPaths currently being visual-tested
+  const [visualTestingProjects, setVisualTestingProjects] = useState(new Set());
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -400,6 +404,30 @@ export function useWorkflow() {
               });
             }
             break;
+
+          case "VISUAL_TEST_STARTED":
+            if (msg.projectPath) {
+              setVisualTestingProjects((prev) => {
+                const next = new Set(prev);
+                next.add(msg.projectPath);
+                return next;
+              });
+            }
+            break;
+
+          case "VISUAL_TEST_COMPLETE":
+            if (msg.projectPath && msg.result) {
+              setVisualTestResults((prev) => ({
+                ...prev,
+                [msg.projectPath]: msg.result,
+              }));
+              setVisualTestingProjects((prev) => {
+                const next = new Set(prev);
+                next.delete(msg.projectPath);
+                return next;
+              });
+            }
+            break;
         }
       };
     }
@@ -527,7 +555,20 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, createTask, startTask, startAllTasks, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
+  const triggerVisualTest = async (projectPath) => {
+    const res = await fetch(`${API_BASE}/visual-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectPath }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Failed to start visual test: ${res.statusText}`);
+    }
+    return res.json();
+  };
+
+  return { tasks, connected, agentLogs, pendingPlans, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, triggerVisualTest, createTask, startTask, startAllTasks, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearErrors, updateTask };
 }
 
 export { stateKey };

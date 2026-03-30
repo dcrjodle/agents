@@ -10,7 +10,6 @@ const STATE_AGENTS = {
   "developing": "developer",
   "committing": "script",
   "testing": "tester",
-  "visualTesting.running": "visual-tester",
   "reviewing": "reviewer",
   "pushing": "script",
   "merging.creatingPr": "githubber",
@@ -23,9 +22,6 @@ const STATE_COLORS = {
   "branching": "#6366f1",
   "developing": "#3b82f6",
   "committing": "#2563eb",
-  "visualTesting.awaitingTrigger": "#a78bfa",
-  "visualTesting.preparing": "#f59e0b",
-  "visualTesting.running": "#f59e0b",
   "testing": "#f59e0b",
   "reviewing": "#ec4899",
   "pushing": "#06b6d4",
@@ -45,9 +41,6 @@ const STATE_LABELS = {
   "branching": "BRANCHING",
   "developing": "DEVELOPING",
   "committing": "COMMITTING",
-  "visualTesting.awaitingTrigger": "QUEUED FOR TESTING",
-  "visualTesting.preparing": "PREPARING TEST",
-  "visualTesting.running": "VISUAL TESTING",
   "testing": "TESTING",
   "reviewing": "REVIEWING",
   "pushing": "PUSHING",
@@ -79,13 +72,6 @@ const NEXT_EVENTS = {
     { type: "COMMIT_COMPLETE", files: ["src/index.js"] },
     { type: "COMMIT_FAILED", error: "Commit failed" },
   ],
-  "visualTesting.awaitingTrigger": [
-    { type: "VISUAL_TEST_START" },
-  ],
-  "visualTesting.running": [
-    { type: "TESTS_PASSED" },
-    { type: "TESTS_FAILED", error: "Visual test failure" },
-  ],
   "testing": [
     { type: "TESTS_PASSED" },
     { type: "TESTS_FAILED", error: "Test failure" },
@@ -115,7 +101,6 @@ function parentStage(sk) {
   // Map sub-states to their pipeline stage
   const stageMap = {
     "committing": "developing",
-    "visualTesting": "testing",
     "pushing": "merging",
   };
   const dot = sk.indexOf(".");
@@ -230,8 +215,6 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
   const stateDisplay = STATE_LABELS[sk] || sk.toUpperCase();
   const isTerminal = sk === "done" || sk === "failed";
   const isAwaitingApproval = sk === "planning.awaitingApproval" || sk === "merging.awaitingApproval";
-  const isAwaitingVisualTest = sk === "visualTesting.awaitingTrigger";
-
   // Auto-scroll log to bottom
   useEffect(() => {
     if (expanded && logEndRef.current) {
@@ -296,13 +279,6 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
         {isAwaitingApproval && (
           <span style={{ color: "#f59e0b", fontSize: 12 }}>
             awaiting approval
-          </span>
-        )}
-
-        {/* Awaiting visual test indicator */}
-        {isAwaitingVisualTest && (
-          <span style={{ color: "#f59e0b", fontSize: 12 }}>
-            awaiting visual test
           </span>
         )}
 
@@ -398,18 +374,6 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
                   onClick={() => onApprove(task.id)}
                 >
                   Approve PR
-                </Button>
-              )}
-              {/* Run Visual Test button for async mode */}
-              {isAwaitingVisualTest && (
-                <Button
-                  variant="action"
-                  color="#f59e0b"
-                  onClick={async () => {
-                    await fetch(`/api/tasks/${task.id}/visual-test`, { method: "POST" });
-                  }}
-                >
-                  Run Visual Test
                 </Button>
               )}
               {/* Sim buttons */}
