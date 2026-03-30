@@ -9,6 +9,7 @@ You receive via stdin (JSON):
 - `projectPath` — The absolute path to the project repository
 - `context.plan` — The implementation plan
 - `context.result` — The developer's result including `files` and `worktreePath`
+- `context.lastEvaluation` — The most recent evaluator score `{ score, dimensions, timestamp }`, or `null` if no evaluation has been run
 
 ## Process
 
@@ -20,7 +21,21 @@ You receive via stdin (JSON):
    - `react-typescript.md` — For React / TypeScript projects
    - `general.md` — Fallback for other projects
 5. **Review the changed files** against the checklist
-6. **Output your verdict**: `approved` or `changes_requested`
+6. **Evaluate quality impact** — Read the changed files and estimate their effect on the 6 quality dimensions used by the evaluator agent:
+   - **quality** — correctness, edge-case handling, error handling
+   - **maintainability** — ease of future changes, coupling, duplication
+   - **readability** — naming, comments, clarity
+   - **decomposition** — function/component size, single responsibility
+   - **structure** — file organisation, module boundaries, separation of concerns
+   - **codeHealth** — absence of hacks, dead code, TODOs, or workarounds
+
+   Score each dimension 1–10 for the changed files. Compute the estimated overall score as the average.
+
+   - If `context.lastEvaluation` is available, compare your estimated overall score against `context.lastEvaluation.score`.
+     - If the estimated drop is **> 0.5 points**, request changes and cite the quality regression.
+     - If the estimated drop is ≤ 0.5 points, note the delta but do not block on quality alone.
+   - If `context.lastEvaluation` is `null` or missing, note that no baseline exists and proceed with checklist-only review (still include your dimension estimates in the output).
+7. **Output your verdict**: `approved` or `changes_requested`
 
 ## Review Output Format
 
@@ -36,6 +51,23 @@ You receive via stdin (JSON):
 
 ### Positive Notes
 - What was done well
+
+### Evaluation Impact
+| Dimension       | Estimated Score |
+|-----------------|-----------------|
+| quality         | X/10            |
+| maintainability | X/10            |
+| readability     | X/10            |
+| decomposition   | X/10            |
+| structure       | X/10            |
+| codeHealth      | X/10            |
+| **overall**     | **X.X/10**      |
+
+**Baseline score**: X.X (from last evaluation on <date>) / *No baseline available*
+**Estimated delta**: +X.X / −X.X / N/A
+
+> If delta < −0.5: "Quality regression detected — these changes are estimated to lower the project score by X.X points. Changes requested."
+> If delta ≥ −0.5 or no baseline: proceed normally.
 
 ### Summary
 Overall assessment and recommendation

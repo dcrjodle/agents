@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Play, Settings } from "lucide-react";
+import { Play, Settings, X } from "lucide-react";
 import { TabTaskPopover } from "./TabTaskPopover.jsx";
 import { Button } from "./Button.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
@@ -231,12 +231,12 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
           items={[
             ...(onOpenSettings ? [{
               label: "open settings",
-              icon: "⚙",
+              icon: Settings,
               action: () => onOpenSettings(contextMenu.target),
             }] : []),
             ...(onRemoveProject ? [{
               label: "remove project",
-              icon: "×",
+              icon: X,
               danger: true,
               action: () => onRemoveProject(contextMenu.target.path),
             }] : []),
