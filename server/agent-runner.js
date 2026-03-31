@@ -42,6 +42,7 @@ const PROMPT_BUILDERS = {
   merger: buildMergerPrompt,
   evaluator: buildEvaluatorPrompt,
   "file-developer": buildFileDeveloperPrompt,
+  ana: buildAnaPrompt,
 };
 
 // --- Auto-discovery: load agent configs from agents/*/agent.json ---
@@ -480,6 +481,46 @@ When you are done, you MUST call report_result with:
 {"status": "complete", "file": "${filePath}", "changes": "<summary>"}
 or
 {"status": "failed", "file": "${filePath}", "error": "<what went wrong>"}`;
+}
+
+function buildAnaPrompt(handoff) {
+  const userMessage = handoff.context.userMessage || handoff.instruction;
+  const projectPath = handoff.projectPath;
+  const selectedTaskId = handoff.context.selectedTaskId || null;
+  const recentErrors = handoff.context.recentErrors || [];
+
+  let contextSection = `## Context
+Project path: ${projectPath}`;
+
+  if (selectedTaskId) {
+    contextSection += `\nCurrently selected task: ${selectedTaskId}`;
+  }
+
+  if (recentErrors.length > 0) {
+    contextSection += `\n\n## Recent Errors
+${recentErrors.slice(0, 5).map((e) => `- [${e.agent}] ${e.error}`).join("\n")}`;
+  }
+
+  return `You are Ana, a helpful AI assistant for the agent workflow system.
+
+${contextSection}
+
+## User Message
+${userMessage}
+
+## Instructions
+1. Understand what the user is asking for
+2. Use your available tools to gather information if needed
+3. Provide a helpful, conversational response
+4. If the user asks to perform an action, explain what you can do and offer guidance
+
+When you are done, call report_result with:
+{
+  "response": "<your response to the user>",
+  "actions": []
+}
+
+The "response" field should contain your conversational reply. Keep it helpful and concise.`;
 }
 
 // --- Resume prompt (for developer retries with existing session) ---

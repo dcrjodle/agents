@@ -1563,6 +1563,80 @@ app.post("/evaluate", async (req, res) => {
   res.status(202).json({ evalId });
 });
 
+// --- Ana Chat ---
+
+// Track active Ana chat sessions
+const activeAnaChats = new Map(); // chatId -> { projectPath, agentHandle }
+const anaChatCallbacks = new Map(); // chatId -> { onResult }
+
+app.post("/ana/chat", async (req, res) => {
+  const { message, context = {} } = req.body;
+  const { projectPath, selectedTaskId } = context;
+
+  if (!message) return res.status(400).json({ error: "message required" });
+  if (!projectPath) return res.status(400).json({ error: "projectPath required in context" });
+
+  const chatId = `ana-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Gather recent errors if a task is selected
+  let recentErrors = [];
+  if (selectedTaskId) {
+    const taskLogs = await getTaskLogs(selectedTaskId);
+    recentErrors = taskLogs
+      .filter((e) => e.type === "error")
+      .slice(-5)
+      .map((e) => ({ agent: e.agent, error: e.error || e.data }));
+  }
+
+  const handoff = {
+    instruction: message,
+    projectPath,
+    context: {
+      userMessage: message,
+      selectedTaskId,
+      recentErrors,
+    },
+  };
+
+  // Register result callback
+  anaChatCallbacks.set(chatId, {
+    onResult(result) {
+      broadcast({ type: "ANA_MESSAGE", chatId, result });
+      activeAnaChats.delete(chatId);
+      anaChatCallbacks.delete(chatId);
+    },
+  });
+
+  const agentHandle = runAgent("ana", chatId, handoff, {
+    onStdout(data) {
+      broadcast({ type: "ANA_STREAM", chatId, data });
+    },
+    onStderr(data) {
+      broadcast({ type: "ANA_STREAM", chatId, data });
+    },
+    onExit(code) {
+      if (code !== 0 && anaChatCallbacks.has(chatId)) {
+        broadcast({ type: "ANA_ERROR", chatId, error: "Ana agent exited unexpectedly" });
+      }
+      activeAnaChats.delete(chatId);
+      anaChatCallbacks.delete(chatId);
+    },
+  });
+
+  activeAnaChats.set(chatId, { projectPath, agentHandle });
+  res.status(202).json({ chatId });
+});
+
+// Internal endpoint for Ana agent results
+app.post("/internal/ana-result", (req, res) => {
+  const { chatId, result } = req.body;
+  const cb = anaChatCallbacks.get(chatId);
+  if (cb) {
+    cb.onResult(result);
+  }
+  res.json({ ok: true });
+});
+
 // --- WebSocket ---
 
 wss.on("connection", async (ws, req) => {
