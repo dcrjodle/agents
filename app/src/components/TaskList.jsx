@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink, Camera } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { useContextMenu, useLongPress } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
@@ -7,6 +7,86 @@ import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
 import { buildTaskMenuItems, buildBulkTaskMenuItems } from "../utils/taskMenuItems.js";
 import "../styles/task-list.css";
+
+function VisualTestIndicator({ result }) {
+  const [showPopover, setShowPopover] = useState(false);
+  const passed = result.status === "complete";
+
+  return (
+    <div
+      className="visual-test-indicator"
+      onMouseEnter={() => setShowPopover(true)}
+      onMouseLeave={() => setShowPopover(false)}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (result.markdownUrl) window.open(result.markdownUrl, "_blank", "noopener,noreferrer");
+      }}
+    >
+      <Camera
+        size={12}
+        style={{
+          color: passed ? "var(--dot-done, #22c55e)" : "var(--dot-failed, #ef4444)",
+          cursor: "pointer",
+        }}
+      />
+      {showPopover && (
+        <div className="visual-test-popover">
+          <div style={{ fontWeight: 600, fontSize: 11, marginBottom: 4 }}>
+            Visual Test {passed ? "Passed" : "Failed"}
+          </div>
+          {result.branchName && (
+            <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 4 }}>
+              {result.branchName}
+            </div>
+          )}
+          {result.screenshots && result.screenshots.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 4 }}>
+              {result.screenshots.slice(0, 3).map((url) => (
+                <img
+                  key={url}
+                  src={url}
+                  alt="Screenshot"
+                  style={{
+                    width: "100%",
+                    maxWidth: 240,
+                    borderRadius: 4,
+                    border: "1px solid var(--border)",
+                  }}
+                />
+              ))}
+              {result.screenshots.length > 3 && (
+                <span style={{ fontSize: 9, color: "var(--text-dim)" }}>
+                  +{result.screenshots.length - 3} more
+                </span>
+              )}
+            </div>
+          )}
+          {result.markdownUrl && (
+            <a
+              href={result.markdownUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 10, color: "var(--accent, #3b82f6)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              view full report
+            </a>
+          )}
+          {result.error && (
+            <div style={{ fontSize: 10, color: "var(--dot-failed, #ef4444)", marginTop: 4 }}>
+              {result.error}
+            </div>
+          )}
+          {result.timestamp && (
+            <div style={{ fontSize: 9, color: "var(--text-dim)", marginTop: 4 }}>
+              {new Date(result.timestamp).toLocaleString()}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const DONE_COLLAPSED_KEY = "taskList.doneCollapsed";
 
@@ -36,6 +116,7 @@ export function TaskList({
   pendingPlans,
   pendingReviews,
   pendingPrs,
+  visualTestResults,
 }) {
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
   const [doneCollapsed, setDoneCollapsed] = useState(getInitialCollapsed);
@@ -338,6 +419,9 @@ export function TaskList({
             </span>
           )}
         </div>
+        {visualTestResults?.[task.id] && (
+          <VisualTestIndicator result={visualTestResults[task.id]} />
+        )}
       </div>
     );
   };

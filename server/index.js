@@ -146,8 +146,7 @@ const activeEvaluations = new Map(); // projectPath -> evalId
 // Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
 const evaluationCallbacks = new Map();
 // Track in-flight visual tests per projectPath
-const activeVisualTests = new Map(); // projectPath -> vtId
-const visualTestCallbacks = new Map(); // vtId -> { onResult, projectPath }
+// Visual testing moved to frontend Vite plugin (app/vite-visual-test-plugin.js)
 
 // Agent timeout: kill agents that run too long (default 30 minutes)
 const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -1480,116 +1479,8 @@ app.get("/memory", async (req, res) => {
 
 const __filename_idx = fileURLToPath(import.meta.url);
 const __dirname_idx = dirname(__filename_idx);
-const VISUAL_TESTER_DIR = join(__dirname_idx, "..", "agents", "visual-tester");
-
-app.post("/visual-test", async (req, res) => {
-  const { projectPath } = req.body;
-  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
-
-  if (activeVisualTests.has(projectPath)) {
-    return res.status(409).json({ error: "visual test already running for this project" });
-  }
-
-  // Discover tasks in merging.awaitingApproval for this project
-  const eligibleTasks = [];
-  for (const [id, actor] of actors) {
-    if (actor._projectPath !== projectPath) continue;
-    const snap = actor.getSnapshot();
-    const sk = stateKey(snap.value);
-    if (sk === "merging.awaitingApproval") {
-      eligibleTasks.push({
-        id,
-        branchName: snap.context.result?.branchName,
-        worktreePath: snap.context.result?.worktreePath,
-        description: actor._description,
-      });
-    }
-  }
-
-  if (eligibleTasks.length === 0) {
-    return res.status(400).json({ error: "No tasks awaiting PR approval" });
-  }
-
-  const vtId = `vt-${Date.now()}`;
-  const scriptPath = "/Users/joel/scripts/ivy-studio-local.sh";
-
-  if (!existsSync(scriptPath)) {
-    return res.status(500).json({ error: `Script not found: ${scriptPath}` });
-  }
-
-  broadcast({ type: "VISUAL_TEST_STARTED", projectPath, vtId, taskCount: eligibleTasks.length });
-
-  // Process branches sequentially using ivy-studio-local.sh
-  const results = [];
-
-  const processNext = (index) => {
-    if (index >= eligibleTasks.length) {
-      // All done
-      activeVisualTests.delete(projectPath);
-      const timestamp = new Date().toISOString();
-      const lastVisualTest = { status: "complete", results, timestamp };
-
-      dbUpdateProjectSettings(projectPath, { lastVisualTest })
-        .catch((err) => console.error("Failed to persist visual test result:", err));
-
-      broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: lastVisualTest });
-      return;
-    }
-
-    const task = eligibleTasks[index];
-    const branchName = task.branchName;
-
-    broadcast({ type: "VISUAL_TEST_PROGRESS", projectPath, vtId, status: { message: `Testing branch ${branchName} (${index + 1}/${eligibleTasks.length})`, current: index + 1, total: eligibleTasks.length } });
-
-    const child = spawn("bash", [scriptPath, `--branch=${branchName}`], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    activeTest.child = child;
-
-    child.stdout.on("data", (chunk) => {
-      broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stdout", data: chunk.toString() });
-    });
-
-    child.stderr.on("data", (chunk) => {
-      broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stderr", data: chunk.toString() });
-    });
-
-    child.on("close", (code) => {
-      results.push({
-        taskId: task.id,
-        branchName,
-        status: code === 0 ? "complete" : "failed",
-        error: code !== 0 ? `ivy-studio-local.sh exited with code ${code}` : undefined,
-      });
-      processNext(index + 1);
-    });
-  };
-
-  const activeTest = { vtId, child: null };
-  activeVisualTests.set(projectPath, activeTest);
-
-  processNext(0);
-
-  res.status(202).json({ vtId, taskCount: eligibleTasks.length });
-});
-
-app.post("/visual-test/stop", (req, res) => {
-  const { projectPath } = req.body;
-  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
-
-  const activeTest = activeVisualTests.get(projectPath);
-  if (!activeTest) {
-    return res.status(404).json({ error: "No visual test running for this project" });
-  }
-
-  if (activeTest.child) {
-    activeTest.child.kill("SIGTERM");
-  }
-  activeVisualTests.delete(projectPath);
-  broadcast({ type: "VISUAL_TEST_STOPPED", projectPath });
-
-  return res.status(200).json({ success: true });
-});
+// Visual testing has been moved to the frontend (Vite plugin).
+// See app/vite-visual-test-plugin.js
 
 // --- Screenshot serving ---
 

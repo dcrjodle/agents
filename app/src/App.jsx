@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Settings, LogOut, Rocket } from "lucide-react";
 import { useWorkflow, stateKey } from "./hooks/useWorkflow.js";
+import { useVisualTest } from "./hooks/useVisualTest.js";
 import { CreateTask } from "./components/CreateTask.jsx";
 import { TaskList } from "./components/TaskList.jsx";
 import { ProjectTabs } from "./components/ProjectTabs.jsx";
@@ -79,11 +80,6 @@ function AuthenticatedApp({ user, onLogout }) {
     evaluationResults,
     evaluatingProjects,
     triggerEvaluation,
-    visualTestResults,
-    visualTestingProjects,
-    visualTestProgress,
-    triggerVisualTest,
-    stopVisualTest,
     createTask,
     startTask,
     startAllTasks,
@@ -107,6 +103,14 @@ function AuthenticatedApp({ user, onLogout }) {
     sendToGithubberQueue,
     deploy,
   } = useWorkflow();
+
+  const {
+    visualTestResults,
+    visualTestIsRunning,
+    visualTestProgress,
+    triggerVisualTest,
+    cancelVisualTest,
+  } = useVisualTest(tasks);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
@@ -632,11 +636,11 @@ function AuthenticatedApp({ user, onLogout }) {
             isEvaluating={evaluatingProjects.has(selectedProject.path)}
             onEvaluate={() => triggerEvaluation(selectedProject.path).catch((err) => console.error("Evaluation error:", err))}
             onAddTask={handleCreateTask}
-            visualTestIsRunning={visualTestingProjects.has(selectedProject.path)}
-            visualTestResults={visualTestResults[selectedProject.path]}
-            visualTestProgress={visualTestProgress[selectedProject.path]}
+            visualTestIsRunning={visualTestIsRunning}
+            visualTestResults={visualTestResults}
+            visualTestProgress={visualTestProgress}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
-            onStopVisualTest={() => stopVisualTest(selectedProject.path).catch((err) => console.error("Stop visual test error:", err))}
+            onStopVisualTest={() => cancelVisualTest().catch((err) => console.error("Stop visual test error:", err))}
             onSendToGithubber={(branches) => sendToGithubberQueue(selectedProject.path, branches).catch((err) => console.error("Githubber queue error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
@@ -677,6 +681,7 @@ function AuthenticatedApp({ user, onLogout }) {
             pendingPlans={pendingPlans}
             pendingReviews={pendingReviews}
             pendingPrs={pendingPrs}
+            visualTestResults={visualTestResults}
           />
         </div>
 

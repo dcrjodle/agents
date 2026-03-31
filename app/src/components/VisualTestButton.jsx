@@ -3,10 +3,11 @@ import { Loader2 } from "lucide-react";
 import { VisualTestCharacter } from "./VisualTestCharacter.jsx";
 
 function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGithubber, eligibleTaskCount, progress }) {
-  const hasResults = results && results.results && results.results.length > 0;
-  const passedCount = hasResults ? results.results.filter((r) => r.status === "complete").length : 0;
-  const totalCount = hasResults ? results.results.length : 0;
-  const hasError = results && results.error;
+  // results is now { [taskId]: { status, screenshotUrl?, markdownUrl?, screenshots?, error?, branchName } }
+  const entries = results ? Object.entries(results) : [];
+  const hasResults = entries.length > 0;
+  const passedCount = entries.filter(([, r]) => r.status === "complete").length;
+  const totalCount = entries.length;
 
   return (
     <div className="evaluator-hover-menu">
@@ -14,22 +15,7 @@ function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGi
 
       {isRunning && (
         <div style={{ fontSize: 10, color: "var(--text-dim)", padding: "4px 0" }}>
-          {progress || "running..."}
-        </div>
-      )}
-
-      {hasError && (
-        <div style={{
-          background: "rgba(239,68,68,0.12)",
-          border: "1px solid var(--dot-failed, #ef4444)",
-          borderRadius: 4,
-          padding: "6px 8px",
-          color: "var(--dot-failed, #ef4444)",
-          marginBottom: hasResults ? 8 : 0,
-          fontSize: 10,
-          wordBreak: "break-word",
-        }}>
-          {results.error}
+          {progress?.message || "running agent..."}
         </div>
       )}
 
@@ -38,11 +24,8 @@ function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGi
           <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 4, fontSize: 11 }}>
             Results ({passedCount}/{totalCount} passed)
           </div>
-          <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 6 }}>
-            {results.timestamp ? new Date(results.timestamp).toLocaleString() : ""}
-          </div>
-          {results.results.map((r) => (
-            <div key={r.taskId || r.branchName} style={{
+          {entries.map(([taskId, r]) => (
+            <div key={taskId} style={{
               display: "flex",
               alignItems: "center",
               gap: 6,
@@ -64,8 +47,19 @@ function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGi
                 flex: 1,
                 fontSize: 10,
               }}>
-                {r.branchName || (r.taskId ? `${r.taskId.slice(0, 8)}...` : "unknown")}
+                {r.branchName || `${taskId.slice(0, 8)}...`}
               </span>
+              {r.markdownUrl && (
+                <a
+                  href={r.markdownUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ fontSize: 9, color: "var(--accent, #3b82f6)", textDecoration: "none" }}
+                >
+                  report
+                </a>
+              )}
               {r.error && (
                 <span style={{ color: "var(--dot-failed, #ef4444)", fontSize: 9 }}>
                   {r.error.slice(0, 30)}
@@ -76,9 +70,9 @@ function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGi
           {passedCount > 0 && onSendToGithubber && (
             <button
               onClick={() => {
-                const passedBranches = results.results
-                  .filter((r) => r.status === "complete" && r.branchName)
-                  .map((r) => r.branchName);
+                const passedBranches = entries
+                  .filter(([, r]) => r.status === "complete" && r.branchName)
+                  .map(([, r]) => r.branchName);
                 if (passedBranches.length > 0) onSendToGithubber(passedBranches);
               }}
               className="evaluator-run-btn"

@@ -39,14 +39,8 @@ export function useWorkflow() {
   const [evaluationResults, setEvaluationResults] = useState({});
   // evaluatingProjects: Set of projectPaths currently being evaluated
   const [evaluatingProjects, setEvaluatingProjects] = useState(new Set());
-  // visualTestResults: { [projectPath]: { status, results: [{ taskId, status, screenshot?, error? }], timestamp } }
-  const [visualTestResults, setVisualTestResults] = useState({});
-  // visualTestingProjects: Set of projectPaths currently being visual-tested
-  const [visualTestingProjects, setVisualTestingProjects] = useState(new Set());
   // ivyStudioRunningBranches: Set of branch names currently running ivy studio
   const [ivyStudioRunningBranches, setIvyStudioRunningBranches] = useState(new Set());
-  // visualTestProgress: { [projectPath]: string } — current step text while a test is running
-  const [visualTestProgress, setVisualTestProgress] = useState({});
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(2000);
@@ -471,64 +465,6 @@ export function useWorkflow() {
             }
             break;
 
-          case "VISUAL_TEST_STARTED":
-            if (msg.projectPath) {
-              setVisualTestingProjects((prev) => {
-                const next = new Set(prev);
-                next.add(msg.projectPath);
-                return next;
-              });
-              setVisualTestProgress((prev) => {
-                const next = { ...prev };
-                delete next[msg.projectPath];
-                return next;
-              });
-            }
-            break;
-
-          case "VISUAL_TEST_PROGRESS":
-            if (msg.projectPath && msg.status?.currentStep) {
-              setVisualTestProgress((prev) => ({
-                ...prev,
-                [msg.projectPath]: msg.status.currentStep,
-              }));
-            }
-            break;
-
-          case "VISUAL_TEST_COMPLETE":
-            if (msg.projectPath && msg.result) {
-              setVisualTestResults((prev) => ({
-                ...prev,
-                [msg.projectPath]: msg.result,
-              }));
-              setVisualTestingProjects((prev) => {
-                const next = new Set(prev);
-                next.delete(msg.projectPath);
-                return next;
-              });
-              setVisualTestProgress((prev) => {
-                const next = { ...prev };
-                delete next[msg.projectPath];
-                return next;
-              });
-            }
-            break;
-
-          case "VISUAL_TEST_STOPPED":
-            if (msg.projectPath) {
-              setVisualTestingProjects((prev) => {
-                const next = new Set(prev);
-                next.delete(msg.projectPath);
-                return next;
-              });
-              setVisualTestProgress((prev) => {
-                const next = { ...prev };
-                delete next[msg.projectPath];
-                return next;
-              });
-            }
-            break;
-
           case "IVY_STUDIO_STARTED":
             if (msg.branch) {
               setIvyStudioRunningBranches((prev) => {
@@ -734,32 +670,6 @@ export function useWorkflow() {
     return res.json();
   };
 
-  const triggerVisualTest = async (projectPath) => {
-    const res = await fetch(`${API_BASE}/visual-test`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectPath }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || `Failed to start visual test: ${res.statusText}`);
-    }
-    return res.json();
-  };
-
-  const stopVisualTest = async (projectPath) => {
-    const res = await fetch(`${API_BASE}/visual-test/stop`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectPath }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || `Failed to stop visual test: ${res.statusText}`);
-    }
-    return res.json();
-  };
-
   const launchIvyStudio = async (branch) => {
     const res = await fetch(`${API_BASE}/ivy-studio`, {
       method: "POST",
@@ -799,7 +709,7 @@ export function useWorkflow() {
   };
 
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, stopVisualTest, launchIvyStudio, ivyStudioRunningBranches, sendToGithubberQueue, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, prAction, planAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, launchIvyStudio, ivyStudioRunningBranches, sendToGithubberQueue, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, prAction, planAction, clearErrors, updateTask };
 }
 
 export { stateKey };
