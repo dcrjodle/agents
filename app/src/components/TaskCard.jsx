@@ -37,14 +37,15 @@ const PIPELINE_STAGES = ["planning", "branching", "developing", "testing", "revi
 const STATE_LABELS = {
   "idle": "IDLE",
   "planning.running": "PLANNING",
-  "planning.awaitingApproval": "AWAITING APPROVAL",
+  "planning.awaitingApproval": "AWAITING PLAN",
   "branching": "BRANCHING",
   "developing": "DEVELOPING",
   "committing": "COMMITTING",
   "testing": "TESTING",
   "reviewing": "REVIEWING",
+  "reviewing.awaitingApproval": "AWAITING REVIEW",
   "pushing": "PUSHING",
-  "merging.awaitingApproval": "AWAITING APPROVAL",
+  "merging.awaitingApproval": "AWAITING PR",
   "merging.creatingPr": "CREATING PR",
   "done": "DONE",
   "failed": "FAILED",
@@ -214,7 +215,7 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
   const stateColor = STATE_COLORS[sk] || "#94a3b8";
   const stateDisplay = STATE_LABELS[sk] || sk.toUpperCase();
   const isTerminal = sk === "done" || sk === "failed";
-  const isAwaitingApproval = sk === "planning.awaitingApproval" || sk === "merging.awaitingApproval";
+  const isAwaitingApproval = sk === "planning.awaitingApproval" || sk === "reviewing.awaitingApproval" || sk === "merging.awaitingApproval";
   // Auto-scroll log to bottom
   useEffect(() => {
     if (expanded && logEndRef.current) {
@@ -278,7 +279,7 @@ export function TaskCard({ task, logs, errors, onSendEvent, onDelete, onApprove,
         {/* Awaiting approval indicator */}
         {isAwaitingApproval && (
           <span style={{ color: "#f59e0b", fontSize: 12 }}>
-            awaiting approval
+            {STATE_LABELS[sk] ? STATE_LABELS[sk].toLowerCase() : "awaiting approval"}
           </span>
         )}
 

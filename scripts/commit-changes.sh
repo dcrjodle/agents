@@ -20,12 +20,12 @@ echo "[committing] Working in: $WORKTREE_PATH" >&2
 
 cd "$WORKTREE_PATH"
 
-# Ensure git identity is configured (required on servers without global git config)
+# Ensure git identity is configured for this worktree (uses --local to avoid polluting global config)
 if ! git config user.name >/dev/null 2>&1; then
-  git config user.name "Agent"
+  git config --local user.name "Agent"
 fi
 if ! git config user.email >/dev/null 2>&1; then
-  git config user.email "agent@automated"
+  git config --local user.email "agent@automated"
 fi
 
 # Get the main branch name
