@@ -5,10 +5,11 @@ import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { randomUUID } from "crypto";
 import { spawn } from "child_process";
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import multer from "multer";
 import { workflowMachine } from "../machine.js";
 import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
 import { clearSession, runAgent } from "./agent-runner.js";
@@ -31,6 +32,9 @@ import {
   appendTaskLog,
   getTaskLogs,
   clearTaskLogs,
+  createTaskImage,
+  getTaskImages,
+  deleteTaskImage,
 } from "./db.js";
 import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
 
@@ -53,6 +57,41 @@ const distPath = join(__dirname_root, "..", "app", "dist");
 if (existsSync(distPath)) {
   app.use(express.static(distPath));
 }
+
+// Create uploads directory if it doesn't exist
+const uploadsPath = join(__dirname_root, "..", "uploads");
+if (!existsSync(uploadsPath)) {
+  mkdirSync(uploadsPath, { recursive: true });
+}
+
+// Serve static uploads (images)
+app.use("/uploads", express.static(uploadsPath));
+
+// Configure multer for image uploads
+const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILES_PER_TASK = 10;
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsPath),
+  filename: (req, file, cb) => {
+    const ext = file.originalname.split(".").pop();
+    const uniqueName = `${randomUUID()}.${ext}`;
+    cb(null, uniqueName);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`));
+    }
+  },
+});
 
 // --- Auth: session store and cookie helpers ---
 const sessions = new Map(); // token -> { email, createdAt }
@@ -218,11 +257,12 @@ function broadcastAndLog(message) {
   appendTaskLog(taskId, logEntry);
 }
 
-function getTaskSnapshot(id) {
+async function getTaskSnapshot(id) {
   const actor = actors.get(id);
   if (!actor) return null;
   const snap = actor.getSnapshot();
   const sk = stateKey(snap.value);
+  const images = await getTaskImages(id);
   return {
     id,
     description: actor._description,
@@ -232,6 +272,7 @@ function getTaskSnapshot(id) {
     label: stateLabel(snap.value),
     context: snap.context,
     createdAt: actor._createdAt,
+    images,
   };
 }
 
@@ -271,6 +312,11 @@ async function onStateTransition(taskId, stateValue, context) {
 
   const label = isAgent ? STATE_TO_ROLE[sk] : `script:${sk}`;
 
+  // Get attached images for this task
+  const taskImages = await getTaskImages(taskId);
+  // Convert to absolute paths for agent Read tool access
+  const imagePaths = taskImages.map((img) => join(uploadsPath, img.filename));
+
   const handoff = {
     instruction: actor._description,
     projectPath: actor._projectPath,
@@ -280,6 +326,7 @@ async function onStateTransition(taskId, stateValue, context) {
       result: context.result,
       error: context.error,
       retries: context.retries,
+      images: imagePaths,
     },
   };
 
@@ -725,14 +772,15 @@ app.post("/deploy", async (req, res) => {
 app.get("/tasks", async (req, res) => {
   // Return live snapshots for active actors, db records for completed/failed
   const dbTasks = await dbGetAllTasks();
-  const list = dbTasks.map((t) => {
+  const list = await Promise.all(dbTasks.map(async (t) => {
     const actor = actors.get(t.id);
     if (actor) {
-      return getTaskSnapshot(t.id);
+      return await getTaskSnapshot(t.id);
     }
-    // No live actor — return persisted state
-    return t;
-  });
+    // No live actor — return persisted state with images
+    const images = await getTaskImages(t.id);
+    return { ...t, images };
+  }));
   res.json(list);
 });
 
@@ -774,7 +822,7 @@ app.post("/tasks", async (req, res) => {
     actor.send({ type: "START", task: description, maxRetries });
   }
 
-  const snapshot = getTaskSnapshot(id);
+  const snapshot = await getTaskSnapshot(id);
   broadcast({ type: "TASK_CREATED", task: snapshot });
   res.status(201).json(snapshot);
 });
@@ -797,7 +845,7 @@ app.patch("/tasks/:id", async (req, res) => {
   actor._description = description.trim();
   await dbUpdateTask(req.params.id, { description: description.trim() });
 
-  const snapshot = getTaskSnapshot(req.params.id);
+  const snapshot = await getTaskSnapshot(req.params.id);
   broadcast({ type: "TASK_UPDATED", task: snapshot });
   res.json(snapshot);
 });
@@ -815,10 +863,10 @@ app.post("/tasks/:id/start", async (req, res) => {
   const projectSettings = await getProjectSettings(actor._projectPath);
   const maxRetries = projectSettings.maxRetries ?? 5;
   actor.send({ type: "START", task: actor._description, maxRetries });
-  res.json(getTaskSnapshot(req.params.id));
+  res.json(await getTaskSnapshot(req.params.id));
 });
 
-app.post("/tasks/:id/event", (req, res) => {
+app.post("/tasks/:id/event", async (req, res) => {
   const actor = actors.get(req.params.id);
   if (!actor) return res.status(404).json({ error: "task not found" });
 
@@ -826,7 +874,7 @@ app.post("/tasks/:id/event", (req, res) => {
   if (!event?.type) return res.status(400).json({ error: "event.type required" });
 
   actor.send(event);
-  res.json(getTaskSnapshot(req.params.id));
+  res.json(await getTaskSnapshot(req.params.id));
 });
 
 app.get("/tasks/:id/plan", (req, res) => {
@@ -841,6 +889,94 @@ app.get("/tasks/:id/plan", (req, res) => {
     });
   }
   res.json(null);
+});
+
+// --- Task Images ---
+
+app.get("/tasks/:id/images", async (req, res) => {
+  try {
+    const images = await getTaskImages(req.params.id);
+    res.json(images);
+  } catch (err) {
+    console.error("Failed to get task images:", err);
+    res.status(500).json({ error: "Failed to get images" });
+  }
+});
+
+app.post("/tasks/:id/images", upload.array("images", MAX_FILES_PER_TASK), async (req, res) => {
+  const taskId = req.params.id;
+
+  // Verify task exists
+  const actor = actors.get(taskId);
+  const dbTask = actor ? null : await dbGetTask(taskId);
+  if (!actor && !dbTask) {
+    // Clean up uploaded files
+    for (const file of req.files || []) {
+      try { unlinkSync(file.path); } catch {}
+    }
+    return res.status(404).json({ error: "task not found" });
+  }
+
+  try {
+    // Check current image count
+    const existing = await getTaskImages(taskId);
+    if (existing.length + (req.files?.length || 0) > MAX_FILES_PER_TASK) {
+      // Clean up uploaded files
+      for (const file of req.files || []) {
+        try { unlinkSync(file.path); } catch {}
+      }
+      return res.status(400).json({
+        error: `Maximum ${MAX_FILES_PER_TASK} images per task. Currently have ${existing.length}.`
+      });
+    }
+
+    const results = [];
+    for (const file of req.files || []) {
+      const imageRecord = await createTaskImage({
+        id: randomUUID(),
+        taskId,
+        filename: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+      });
+      results.push(imageRecord);
+    }
+
+    res.status(201).json(results);
+  } catch (err) {
+    console.error("Failed to save task images:", err);
+    // Clean up uploaded files on error
+    for (const file of req.files || []) {
+      try { unlinkSync(file.path); } catch {}
+    }
+    res.status(500).json({ error: "Failed to save images" });
+  }
+});
+
+app.delete("/tasks/:id/images/:imageId", async (req, res) => {
+  try {
+    const images = await getTaskImages(req.params.id);
+    const image = images.find((img) => img.id === req.params.imageId);
+    if (!image) {
+      return res.status(404).json({ error: "image not found" });
+    }
+
+    // Delete file from disk
+    const filePath = join(uploadsPath, image.filename);
+    try {
+      unlinkSync(filePath);
+    } catch (err) {
+      console.warn(`Failed to delete image file ${filePath}:`, err.message);
+    }
+
+    // Delete from database
+    await deleteTaskImage(req.params.imageId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Failed to delete task image:", err);
+    res.status(500).json({ error: "Failed to delete image" });
+  }
 });
 
 app.post("/tasks/:id/approve", (req, res) => {
@@ -971,7 +1107,7 @@ app.post("/tasks/:id/restart", async (req, res) => {
 
   broadcast({ type: "TASK_RESTARTED", taskId: id });
 
-  res.json(getTaskSnapshot(id));
+  res.json(await getTaskSnapshot(id));
 });
 
 app.post("/tasks/:id/stop", async (req, res) => {
@@ -1033,7 +1169,7 @@ app.post("/tasks/:id/stop", async (req, res) => {
   broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "stopped", currentStep: `Stopped by user (was ${sk})` } });
   broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
 
-  res.json(getTaskSnapshot(id));
+  res.json(await getTaskSnapshot(id));
 });
 
 app.post("/tasks/:id/continue", async (req, res) => {
@@ -1098,7 +1234,7 @@ app.post("/tasks/:id/continue", async (req, res) => {
 
   broadcast({ type: "TASK_CONTINUED", taskId: id, fromState: snap.context.failedFrom });
 
-  res.json(getTaskSnapshot(id));
+  res.json(await getTaskSnapshot(id));
 });
 
 app.delete("/tasks/:id", async (req, res) => {
@@ -1512,10 +1648,15 @@ wss.on("connection", async (ws, req) => {
 
   // Send current state of all tasks on connect
   const dbTasks = await dbGetAllTasks();
-  const list = dbTasks.map((t) => {
+  const list = await Promise.all(dbTasks.map(async (t) => {
     const actor = actors.get(t.id);
-    return actor ? getTaskSnapshot(t.id) : t;
-  });
+    if (actor) {
+      return await getTaskSnapshot(t.id);
+    }
+    // Include images for persisted tasks
+    const images = await getTaskImages(t.id);
+    return { ...t, images };
+  }));
 
   // Include persisted logs for active (non-terminal) tasks
   const logs = {};

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { stateKey } from "../hooks/useWorkflow.js";
 import { STATE_LABELS } from "../constants.js";
 import { PipelineBar } from "./PipelineBar.jsx";
@@ -23,6 +23,7 @@ export function DetailPanel({
   onToggleViewMode,
 }) {
   const streamEndRef = useRef(null);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const sk = task.stateKey || stateKey(task.state);
   const label = STATE_LABELS[sk] || sk;
 
@@ -174,6 +175,52 @@ export function DetailPanel({
           </div>
         )}
       </div>
+
+      {/* Task Images */}
+      {task.images && task.images.length > 0 && (
+        <div className="detail-panel-images">
+          <div className="detail-panel-images-title">attached images</div>
+          <div className="detail-panel-images-grid">
+            {task.images.map((image) => (
+              <button
+                key={image.id}
+                className="detail-panel-image-thumb"
+                onClick={() => setLightboxImage(image)}
+                title={image.originalName || image.filename}
+              >
+                <img
+                  src={`/uploads/${image.filename}`}
+                  alt={image.originalName || "Task image"}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div
+          className="detail-panel-lightbox"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="detail-panel-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={`/uploads/${lightboxImage.filename}`}
+              alt={lightboxImage.originalName || "Task image"}
+            />
+            <div className="detail-panel-lightbox-caption">
+              {lightboxImage.originalName || lightboxImage.filename}
+            </div>
+            <button
+              className="detail-panel-lightbox-close"
+              onClick={() => setLightboxImage(null)}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Agent Memory */}
       {memoryEntries.length > 0 && (
