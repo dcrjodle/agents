@@ -2,9 +2,16 @@ import { query, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { execSync } from "child_process";
-import { fileURLToPath } from "url";
+import { fileURLToPath, URL } from "url";
+import { createRequire } from "module";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Resolve the absolute path to the SDK's bundled cli.js so it works
+// regardless of which project cwd the agent runs in.
+const require = createRequire(import.meta.url);
+const sdkDir = dirname(require.resolve("@anthropic-ai/claude-agent-sdk"));
+const CLI_JS_PATH = join(sdkDir, "cli.js");
 const AGENTS_DIR = join(__dirname, "..", "agents");
 const PORT = process.env.PORT || 3001;
 
@@ -485,6 +492,7 @@ export function runAgent(role, taskId, handoff, callbacks) {
       const options = {
         abortController,
         cwd,
+        pathToClaudeCodeExecutable: CLI_JS_PATH,
         systemPrompt: config.systemPrompt,
         tools: config.tools,
         allowedTools: config.tools,
