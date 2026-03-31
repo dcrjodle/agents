@@ -14,8 +14,10 @@ import { IconButton } from "./components/IconButton.jsx";
 import { buildTaskMenuItems } from "./utils/taskMenuItems.js";
 import { ProjectToolbar } from "./components/ProjectToolbar.jsx";
 import { LoginPage } from "./components/LoginPage.jsx";
+import { ServerStatusPopover } from "./components/ServerStatusPopover.jsx";
 import "./styles/layout.css";
 import "./styles/login.css";
+import "./styles/server-status.css";
 
 import { API_BASE } from "./config.js";
 
@@ -62,6 +64,9 @@ function AuthenticatedApp({ user, onLogout }) {
   const approvedPlanIds = useRef(new Set());
   const [deploying, setDeploying] = useState(false);
   const [deployResult, setDeployResult] = useState(null);
+  const [showServerStatus, setShowServerStatus] = useState(false);
+  const [serverStatusAnchorRect, setServerStatusAnchorRect] = useState(null);
+  const serverStatusHoverTimerRef = useRef(null);
 
   const {
     tasks,
@@ -507,7 +512,28 @@ function AuthenticatedApp({ user, onLogout }) {
           />
         </div>
         <div className="app-header-right">
-          <span className={`app-connection-status ${connected ? "connected" : "disconnected"}`}>
+          <span
+            className={`app-connection-status server-status-trigger ${connected ? "connected" : "disconnected"}`}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setServerStatusAnchorRect(rect);
+              setShowServerStatus((prev) => !prev);
+            }}
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              serverStatusHoverTimerRef.current = setTimeout(() => {
+                setServerStatusAnchorRect(rect);
+                setShowServerStatus(true);
+              }, 300);
+            }}
+            onMouseLeave={() => {
+              if (serverStatusHoverTimerRef.current) {
+                clearTimeout(serverStatusHoverTimerRef.current);
+                serverStatusHoverTimerRef.current = null;
+              }
+            }}
+            title="Click to view server status"
+          >
             <span className={`app-connection-dot ${connected ? "connected" : "disconnected"}`} />
             {connected ? "connected" : "disconnected"}
           </span>
@@ -684,6 +710,13 @@ function AuthenticatedApp({ user, onLogout }) {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showServerStatus && serverStatusAnchorRect && (
+        <ServerStatusPopover
+          anchorRect={serverStatusAnchorRect}
+          onClose={() => setShowServerStatus(false)}
         />
       )}
 
