@@ -17,7 +17,7 @@ import { LoginPage } from "./components/LoginPage.jsx";
 import "./styles/layout.css";
 import "./styles/login.css";
 
-const API_BASE = "/api";
+import { API_BASE } from "./config.js";
 
 export function App() {
   const [authChecked, setAuthChecked] = useState(false);

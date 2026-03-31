@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE } from "../config.js";
 
 export function LoginPage({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -12,7 +13,7 @@ export function LoginPage({ onLogin }) {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/login", {
+      const res = await fetch(`${API_BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

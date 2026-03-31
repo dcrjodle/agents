@@ -36,7 +36,7 @@ function SettingsSection({ title, expanded, onToggle, children }) {
   );
 }
 
-const API_BASE = "/api";
+import { API_BASE } from "../config.js";
 
 export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const settings = project.settings || {};

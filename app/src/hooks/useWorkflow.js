@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const WS_URL = `ws://${window.location.host}/ws`;
-const API_BASE = "/api";
+import { API_BASE, WS_URL } from "../config.js";
 
 /**
  * Normalize XState compound state values to dot-notation strings.
