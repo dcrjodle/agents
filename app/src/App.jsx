@@ -83,6 +83,7 @@ function AuthenticatedApp({ user, onLogout }) {
     visualTestingProjects,
     visualTestProgress,
     triggerVisualTest,
+    stopVisualTest,
     createTask,
     startTask,
     startAllTasks,
@@ -98,6 +99,7 @@ function AuthenticatedApp({ user, onLogout }) {
     pendingPrs,
     clearPendingPr,
     reviewAction,
+    prAction,
     planAction,
     updateTask,
     launchIvyStudio,
@@ -248,6 +250,14 @@ function AuthenticatedApp({ user, onLogout }) {
       }
     }
   }, [viewingPrTaskId, approveTask, clearPendingPr, pendingPrTaskIds, currentPrIndex]);
+
+  const handlePrRequestChanges = useCallback((feedback) => {
+    if (viewingPrTaskId) {
+      prAction(viewingPrTaskId, "changes_requested", feedback);
+      clearPendingPr(viewingPrTaskId);
+      setViewingPrTaskId(null);
+    }
+  }, [viewingPrTaskId, prAction, clearPendingPr]);
 
   const handleClosePr = useCallback(() => {
     setViewingPrTaskId(null);
@@ -626,6 +636,7 @@ function AuthenticatedApp({ user, onLogout }) {
             visualTestResults={visualTestResults[selectedProject.path]}
             visualTestProgress={visualTestProgress[selectedProject.path]}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
+            onStopVisualTest={() => stopVisualTest(selectedProject.path).catch((err) => console.error("Stop visual test error:", err))}
             onSendToGithubber={(branches) => sendToGithubberQueue(selectedProject.path, branches).catch((err) => console.error("Githubber queue error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
@@ -716,6 +727,7 @@ function AuthenticatedApp({ user, onLogout }) {
           pr={pendingPrs[viewingPrTaskId]}
           taskDescription={tasks.find((t) => t.id === viewingPrTaskId)?.description || ""}
           onApprove={handleApprovePr}
+          onRequestChanges={handlePrRequestChanges}
           onClose={handleClosePr}
           pendingPrCount={pendingPrTaskIds.length}
           currentIndex={currentPrIndex}

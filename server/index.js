@@ -1008,8 +1008,14 @@ app.post("/tasks/:id/approve", (req, res) => {
   }
 
   if (sk === "merging.awaitingApproval") {
-    actor.send({ type: "PR_APPROVED" });
-    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Approved" });
+    const action = req.body.action; // "approve" | "changes_requested" | undefined (treat as approve)
+    if (action === "changes_requested") {
+      actor.send({ type: "PR_CHANGES_REQUESTED", feedback: req.body.feedback || "" });
+      broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Changes requested" });
+    } else {
+      actor.send({ type: "PR_APPROVED" });
+      broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Approved" });
+    }
     return res.json({ ok: true });
   }
 
@@ -1504,6 +1510,7 @@ app.post("/visual-test", async (req, res) => {
     const child = spawn("bash", [scriptPath, `--branch=${branchName}`], {
       stdio: ["pipe", "pipe", "pipe"],
     });
+    activeTest.child = child;
 
     child.stdout.on("data", (chunk) => {
       broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stdout", data: chunk.toString() });
@@ -1524,10 +1531,30 @@ app.post("/visual-test", async (req, res) => {
     });
   };
 
+  const activeTest = { vtId, child: null };
+  activeVisualTests.set(projectPath, activeTest);
+
   processNext(0);
 
-  activeVisualTests.set(projectPath, { vtId, child });
   res.status(202).json({ vtId, taskCount: eligibleTasks.length });
+});
+
+app.post("/visual-test/stop", (req, res) => {
+  const { projectPath } = req.body;
+  if (!projectPath) return res.status(400).json({ error: "projectPath required" });
+
+  const activeTest = activeVisualTests.get(projectPath);
+  if (!activeTest) {
+    return res.status(404).json({ error: "No visual test running for this project" });
+  }
+
+  if (activeTest.child) {
+    activeTest.child.kill("SIGTERM");
+  }
+  activeVisualTests.delete(projectPath);
+  broadcast({ type: "VISUAL_TEST_STOPPED", projectPath });
+
+  return res.status(200).json({ success: true });
 });
 
 // --- Screenshot serving ---

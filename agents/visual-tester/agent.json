@@ -1,1 +1,7 @@
-{ "runtime": "bash", "entrypoint": "start.sh" }
+{
+  "model": "claude-sonnet-4-20250514",
+  "tools": ["Bash", "Read", "Glob", "Grep"],
+  "cwd": "project",
+  "supportsResume": false,
+  "mcpTools": "tools/mcp-tools.js"
+}

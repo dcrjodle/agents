@@ -32,6 +32,7 @@ export const workflowMachine = setup({
       | { type: "DIRECT_MERGE_FAILED", error: string }
       | { type: "PUSH_FAILED", error: string }
       | { type: "PR_APPROVED" }
+      | { type: "PR_CHANGES_REQUESTED", feedback: string }
       | { type: "MERGED", url: string }
       | { type: "PR_FAILED", error: string }
       | { type: "RETRY" }
@@ -348,6 +349,23 @@ export const workflowMachine = setup({
             PR_APPROVED: {
               target: "creatingPr",
             },
+            PR_CHANGES_REQUESTED: [
+              {
+                target: "#workflow.developing",
+                guard: "underRetryLimit",
+                actions: assign({
+                  error: ({ event }) => event.feedback,
+                  retries: ({ context }) => context.retries + 1,
+                }),
+              },
+              {
+                target: "#workflow.failed",
+                actions: assign({
+                  error: ({ event }) => event.feedback || "Max retries exceeded (PR changes requested)",
+                  failedFrom: () => "merging.awaitingApproval",
+                }),
+              },
+            ],
           },
         },
         creatingPr: {
