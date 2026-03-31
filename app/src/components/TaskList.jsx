@@ -94,6 +94,23 @@ export function TaskList({
     };
   }, []);
 
+  // Clear multi-selection when clicking outside the task list
+  useEffect(() => {
+    if (selectedTaskIds.size === 0) return;
+
+    const handleClickOutside = (e) => {
+      // Don't clear selection if click was inside the task list
+      if (listRef.current?.contains(e.target)) return;
+      // Don't clear if clicking on context menu (handled separately)
+      if (e.target.closest('.context-menu, .context-menu-overlay')) return;
+
+      setSelectedTaskIds(new Set());
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedTaskIds.size]);
+
   const startEditing = useCallback((task) => {
     setEditingTaskId(task.id);
     setEditValue(task.description);
