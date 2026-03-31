@@ -79,6 +79,49 @@
   color: var(--dot-failed);
 }
 
+.context-menu-item.current {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+}
+
+.context-menu-item.disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.context-menu-item.disabled:hover {
+  background: none;
+}
+
+/* ============================================================
+   Submenu (desktop)
+   ============================================================ */
+.context-menu-item-with-submenu {
+  position: relative;
+}
+
+.context-menu-chevron {
+  width: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.context-menu-submenu {
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: var(--font-mono);
+  z-index: 1002;
+}
+
 /* ============================================================
    Mobile bottom sheet
    ============================================================ */
@@ -115,4 +158,21 @@
     padding: 10px 20px;
     font-size: 13px;
   }
+}
+
+/* Accordion-style submenu items for mobile bottom sheet */
+.context-menu--sheet .context-menu-submenu-items {
+  padding-left: 24px;
+  border-left: 2px solid var(--border-light);
+  margin-left: 14px;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.2s ease-out, opacity 0.2s ease-out;
+  opacity: 0;
+}
+
+.context-menu--sheet .context-menu-submenu-items.expanded {
+  max-height: 400px;
+  opacity: 1;
+  transition: max-height 0.25s ease-in, opacity 0.2s ease-in;
 }
