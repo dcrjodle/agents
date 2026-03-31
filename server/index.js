@@ -757,6 +757,93 @@ app.post("/deploy", async (req, res) => {
   }
 });
 
+/// --- Server Status: get PM2 status and logs from production ---
+app.get("/server-status", async (req, res) => {
+  const remoteHost = "joel.bystedt@35.228.54.40";
+  const remoteDir = "/home/joel.bystedt/agents";
+  const { hostname } = await import("os");
+  const isLocal = hostname() === "joel-linux-monstrosity";
+
+  // Commands to run
+  const statusCmd = "pm2 jlist";
+  const logsCmd = "pm2 logs agents --lines 30 --nostream";
+
+  // Script to run on production (with nvm sourcing)
+  const buildScript = (cmd) => [
+    `export NVM_DIR="$HOME/.nvm"`,
+    `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"`,
+    `cd ${remoteDir}`,
+    cmd,
+  ].join("\n");
+
+  try {
+    const { execFileSync } = await import("child_process");
+    let statusOutput, logsOutput;
+
+    if (isLocal) {
+      // SSH to production server
+      statusOutput = execFileSync("ssh", [remoteHost, buildScript(statusCmd)], {
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      logsOutput = execFileSync("ssh", [remoteHost, buildScript(logsCmd)], {
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+    } else {
+      // We're on the production server - run directly
+      statusOutput = execFileSync("bash", [], {
+        input: buildScript(statusCmd),
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      logsOutput = execFileSync("bash", [], {
+        input: buildScript(logsCmd),
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+    }
+
+    // Parse PM2 JSON output to extract status
+    let pm2Status = "unknown";
+    let pm2Details = null;
+    try {
+      const pm2List = JSON.parse(statusOutput.trim());
+      const agentsProcess = pm2List.find((p) => p.name === "agents");
+      if (agentsProcess) {
+        pm2Status = agentsProcess.pm2_env?.status || "unknown";
+        pm2Details = {
+          name: agentsProcess.name,
+          status: pm2Status,
+          cpu: agentsProcess.monit?.cpu,
+          memory: agentsProcess.monit?.memory,
+          uptime: agentsProcess.pm2_env?.pm_uptime,
+          restarts: agentsProcess.pm2_env?.restart_time,
+        };
+      } else {
+        pm2Status = "not_found";
+      }
+    } catch {
+      // Fall back to raw output if JSON parsing fails
+      pm2Status = statusOutput.includes("online") ? "online" : "unknown";
+    }
+
+    res.json({
+      status: pm2Status,
+      details: pm2Details,
+      logs: logsOutput.trim(),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      error: err.message,
+      logs: err.stdout || "",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 app.get("/tasks", async (req, res) => {
   // Return live snapshots for active actors, db records for completed/failed
   const dbTasks = await dbGetAllTasks();
