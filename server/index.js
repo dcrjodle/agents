@@ -1008,8 +1008,14 @@ app.post("/tasks/:id/approve", (req, res) => {
   }
 
   if (sk === "merging.awaitingApproval") {
-    actor.send({ type: "PR_APPROVED" });
-    broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Approved" });
+    const action = req.body.action; // "approve" | "changes_requested" | undefined (treat as approve)
+    if (action === "changes_requested") {
+      actor.send({ type: "PR_CHANGES_REQUESTED", feedback: req.body.feedback || "" });
+      broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Changes requested" });
+    } else {
+      actor.send({ type: "PR_APPROVED" });
+      broadcast({ type: "APPROVAL", taskId: req.params.id, approval: "pr", message: req.body.message || "Approved" });
+    }
     return res.json({ ok: true });
   }
 

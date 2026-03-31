@@ -98,6 +98,7 @@ function AuthenticatedApp({ user, onLogout }) {
     pendingPrs,
     clearPendingPr,
     reviewAction,
+    prAction,
     planAction,
     updateTask,
     launchIvyStudio,
@@ -236,6 +237,14 @@ function AuthenticatedApp({ user, onLogout }) {
       setViewingPrTaskId(null);
     }
   }, [viewingPrTaskId, approveTask, clearPendingPr]);
+
+  const handlePrRequestChanges = useCallback((feedback) => {
+    if (viewingPrTaskId) {
+      prAction(viewingPrTaskId, "changes_requested", feedback);
+      clearPendingPr(viewingPrTaskId);
+      setViewingPrTaskId(null);
+    }
+  }, [viewingPrTaskId, prAction, clearPendingPr]);
 
   const handleClosePr = useCallback(() => {
     setViewingPrTaskId(null);
@@ -690,6 +699,7 @@ function AuthenticatedApp({ user, onLogout }) {
           pr={pendingPrs[viewingPrTaskId]}
           taskDescription={tasks.find((t) => t.id === viewingPrTaskId)?.description || ""}
           onApprove={handleApprovePr}
+          onRequestChanges={handlePrRequestChanges}
           onClose={handleClosePr}
         />
       )}

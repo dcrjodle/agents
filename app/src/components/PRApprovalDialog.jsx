@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, MessageSquarePlus } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
-export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
+export function PRApprovalDialog({ pr, taskDescription, onApprove, onRequestChanges, onClose }) {
   const contentRef = useRef(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
     const handler = (e) => {
@@ -17,6 +19,8 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
+    setShowFeedback(false);
+    setFeedback("");
   }, [pr]);
 
   if (!pr) return null;
@@ -107,6 +111,48 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
           }}
         >
           <MarkdownContent markdown={markdown} />
+          {/* Feedback for developer toggle */}
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={() => setShowFeedback((v) => !v)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: showFeedback ? "var(--text)" : "var(--text-dim)",
+                fontSize: 11,
+                padding: 0,
+              }}
+            >
+              <MessageSquarePlus size={13} />
+              {showFeedback ? "hide feedback" : "add feedback for developer"}
+            </button>
+            {showFeedback && (
+              <textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Describe what's not working..."
+                rows={5}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  background: "var(--bg)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text)",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Actions */}
@@ -118,6 +164,14 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
           borderTop: "1px solid var(--border-light)",
           flexShrink: 0,
         }}>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => onRequestChanges(feedback)}
+            disabled={!feedback.trim()}
+          >
+            send back to developer
+          </Button>
           <Button variant="secondary" size="md" onClick={onClose}>
             cancel
           </Button>

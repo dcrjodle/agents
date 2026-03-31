@@ -619,6 +619,16 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const prAction = async (taskId, action, feedback) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, feedback, message: `PR: ${action}` }),
+    });
+    if (!res.ok) throw new Error(`Failed to perform PR action: ${res.statusText}`);
+    return res.json();
+  };
+
   const planAction = async (taskId, action, comments) => {
     const res = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
       method: "POST",
@@ -761,7 +771,7 @@ export function useWorkflow() {
   };
 
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, launchIvyStudio, ivyStudioRunningBranches, sendToGithubberQueue, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, planAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, launchIvyStudio, ivyStudioRunningBranches, sendToGithubberQueue, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, prAction, planAction, clearErrors, updateTask };
 }
 
 export { stateKey };
