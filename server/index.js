@@ -691,18 +691,41 @@ app.post("/deploy", async (req, res) => {
   const { hostname } = await import("os");
   const isLocal = hostname() === "joel-linux-monstrosity";
 
+  // When running on dev machine, use server-deploy.sh (which SSHes to remote)
+  // When running on production server, run deployment commands directly (no SSH needed)
+  const directScript = [
+    `export NVM_DIR="$HOME/.nvm"`,
+    `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"`,
+    `cd ${remoteDir}`,
+    `git pull origin main`,
+    `npm install`,
+    `cd app && npm install && npm run build`,
+    `cd ${remoteDir}`,
+    `pm2 restart agents`,
+    `echo "Deploy complete"`,
+  ].join("\n");
+
   try {
     const { execFileSync } = await import("child_process");
-    const args = isLocal
-      ? ["bash", scriptPath]
-      : ["ssh", "-o", "ConnectTimeout=10", remoteHost, `bash ${scriptPath}`];
 
-    const output = execFileSync(args[0], args.slice(1), {
-      encoding: "utf-8",
-      timeout: 120000,
-    });
-    const success = output.includes("Deploy complete");
-    res.json({ success, output: output.trim() });
+    if (isLocal) {
+      // Run server-deploy.sh locally (it handles SSH to remote internally)
+      const output = execFileSync("bash", [scriptPath], {
+        encoding: "utf-8",
+        timeout: 120000,
+      });
+      const success = output.includes("Deploy complete");
+      res.json({ success, output: output.trim() });
+    } else {
+      // We're on the production server - run deployment commands directly
+      const output = execFileSync("bash", [], {
+        input: directScript,
+        encoding: "utf-8",
+        timeout: 120000,
+      });
+      const success = output.includes("Deploy complete");
+      res.json({ success, output: output.trim() });
+    }
   } catch (err) {
     res.status(500).json({ success: false, error: err.message, output: err.stdout || "" });
   }
