@@ -1471,7 +1471,7 @@ app.post("/visual-test", async (req, res) => {
   }
 
   const vtId = `vt-${Date.now()}`;
-  const scriptPath = join(process.env.HOME, "scripts", "ivy-studio-local.sh");
+  const scriptPath = "/Users/joel/scripts/ivy-studio-local.sh";
 
   if (!existsSync(scriptPath)) {
     return res.status(500).json({ error: `Script not found: ${scriptPath}` });
@@ -1930,7 +1930,7 @@ async function start() {
     const { branch } = req.body;
     if (!branch) return res.status(400).json({ error: "branch required" });
 
-    const scriptPath = join(process.env.HOME, "scripts", "ivy-studio-local.sh");
+    const scriptPath = "/Users/joel/scripts/ivy-studio-local.sh";
 
     if (!existsSync(scriptPath)) {
       return res.status(500).json({ error: `Script not found: ${scriptPath}` });
