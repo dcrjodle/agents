@@ -254,6 +254,13 @@ export function TaskList({
           if (selectedTaskIds.size > 1) return;
           // Clear multi-selection on plain click
           setSelectedTaskIds(new Set());
+          // On mobile, always open the context menu instead of performing direct actions
+          const isMobile = window.innerWidth <= 768;
+          if (isMobile) {
+            openContextMenu(e, task);
+            return;
+          }
+          // Desktop: perform direct actions
           if (sk === "planning.awaitingApproval" && pendingPlans[task.id]) {
             onViewPlan(task.id);
           } else if (sk === "reviewing.awaitingApproval" && pendingReviews?.[task.id] && onViewReview) {
@@ -374,6 +381,7 @@ export function TaskList({
                   onViewReview,
                   onViewPr,
                   onApprove,
+                  onSelectTask,
                   pendingPlans,
                   pendingReviews,
                   pendingPrs,
