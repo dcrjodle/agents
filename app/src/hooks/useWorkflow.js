@@ -514,6 +514,21 @@ export function useWorkflow() {
             }
             break;
 
+          case "VISUAL_TEST_STOPPED":
+            if (msg.projectPath) {
+              setVisualTestingProjects((prev) => {
+                const next = new Set(prev);
+                next.delete(msg.projectPath);
+                return next;
+              });
+              setVisualTestProgress((prev) => {
+                const next = { ...prev };
+                delete next[msg.projectPath];
+                return next;
+              });
+            }
+            break;
+
           case "IVY_STUDIO_STARTED":
             if (msg.branch) {
               setIvyStudioRunningBranches((prev) => {
@@ -732,6 +747,19 @@ export function useWorkflow() {
     return res.json();
   };
 
+  const stopVisualTest = async (projectPath) => {
+    const res = await fetch(`${API_BASE}/visual-test/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectPath }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Failed to stop visual test: ${res.statusText}`);
+    }
+    return res.json();
+  };
+
   const launchIvyStudio = async (branch) => {
     const res = await fetch(`${API_BASE}/ivy-studio`, {
       method: "POST",
@@ -771,7 +799,7 @@ export function useWorkflow() {
   };
 
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, launchIvyStudio, ivyStudioRunningBranches, sendToGithubberQueue, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, prAction, planAction, clearErrors, updateTask };
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, stopVisualTest, launchIvyStudio, ivyStudioRunningBranches, sendToGithubberQueue, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, prAction, planAction, clearErrors, updateTask };
 }
 
 export { stateKey };

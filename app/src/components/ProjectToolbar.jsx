@@ -18,6 +18,7 @@ export function ProjectToolbar({
   visualTestResults,
   visualTestProgress,
   onVisualTest,
+  onStopVisualTest,
   onSendToGithubber,
   eligibleTaskCount,
   onLaunchStudio,
@@ -39,6 +40,7 @@ export function ProjectToolbar({
         progress={visualTestProgress}
         onTrigger={onVisualTest}
         onSendToGithubber={onSendToGithubber}
+        onStop={onStopVisualTest}
         eligibleTaskCount={eligibleTaskCount}
       />
       <div className="project-toolbar-separator" />

@@ -83,6 +83,7 @@ function AuthenticatedApp({ user, onLogout }) {
     visualTestingProjects,
     visualTestProgress,
     triggerVisualTest,
+    stopVisualTest,
     createTask,
     startTask,
     startAllTasks,
@@ -609,6 +610,7 @@ function AuthenticatedApp({ user, onLogout }) {
             visualTestResults={visualTestResults[selectedProject.path]}
             visualTestProgress={visualTestProgress[selectedProject.path]}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
+            onStopVisualTest={() => stopVisualTest(selectedProject.path).catch((err) => console.error("Stop visual test error:", err))}
             onSendToGithubber={(branches) => sendToGithubberQueue(selectedProject.path, branches).catch((err) => console.error("Githubber queue error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
