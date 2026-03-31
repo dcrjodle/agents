@@ -5,7 +5,7 @@ import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { randomUUID } from "crypto";
 import { spawn } from "child_process";
-import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from "fs";
+import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -63,9 +63,6 @@ const uploadsPath = join(__dirname_root, "..", "uploads");
 if (!existsSync(uploadsPath)) {
   mkdirSync(uploadsPath, { recursive: true });
 }
-
-// Serve static uploads (images)
-app.use("/uploads", express.static(uploadsPath));
 
 // Configure multer for image uploads
 const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -165,6 +162,9 @@ app.use((req, res, next) => {
   if (!session) return res.status(401).json({ error: "Unauthorized" });
   next();
 });
+
+// Serve static uploads (images) — after auth middleware so images are protected
+app.use("/uploads", express.static(uploadsPath));
 
 // In-memory XState actors keyed by task id
 const actors = new Map();

@@ -129,16 +129,16 @@ function AuthenticatedApp({ user, onLogout }) {
       .catch((err) => console.error("Failed to load config:", err));
   }, []);
 
-  const handleCreateTask = (description) => {
+  const handleCreateTask = (description, images = []) => {
     if (!selectedProject) return;
-    createTask(description, selectedProject.path);
+    createTask(description, selectedProject.path, { images });
     setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
   };
 
-  const handleCreateAndStartTask = async (description) => {
+  const handleCreateAndStartTask = async (description, images = []) => {
     if (!selectedProject) return;
     try {
-      await createTask(description, selectedProject.path, { autoStart: true });
+      await createTask(description, selectedProject.path, { autoStart: true, images });
       setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
     } catch (err) {
       console.error("Failed to create and start task:", err);
