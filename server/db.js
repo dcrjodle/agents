@@ -11,6 +11,7 @@ function taskFromRow(row) {
     stateKey: row.state_key,
     label: row.label,
     context: row.context,
+    snapshot: row.snapshot,
     createdAt: row.created_at,
   };
 }
@@ -24,6 +25,7 @@ function taskToRow(task) {
   if (task.stateKey !== undefined) row.state_key = task.stateKey;
   if (task.label !== undefined) row.label = task.label;
   if (task.context !== undefined) row.context = task.context;
+  if (task.snapshot !== undefined) row.snapshot = task.snapshot;
   if (task.createdAt !== undefined) row.created_at = task.createdAt;
   return row;
 }
