@@ -168,3 +168,15 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Visual Test Loading Spinner */
+@keyframes visual-test-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.visual-test-loading-spinner {
+  animation: visual-test-spin 1s linear infinite;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
