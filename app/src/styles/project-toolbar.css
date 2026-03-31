@@ -13,3 +13,10 @@
   flex-shrink: 0;
   margin: 0 2px;
 }
+
+/* Hide toolbar on mobile */
+@media (max-width: 768px) {
+  .project-toolbar {
+    display: none;
+  }
+}
