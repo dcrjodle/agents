@@ -1,4 +1,4 @@
-import { Play, Pencil, ClipboardList, Check, RotateCcw, X, Square } from "lucide-react";
+import { Play, Pencil, ClipboardList, Check, RotateCcw, X, Square, FileText } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
 
 /**
@@ -108,6 +108,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
     onViewReview,
     onViewPr,
     onApprove,
+    onSelectTask,
     pendingPlans,
     pendingReviews,
     pendingPrs,
@@ -171,6 +172,15 @@ export function buildTaskMenuItems(task, handlers = {}) {
       label: "approve pr",
       icon: Check,
       action: () => onApprove(task.id),
+    });
+  }
+
+  // "view logs" — available for all tasks when handler is provided
+  if (onSelectTask) {
+    items.push({
+      label: "view logs",
+      icon: FileText,
+      action: () => onSelectTask(task.id),
     });
   }
 
