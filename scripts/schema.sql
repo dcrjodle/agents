@@ -44,14 +44,3 @@ CREATE TABLE IF NOT EXISTS agent_memory (
 CREATE INDEX IF NOT EXISTS idx_agent_memory_role ON agent_memory(role);
 CREATE INDEX IF NOT EXISTS idx_agent_memory_role_project ON agent_memory(role, project_path);
 
-CREATE TABLE IF NOT EXISTS task_images (
-  id text PRIMARY KEY,
-  task_id text REFERENCES tasks(id) ON DELETE CASCADE,
-  filename text NOT NULL,
-  original_name text,
-  mime_type text,
-  size_bytes integer,
-  created_at timestamptz DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_task_images_task_id ON task_images(task_id);

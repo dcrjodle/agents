@@ -97,6 +97,7 @@ function AuthenticatedApp({ user, onLogout }) {
     updateTask,
     launchIvyStudio,
     ivyStudioRunningBranches,
+    sendToGithubberQueue,
     deploy,
   } = useWorkflow();
 
@@ -129,16 +130,16 @@ function AuthenticatedApp({ user, onLogout }) {
       .catch((err) => console.error("Failed to load config:", err));
   }, []);
 
-  const handleCreateTask = (description, images = []) => {
+  const handleCreateTask = (description) => {
     if (!selectedProject) return;
-    createTask(description, selectedProject.path, { images });
+    createTask(description, selectedProject.path);
     setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
   };
 
-  const handleCreateAndStartTask = async (description, images = []) => {
+  const handleCreateAndStartTask = async (description) => {
     if (!selectedProject) return;
     try {
-      await createTask(description, selectedProject.path, { autoStart: true, images });
+      await createTask(description, selectedProject.path, { autoStart: true });
       setTaskInputsByProject((prev) => ({ ...prev, [selectedProject.path]: "" }));
     } catch (err) {
       console.error("Failed to create and start task:", err);
@@ -573,6 +574,7 @@ function AuthenticatedApp({ user, onLogout }) {
             visualTestResults={visualTestResults[selectedProject.path]}
             visualTestProgress={visualTestProgress[selectedProject.path]}
             onVisualTest={() => triggerVisualTest(selectedProject.path).catch((err) => console.error("Visual test error:", err))}
+            onSendToGithubber={(branches) => sendToGithubberQueue(selectedProject.path, branches).catch((err) => console.error("Githubber queue error:", err))}
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
             ivyStudioIsRunning={ivyStudioRunningBranches.size > 0}

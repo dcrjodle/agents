@@ -41,7 +41,7 @@ import { API_BASE } from "../config.js";
 export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const settings = project.settings || {};
   const [projectPath, setProjectPath] = useState(project.path);
-  const [createPr, setCreatePr] = useState(settings.createPr !== false);
+  const [mergeStrategy, setMergeStrategy] = useState(settings.mergeStrategy || (settings.createPr === false ? "merge" : "pr"));
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [autoApproveReviews, setAutoApproveReviews] = useState(settings.autoApproveReviews === true);
   const [trustReviewerVerdict, setTrustReviewerVerdict] = useState(settings.trustReviewerVerdict === true);
@@ -54,7 +54,8 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   // Section expansion state
   const [expandedSections, setExpandedSections] = useState({
     project: true,
-    workflow: true,
+    delivery: true,
+    planning: true,
     testing: true,
     runtime: false,
   });
@@ -94,7 +95,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: trimmedPath || project.path, settings: { createPr, autoApprovePr, autoApprovePlans, autoApproveReviews, trustReviewerVerdict, skipTesting, agentMode, maxRetries } }),
+        body: JSON.stringify({ path: trimmedPath || project.path, settings: { mergeStrategy, autoApprovePr, autoApprovePlans, autoApproveReviews, trustReviewerVerdict, skipTesting, agentMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -174,34 +175,35 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             </div>
           </SettingsSection>
 
-          {/* Workflow Automation Section */}
+          {/* Merge & Delivery Section */}
           <SettingsSection
-            title="WORKFLOW AUTOMATION"
-            expanded={expandedSections.workflow}
-            onToggle={() => toggleSection("workflow")}
+            title="MERGE & DELIVERY"
+            expanded={expandedSections.delivery}
+            onToggle={() => toggleSection("delivery")}
           >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "8px 0",
-                borderBottom: "1px solid var(--border-light)",
-                cursor: "pointer",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 12, color: "var(--text)" }}>create pull request</div>
-                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-                  {createPr ? "branch is pushed, PR created for review" : "changes are pushed directly to main"}
-                </div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 6 }}>merge strategy</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                {["pr", "branch", "merge"].map((mode) => (
+                  <Button
+                    key={mode}
+                    variant="seg"
+                    active={mergeStrategy === mode}
+                    onClick={() => setMergeStrategy(mode)}
+                    style={{ flex: 1 }}
+                  >
+                    {mode}
+                  </Button>
+                ))}
               </div>
-              <Button variant="toggle" active={createPr} size="sm" onClick={() => setCreatePr((v) => !v)}>
-                {createPr ? "on" : "off"}
-              </Button>
-            </label>
+              <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>
+                {mergeStrategy === "pr" && "branch is pushed, PR created for review"}
+                {mergeStrategy === "branch" && "branch is pushed to remote, no PR or merge"}
+                {mergeStrategy === "merge" && "changes are merged directly to main"}
+              </div>
+            </div>
 
-            {createPr && (
+            {mergeStrategy === "pr" && (
               <label
                 style={{
                   display: "flex",
@@ -224,7 +226,14 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
                 </Button>
               </label>
             )}
+          </SettingsSection>
 
+          {/* Planning Section */}
+          <SettingsSection
+            title="PLANNING"
+            expanded={expandedSections.planning}
+            onToggle={() => toggleSection("planning")}
+          >
             <label
               style={{
                 display: "flex",

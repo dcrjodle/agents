@@ -27,6 +27,7 @@ export const workflowMachine = setup({
       | { type: "CHANGES_REQUESTED", feedback: string }
       | { type: "PUSH_COMPLETE", branchName: string, diffSummary: string }
       | { type: "PUSH_COMPLETE_NO_PR", branchName: string, diffSummary: string }
+      | { type: "PUSH_COMPLETE_BRANCH_ONLY", branchName: string, diffSummary: string }
       | { type: "DIRECT_MERGE_COMPLETE" }
       | { type: "DIRECT_MERGE_FAILED", error: string }
       | { type: "PUSH_FAILED", error: string }
@@ -294,6 +295,16 @@ export const workflowMachine = setup({
         },
         PUSH_COMPLETE_NO_PR: {
           target: "directMerging",
+          actions: assign({
+            result: ({ context, event }) => ({
+              ...context.result,
+              branchName: event.branchName,
+              diffSummary: event.diffSummary,
+            }),
+          }),
+        },
+        PUSH_COMPLETE_BRANCH_ONLY: {
+          target: "done",
           actions: assign({
             result: ({ context, event }) => ({
               ...context.result,

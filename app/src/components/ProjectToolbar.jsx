@@ -18,6 +18,7 @@ export function ProjectToolbar({
   visualTestResults,
   visualTestProgress,
   onVisualTest,
+  onSendToGithubber,
   eligibleTaskCount,
   onLaunchStudio,
   ivyStudioIsRunning,
@@ -37,6 +38,7 @@ export function ProjectToolbar({
         results={visualTestResults}
         progress={visualTestProgress}
         onTrigger={onVisualTest}
+        onSendToGithubber={onSendToGithubber}
         eligibleTaskCount={eligibleTaskCount}
       />
       <div className="project-toolbar-separator" />

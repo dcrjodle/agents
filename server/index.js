@@ -5,11 +5,11 @@ import { createActor } from "xstate";
 import { v4 as uuid } from "uuid";
 import { randomUUID } from "crypto";
 import { spawn } from "child_process";
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import multer from "multer";
+
 import { workflowMachine } from "../machine.js";
 import { spawnAgent, spawnScript, stateKey, STATE_TO_ROLE, STATE_TO_SCRIPT, RESULT_TO_EVENT, getMapperKey, ensureConfigsLoaded } from "./spawner.js";
 import { clearSession, runAgent } from "./agent-runner.js";
@@ -32,9 +32,6 @@ import {
   appendTaskLog,
   getTaskLogs,
   clearTaskLogs,
-  createTaskImage,
-  getTaskImages,
-  deleteTaskImage,
 } from "./db.js";
 import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
 
@@ -57,38 +54,6 @@ const distPath = join(__dirname_root, "..", "app", "dist");
 if (existsSync(distPath)) {
   app.use(express.static(distPath));
 }
-
-// Create uploads directory if it doesn't exist
-const uploadsPath = join(__dirname_root, "..", "uploads");
-if (!existsSync(uploadsPath)) {
-  mkdirSync(uploadsPath, { recursive: true });
-}
-
-// Configure multer for image uploads
-const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_FILES_PER_TASK = 10;
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsPath),
-  filename: (req, file, cb) => {
-    const ext = file.originalname.split(".").pop();
-    const uniqueName = `${randomUUID()}.${ext}`;
-    cb(null, uniqueName);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: MAX_FILE_SIZE },
-  fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`));
-    }
-  },
-});
 
 // --- Auth: session store and cookie helpers ---
 const sessions = new Map(); // token -> { email, createdAt }
@@ -162,9 +127,6 @@ app.use((req, res, next) => {
   if (!session) return res.status(401).json({ error: "Unauthorized" });
   next();
 });
-
-// Serve static uploads (images) — after auth middleware so images are protected
-app.use("/uploads", express.static(uploadsPath));
 
 // In-memory XState actors keyed by task id
 const actors = new Map();
@@ -262,7 +224,6 @@ async function getTaskSnapshot(id) {
   if (!actor) return null;
   const snap = actor.getSnapshot();
   const sk = stateKey(snap.value);
-  const images = await getTaskImages(id);
   return {
     id,
     description: actor._description,
@@ -272,7 +233,6 @@ async function getTaskSnapshot(id) {
     label: stateLabel(snap.value),
     context: snap.context,
     createdAt: actor._createdAt,
-    images,
   };
 }
 
@@ -312,11 +272,6 @@ async function onStateTransition(taskId, stateValue, context) {
 
   const label = isAgent ? STATE_TO_ROLE[sk] : `script:${sk}`;
 
-  // Get attached images for this task
-  const taskImages = await getTaskImages(taskId);
-  // Convert to absolute paths for agent Read tool access
-  const imagePaths = taskImages.map((img) => join(uploadsPath, img.filename));
-
   const handoff = {
     instruction: actor._description,
     projectPath: actor._projectPath,
@@ -326,7 +281,6 @@ async function onStateTransition(taskId, stateValue, context) {
       result: context.result,
       error: context.error,
       retries: context.retries,
-      images: imagePaths,
     },
   };
 
@@ -364,12 +318,16 @@ async function onStateTransition(taskId, stateValue, context) {
       if (mapper) {
         let event = mapper(result);
 
-        // If push completed, check project settings to decide PR vs direct
+        // If push completed, check project settings to decide PR vs direct vs branch-only
         if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
           const projectSettings = await getProjectSettings(actor._projectPath);
-          if (projectSettings.createPr === false) {
+          const strategy = projectSettings.mergeStrategy || (projectSettings.createPr === false ? "merge" : "pr");
+          if (strategy === "merge") {
             event = { ...event, type: "PUSH_COMPLETE_NO_PR" };
-            broadcastAndLog({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data: "[pushing] Skipping PR creation (project setting)\n" });
+            broadcastAndLog({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data: "[pushing] Direct merge to main (project setting)\n" });
+          } else if (strategy === "branch") {
+            event = { ...event, type: "PUSH_COMPLETE_BRANCH_ONLY" };
+            broadcastAndLog({ type: "AGENT_OUTPUT", taskId, agent: label, stream: "stderr", data: "[pushing] Branch only, no PR (project setting)\n" });
           }
         }
 
@@ -807,9 +765,7 @@ app.get("/tasks", async (req, res) => {
     if (actor) {
       return await getTaskSnapshot(t.id);
     }
-    // No live actor — return persisted state with images
-    const images = await getTaskImages(t.id);
-    return { ...t, images };
+    return t;
   }));
   res.json(list);
 });
@@ -919,94 +875,6 @@ app.get("/tasks/:id/plan", (req, res) => {
     });
   }
   res.json(null);
-});
-
-// --- Task Images ---
-
-app.get("/tasks/:id/images", async (req, res) => {
-  try {
-    const images = await getTaskImages(req.params.id);
-    res.json(images);
-  } catch (err) {
-    console.error("Failed to get task images:", err);
-    res.status(500).json({ error: "Failed to get images" });
-  }
-});
-
-app.post("/tasks/:id/images", upload.array("images", MAX_FILES_PER_TASK), async (req, res) => {
-  const taskId = req.params.id;
-
-  // Verify task exists
-  const actor = actors.get(taskId);
-  const dbTask = actor ? null : await dbGetTask(taskId);
-  if (!actor && !dbTask) {
-    // Clean up uploaded files
-    for (const file of req.files || []) {
-      try { unlinkSync(file.path); } catch {}
-    }
-    return res.status(404).json({ error: "task not found" });
-  }
-
-  try {
-    // Check current image count
-    const existing = await getTaskImages(taskId);
-    if (existing.length + (req.files?.length || 0) > MAX_FILES_PER_TASK) {
-      // Clean up uploaded files
-      for (const file of req.files || []) {
-        try { unlinkSync(file.path); } catch {}
-      }
-      return res.status(400).json({
-        error: `Maximum ${MAX_FILES_PER_TASK} images per task. Currently have ${existing.length}.`
-      });
-    }
-
-    const results = [];
-    for (const file of req.files || []) {
-      const imageRecord = await createTaskImage({
-        id: randomUUID(),
-        taskId,
-        filename: file.filename,
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-      });
-      results.push(imageRecord);
-    }
-
-    res.status(201).json(results);
-  } catch (err) {
-    console.error("Failed to save task images:", err);
-    // Clean up uploaded files on error
-    for (const file of req.files || []) {
-      try { unlinkSync(file.path); } catch {}
-    }
-    res.status(500).json({ error: "Failed to save images" });
-  }
-});
-
-app.delete("/tasks/:id/images/:imageId", async (req, res) => {
-  try {
-    const images = await getTaskImages(req.params.id);
-    const image = images.find((img) => img.id === req.params.imageId);
-    if (!image) {
-      return res.status(404).json({ error: "image not found" });
-    }
-
-    // Delete file from disk
-    const filePath = join(uploadsPath, image.filename);
-    try {
-      unlinkSync(filePath);
-    } catch (err) {
-      console.warn(`Failed to delete image file ${filePath}:`, err.message);
-    }
-
-    // Delete from database
-    await deleteTaskImage(req.params.imageId);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("Failed to delete task image:", err);
-    res.status(500).json({ error: "Failed to delete image" });
-  }
 });
 
 app.post("/tasks/:id/approve", (req, res) => {
@@ -1369,11 +1237,14 @@ app.post("/internal/agent-result", async (req, res) => {
     (async () => {
       let event = mapper(resultPayload);
 
-      // If push completed, check project settings to decide PR vs direct
+      // If push completed, check project settings to decide PR vs direct vs branch-only
       if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
         const projectSettings = await getProjectSettings(actor._projectPath);
-        if (projectSettings.createPr === false) {
+        const strategy = projectSettings.mergeStrategy || (projectSettings.createPr === false ? "merge" : "pr");
+        if (strategy === "merge") {
           event = { ...event, type: "PUSH_COMPLETE_NO_PR" };
+        } else if (strategy === "branch") {
+          event = { ...event, type: "PUSH_COMPLETE_BRANCH_ONLY" };
         }
       }
 
@@ -1507,78 +1378,60 @@ app.post("/visual-test", async (req, res) => {
   }
 
   const vtId = `vt-${Date.now()}`;
+  const scriptPath = join(process.env.HOME, "scripts", "ivy-studio-local.sh");
+
+  if (!existsSync(scriptPath)) {
+    return res.status(500).json({ error: `Script not found: ${scriptPath}` });
+  }
 
   broadcast({ type: "VISUAL_TEST_STARTED", projectPath, vtId, taskCount: eligibleTasks.length });
 
-  // Write tasks to a temp file for the script to read
-  const tmpDir = join(tmpdir(), "agents-vt");
-  mkdirSync(tmpDir, { recursive: true });
-  const tasksFile = join(tmpDir, `tasks-${vtId}.json`);
-  writeFileSync(tasksFile, JSON.stringify(eligibleTasks));
+  // Process branches sequentially using ivy-studio-local.sh
+  const results = [];
 
-  // Spawn visual-test.mjs as child process
-  const child = spawn("node", [
-    join(VISUAL_TESTER_DIR, "visual-test.mjs"),
-    "--projectPath", projectPath,
-    "--tasksFile", tasksFile,
-  ], {
-    cwd: projectPath,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const processNext = (index) => {
+    if (index >= eligibleTasks.length) {
+      // All done
+      activeVisualTests.delete(projectPath);
+      const timestamp = new Date().toISOString();
+      const lastVisualTest = { status: "complete", results, timestamp };
 
-  let stdout = "";
-  let resultParsed = false;
+      dbUpdateProjectSettings(projectPath, { lastVisualTest })
+        .catch((err) => console.error("Failed to persist visual test result:", err));
 
-  child.stdout.on("data", (chunk) => {
-    stdout += chunk.toString();
-    broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stdout", data: chunk.toString() });
-
-    // Parse status updates
-    const lines = stdout.split("\n");
-    for (const line of lines) {
-      if (line.startsWith(":::STATUS:::")) {
-        try {
-          const status = JSON.parse(line.replace(":::STATUS:::", "").trim());
-          broadcast({ type: "VISUAL_TEST_PROGRESS", projectPath, vtId, status });
-        } catch {}
-      }
+      broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: lastVisualTest });
+      return;
     }
 
-    // Parse final result
-    const startIdx = stdout.indexOf(":::RESULT_START:::");
-    const endIdx = stdout.indexOf(":::RESULT_END:::");
-    if (startIdx >= 0 && endIdx > startIdx && !resultParsed) {
-      resultParsed = true;
-      const resultStr = stdout.substring(startIdx + ":::RESULT_START:::".length, endIdx).trim();
-      try {
-        const result = JSON.parse(resultStr);
-        const timestamp = new Date().toISOString();
-        const lastVisualTest = { ...result, timestamp };
+    const task = eligibleTasks[index];
+    const branchName = task.branchName;
 
-        // Persist to project settings
-        dbUpdateProjectSettings(projectPath, { lastVisualTest })
-          .catch((err) => console.error("Failed to persist visual test result:", err));
+    broadcast({ type: "VISUAL_TEST_PROGRESS", projectPath, vtId, status: { message: `Testing branch ${branchName} (${index + 1}/${eligibleTasks.length})`, current: index + 1, total: eligibleTasks.length } });
 
-        broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: lastVisualTest });
-      } catch (err) {
-        console.error("Failed to parse visual test result:", err);
-      }
-    }
-  });
+    const child = spawn("bash", [scriptPath, `--branch=${branchName}`], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
 
-  child.stderr.on("data", (chunk) => {
-    broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stderr", data: chunk.toString() });
-  });
+    child.stdout.on("data", (chunk) => {
+      broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stdout", data: chunk.toString() });
+    });
 
-  child.on("close", () => {
-    activeVisualTests.delete(projectPath);
-    // Clean up temp file
-    try { unlinkSync(tasksFile); } catch {}
+    child.stderr.on("data", (chunk) => {
+      broadcast({ type: "AGENT_OUTPUT", taskId: vtId, agent: "visual-tester", stream: "stderr", data: chunk.toString() });
+    });
 
-    if (!resultParsed) {
-      broadcast({ type: "VISUAL_TEST_COMPLETE", projectPath, result: { status: "failed", error: "Visual test exited without result", results: [], timestamp: new Date().toISOString() } });
-    }
-  });
+    child.on("close", (code) => {
+      results.push({
+        taskId: task.id,
+        branchName,
+        status: code === 0 ? "complete" : "failed",
+        error: code !== 0 ? `ivy-studio-local.sh exited with code ${code}` : undefined,
+      });
+      processNext(index + 1);
+    });
+  };
+
+  processNext(0);
 
   activeVisualTests.set(projectPath, { vtId, child });
   res.status(202).json({ vtId, taskCount: eligibleTasks.length });
@@ -1683,9 +1536,7 @@ wss.on("connection", async (ws, req) => {
     if (actor) {
       return await getTaskSnapshot(t.id);
     }
-    // Include images for persisted tasks
-    const images = await getTaskImages(t.id);
-    return { ...t, images };
+    return t;
   }));
 
   // Include persisted logs for active (non-terminal) tasks
@@ -1856,6 +1707,100 @@ async function start() {
       }
     }
   }
+
+  // --- Githubber queue endpoint ---
+  // Processes tested branches through githubber (PR) or merger (direct merge) based on project settings
+
+  const activeGithubberQueues = new Map(); // projectPath -> { queueId, branches }
+
+  app.post("/githubber-queue", async (req, res) => {
+    const { projectPath, branches } = req.body;
+    if (!projectPath) return res.status(400).json({ error: "projectPath required" });
+    if (!branches || !Array.isArray(branches) || branches.length === 0) {
+      return res.status(400).json({ error: "branches array required" });
+    }
+
+    if (activeGithubberQueues.has(projectPath)) {
+      return res.status(409).json({ error: "githubber queue already running for this project" });
+    }
+
+    const projectSettings = await getProjectSettings(projectPath);
+    const strategy = projectSettings.mergeStrategy || (projectSettings.createPr === false ? "merge" : "pr");
+
+    if (strategy === "branch") {
+      return res.json({ ok: true, message: "Branch-only mode, no action needed", processed: 0 });
+    }
+
+    const queueId = `ghq-${Date.now()}`;
+    const results = [];
+
+    broadcast({ type: "GITHUBBER_QUEUE_STARTED", projectPath, queueId, branchCount: branches.length, strategy });
+
+    activeGithubberQueues.set(projectPath, { queueId, branches });
+
+    // Process branches sequentially
+    const processNext = (index) => {
+      if (index >= branches.length) {
+        activeGithubberQueues.delete(projectPath);
+        broadcast({ type: "GITHUBBER_QUEUE_COMPLETE", projectPath, queueId, results });
+        return;
+      }
+
+      const branchName = branches[index];
+      broadcast({ type: "GITHUBBER_QUEUE_PROGRESS", projectPath, queueId, current: index + 1, total: branches.length, branchName, strategy });
+
+      // Use gh CLI directly for PR creation, or git merge for direct merge
+      const role = strategy === "pr" ? "githubber" : "merger";
+      const taskId = `${queueId}-${index}`;
+
+      const handoff = {
+        instruction: strategy === "pr"
+          ? `Create a pull request for branch "${branchName}" in ${projectPath}`
+          : `Merge branch "${branchName}" into main in ${projectPath}`,
+        projectPath,
+        context: {
+          task: `Process branch ${branchName}`,
+          plan: null,
+          result: { branchName, worktreePath: projectPath },
+          error: null,
+          retries: 0,
+        },
+      };
+
+      const callbacks = {
+        projectPath,
+        taskDescription: handoff.instruction,
+        onStdout(data) {
+          broadcast({ type: "AGENT_OUTPUT", taskId, agent: `queue-${role}`, stream: "stdout", data });
+        },
+        onStderr(data) {
+          broadcast({ type: "AGENT_OUTPUT", taskId, agent: `queue-${role}`, stream: "stderr", data });
+        },
+        onStatus(status) {
+          broadcast({ type: "AGENT_STATUS", taskId, agent: `queue-${role}`, status });
+        },
+        async onResult(result) {
+          results.push({ branchName, status: result.status || "complete", prUrl: result.prUrl, error: result.error });
+          processNext(index + 1);
+        },
+        onExit(code) {
+          // If no result was reported, treat as failure
+          if (!results.find((r) => r.branchName === branchName)) {
+            results.push({ branchName, status: "failed", error: `Agent exited with code ${code}` });
+            processNext(index + 1);
+          }
+        },
+      };
+
+      // Spawn via the state key that maps to the right role
+      const sk = strategy === "pr" ? "merging.creatingPr" : "directMerging";
+      const agentMode = projectSettings.agentMode || "sdk";
+      spawnAgent(sk, taskId, handoff.instruction, handoff, { ...callbacks, agentMode });
+    };
+
+    processNext(0);
+    res.status(202).json({ queueId, branchCount: branches.length, strategy });
+  });
 
   // --- Ivy Studio launcher endpoint ---
   // Opens a new Terminal.app window running the ivy-studio-local.sh script

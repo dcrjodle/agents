@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { Play } from "lucide-react";
-import { IconButton } from "./IconButton.jsx";
+import { StudioCharacter } from "./StudioCharacter.jsx";
 
-export function LaunchStudioButton({ onLaunch, isRunning }) {
-  const [showInput, setShowInput] = useState(false);
+function StudioHoverMenu({ onLaunch, isRunning }) {
   const [branch, setBranch] = useState("");
   const [error, setError] = useState(null);
 
@@ -12,7 +10,6 @@ export function LaunchStudioButton({ onLaunch, isRunning }) {
     setError(null);
     try {
       await onLaunch(branch.trim());
-      setShowInput(false);
       setBranch("");
     } catch (err) {
       setError(err.message);
@@ -21,62 +18,26 @@ export function LaunchStudioButton({ onLaunch, isRunning }) {
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") handleLaunch();
-    if (e.key === "Escape") {
-      setShowInput(false);
-      setBranch("");
-    }
   };
 
   return (
-    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-      <IconButton
-        icon={Play}
-        title={isRunning ? "Ivy Studio is running..." : "Launch Ivy Studio on a branch"}
-        disabled={isRunning}
-        onClick={() => !isRunning && setShowInput(!showInput)}
-        style={{
-          opacity: isRunning ? 1 : undefined,
-          animation: isRunning ? "pulse 1.5s ease-in-out infinite" : undefined,
-        }}
-      />
+    <div className="evaluator-hover-menu">
+      <div className="evaluator-hover-menu-title">Ivy Studio</div>
 
       {isRunning && (
-        <span style={{
-          position: "absolute",
-          top: -2,
-          right: -2,
-          background: "var(--dot-developing, #3b82f6)",
-          borderRadius: "50%",
-          width: 10,
-          height: 10,
-          animation: "pulse 1s ease-in-out infinite",
-          pointerEvents: "none",
-        }} />
+        <div style={{ fontSize: 10, color: "var(--dot-developing, #3b82f6)", padding: "4px 0" }}>
+          studio is running...
+        </div>
       )}
 
-      {showInput && !isRunning && (
-        <div style={{
-          position: "absolute",
-          top: "100%",
-          right: 0,
-          marginTop: 6,
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-          padding: 8,
-          minWidth: 240,
-          zIndex: 50,
-          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
-            Launch Ivy Studio
-          </div>
+      {!isRunning && (
+        <>
           <input
             type="text"
             value={branch}
             onChange={(e) => setBranch(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Branch name..."
+            placeholder="branch name..."
             autoFocus
             autoComplete="off"
             style={{
@@ -89,47 +50,49 @@ export function LaunchStudioButton({ onLaunch, isRunning }) {
               borderRadius: 4,
               outline: "none",
               boxSizing: "border-box",
+              marginBottom: 6,
             }}
           />
           {error && (
-            <div style={{ fontSize: 10, color: "var(--dot-failed, #ef4444)", marginTop: 4 }}>
+            <div style={{ fontSize: 10, color: "var(--dot-failed, #ef4444)", marginBottom: 4 }}>
               {error}
             </div>
           )}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6, gap: 4 }}>
+          <div className="evaluator-hover-menu-footer">
             <button
-              onClick={() => { setShowInput(false); setBranch(""); }}
-              style={{
-                fontSize: 10,
-                padding: "2px 8px",
-                background: "transparent",
-                color: "var(--text-dim)",
-                border: "1px solid var(--border)",
-                borderRadius: 4,
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleLaunch}
+              className="evaluator-run-btn"
               disabled={!branch.trim()}
-              style={{
-                fontSize: 10,
-                padding: "2px 8px",
-                background: branch.trim() ? "var(--dot-done, #22c55e)" : "var(--border)",
-                color: branch.trim() ? "#000" : "var(--text-dim)",
-                border: "none",
-                borderRadius: 4,
-                cursor: branch.trim() ? "pointer" : "default",
-                fontWeight: 600,
-              }}
+              onClick={handleLaunch}
             >
-              Launch
+              launch studio
             </button>
           </div>
-        </div>
+        </>
       )}
+    </div>
+  );
+}
+
+export function LaunchStudioButton({ onLaunch, isRunning }) {
+  const [showMenu, setShowMenu] = useState(false);
+
+  return (
+    <div
+      className="evaluator-character"
+      onMouseEnter={() => setShowMenu(true)}
+      onMouseLeave={() => setShowMenu(false)}
+    >
+      {showMenu && (
+        <StudioHoverMenu
+          onLaunch={onLaunch}
+          isRunning={isRunning}
+        />
+      )}
+      <StudioCharacter
+        isRunning={isRunning}
+        disabled={isRunning}
+        onClick={() => {}}
+      />
     </div>
   );
 }
