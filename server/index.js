@@ -34,6 +34,10 @@ import {
   clearTaskLogs,
 } from "./db.js";
 import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
+import OpenAI from "openai";
+import multer from "multer";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const app = express();
 const server = createServer(app);
@@ -581,6 +585,36 @@ function wireActor(id, actor) {
 }
 
 // --- REST API ---
+
+app.post("/transcribe", upload.single("audio"), async (req, res) => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "OPENAI_API_KEY not configured" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No audio file provided" });
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    // Create a File object from the buffer for the OpenAI API
+    const file = new File([req.file.buffer], req.file.originalname || "audio.webm", {
+      type: req.file.mimetype || "audio/webm",
+    });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: "whisper-1",
+    });
+
+    res.json({ text: transcription.text });
+  } catch (err) {
+    console.error("[transcribe] Error:", err);
+    res.status(500).json({ error: err.message || "Transcription failed" });
+  }
+});
 
 app.get("/config", async (req, res) => {
   const config = await getConfig();

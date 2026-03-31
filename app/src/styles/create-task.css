@@ -148,6 +148,58 @@
   z-index: 10;
 }
 
+/* Voice input button */
+.voice-input-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  position: relative;
+}
+
+.voice-input-btn:hover {
+  background: var(--bg-muted);
+}
+
+.voice-input-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Recording state */
+.voice-input-btn.recording {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.voice-input-btn.recording::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: pulse-recording 1s ease-in-out infinite;
+}
+
+@keyframes pulse-recording {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Transcribing state */
+.voice-input-btn.transcribing {
+  opacity: 0.7;
+}
+
 /* Mobile — ensure the submit button meets the 44 px minimum tap target */
 @media (max-width: 768px) {
   .create-task-form .btn--md {
@@ -160,6 +212,11 @@
   }
 
   .image-attach-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .voice-input-btn {
     min-height: 44px;
     min-width: 44px;
   }

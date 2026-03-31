@@ -1,10 +1,27 @@
 import { useState, useRef } from "react";
 import { Button } from "./Button.jsx";
+import { useVoiceInput } from "../hooks/useVoiceInput.js";
 import "../styles/create-task.css";
 
 export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, onValueChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef(null);
+
+  const handleTranscription = (text) => {
+    if (text) {
+      const newValue = value ? `${value} ${text}` : text;
+      onValueChange(newValue);
+    }
+  };
+  const { isRecording, isTranscribing, startRecording, stopRecording, error } = useVoiceInput(handleTranscription);
+
+  const handleVoiceClick = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
   const isSlash = value.startsWith("/");
   const query = isSlash ? value.slice(1).toLowerCase() : "";
@@ -91,10 +108,25 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
             outline: "none",
           }}
         />
+        <button
+          type="button"
+          className={`voice-input-btn${isRecording ? " recording" : ""}${isTranscribing ? " transcribing" : ""}`}
+          onClick={handleVoiceClick}
+          disabled={isTranscribing}
+          title={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
+        >
+          🎤
+        </button>
         <Button variant="primary" type="submit" size="md">
           add
         </Button>
       </form>
+
+      {error && (
+        <div className="voice-error" style={{ color: "#ef4444", fontSize: 11, marginTop: 4, fontFamily: "var(--font-mono)" }}>
+          {error}
+        </div>
+      )}
 
       {showDropdown && (
         <div className="slash-dropdown">
