@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
-const API_BASE = "/api";
+import { API_BASE } from "../config.js";
 
 export function SettingsDialog({
   darkMode,

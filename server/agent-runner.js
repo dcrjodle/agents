@@ -182,11 +182,24 @@ ${userComments}
 `;
   }
 
+  // Include attached images section if any
+  const images = handoff.context.images || [];
+  let imagesSection = "";
+  if (images.length > 0) {
+    imagesSection = `
+## Attached Images
+The user has attached ${images.length} image(s) to this task. Use the Read tool to view each image to understand the visual requirements:
+${images.map((path) => `- ${path}`).join("\n")}
+
+IMPORTANT: Review these images before creating your plan. They may contain mockups, screenshots, or visual references that are essential for understanding the task.
+`;
+  }
+
   return `You are a planner agent. Your job is to create an implementation plan.
 
 Task: ${handoff.instruction}
 Project path: ${handoff.projectPath}
-${userFeedbackSection}
+${userFeedbackSection}${imagesSection}
 First, explore the project directory to understand its structure, framework, and conventions.
 Detect the framework from actual project files (package.json, .csproj, go.mod, etc.) — do NOT assume any framework that isn't evidenced in the codebase.
 Then write a plan following this template:
@@ -242,6 +255,19 @@ RETRY INSTRUCTIONS:
     ? `\n## Project Rules\nThe following rules are defined by the project owner and MUST be followed:\n\n${projectRules}\n`
     : "";
 
+  // Include attached images section if any
+  const images = handoff.context.images || [];
+  let imagesSection = "";
+  if (images.length > 0) {
+    imagesSection = `
+## Attached Images
+The user has attached ${images.length} image(s) to this task. Use the Read tool to view each image to understand the visual requirements:
+${images.map((path) => `- ${path}`).join("\n")}
+
+IMPORTANT: Review these images before implementing. They may contain mockups, screenshots, or visual references that are essential for understanding what needs to be built.
+`;
+  }
+
   return `You are a developer agent. Implement the following task in the worktree.
 
 Task: ${handoff.instruction}
@@ -250,7 +276,7 @@ Worktree path: ${worktreePath}
 
 Plan from planner:
 ${planMarkdown}
-${reviewerNotesSection}${retrySection}${rulesSection}
+${reviewerNotesSection}${retrySection}${rulesSection}${imagesSection}
 IMPORTANT RULES:
 - Work ONLY within the worktree at: ${worktreePath}
 - ALWAYS read a file before modifying it — use Read to see the current contents first
