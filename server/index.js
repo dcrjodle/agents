@@ -803,7 +803,28 @@ app.get("/server-status", async (req, res) => {
 
   // Commands to run
   const statusCmd = "pm2 jlist";
-  const logsCmd = "pm2 logs agents --lines 30 --nostream";
+  const stdoutLogsCmd = "pm2 logs agents --out --lines 30 --nostream 2>/dev/null";
+  const stderrLogsCmd = "pm2 logs agents --err --lines 30 --nostream 2>/dev/null";
+
+  // Helper: strip ANSI escape codes
+  const stripAnsi = (str) => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+  // Helper: parse log lines and detect log levels
+  const parseLogLines = (raw) => {
+    return raw
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => {
+        const text = stripAnsi(line);
+        let level = "info";
+        if (/error/i.test(text)) {
+          level = "error";
+        } else if (/warn/i.test(text)) {
+          level = "warn";
+        }
+        return { text, level };
+      });
+  };
 
   // Script to run on production (with nvm sourcing)
   const buildScript = (cmd) => [
@@ -815,7 +836,7 @@ app.get("/server-status", async (req, res) => {
 
   try {
     const { execFileSync } = await import("child_process");
-    let statusOutput, logsOutput;
+    let statusOutput, stdoutLogsOutput, stderrLogsOutput;
 
     if (isLocal) {
       // SSH to production server
@@ -823,7 +844,11 @@ app.get("/server-status", async (req, res) => {
         encoding: "utf-8",
         timeout: 15000,
       });
-      logsOutput = execFileSync("ssh", [remoteHost, buildScript(logsCmd)], {
+      stdoutLogsOutput = execFileSync("ssh", [remoteHost, buildScript(stdoutLogsCmd)], {
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      stderrLogsOutput = execFileSync("ssh", [remoteHost, buildScript(stderrLogsCmd)], {
         encoding: "utf-8",
         timeout: 15000,
       });
@@ -834,8 +859,13 @@ app.get("/server-status", async (req, res) => {
         encoding: "utf-8",
         timeout: 15000,
       });
-      logsOutput = execFileSync("bash", [], {
-        input: buildScript(logsCmd),
+      stdoutLogsOutput = execFileSync("bash", [], {
+        input: buildScript(stdoutLogsCmd),
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      stderrLogsOutput = execFileSync("bash", [], {
+        input: buildScript(stderrLogsCmd),
         encoding: "utf-8",
         timeout: 15000,
       });
@@ -865,17 +895,20 @@ app.get("/server-status", async (req, res) => {
       pm2Status = statusOutput.includes("online") ? "online" : "unknown";
     }
 
+    const parsedStdoutLines = parseLogLines(stdoutLogsOutput);
+    const parsedStderrLines = parseLogLines(stderrLogsOutput);
+
     res.json({
       status: pm2Status,
       details: pm2Details,
-      logs: logsOutput.trim(),
+      logs: { stdout: parsedStdoutLines, stderr: parsedStderrLines },
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
     res.status(500).json({
       status: "error",
       error: err.message,
-      logs: err.stdout || "",
+      logs: { stdout: [], stderr: [], error: err.message },
       timestamp: new Date().toISOString(),
     });
   }
@@ -1198,6 +1231,92 @@ app.post("/tasks/:id/stop", async (req, res) => {
 
   broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "stopped", currentStep: `Stopped by user (was ${sk})` } });
   broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
+
+  res.json(await getTaskSnapshot(id));
+});
+
+app.post("/tasks/:id/force-state", async (req, res) => {
+  const id = req.params.id;
+  const { stateKey: targetStateKey } = req.body;
+
+  const VALID_STATES = ["idle", "planning.running", "planning.awaitingApproval", "branching", "developing", "committing", "testing", "reviewing.running", "reviewing.awaitingApproval", "pushing", "directMerging", "merging.awaitingApproval", "merging.creatingPr", "done", "failed"];
+
+  if (!targetStateKey || !VALID_STATES.includes(targetStateKey)) {
+    return res.status(400).json({ error: `Invalid stateKey "${targetStateKey}". Must be one of: ${VALID_STATES.join(", ")}` });
+  }
+
+  function stateKeyToValue(sk) {
+    if (sk.includes(".")) {
+      const [parent, child] = sk.split(".");
+      return { [parent]: child };
+    }
+    return sk;
+  }
+
+  let actor = actors.get(id);
+  let dbTask = null;
+  if (!actor) {
+    dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+  }
+
+  const previousStateKey = actor ? stateKey(actor.getSnapshot().value) : (dbTask.stateKey || stateKey(dbTask.state));
+  const existingContext = actor ? actor.getSnapshot().context : (dbTask.context || {});
+
+  // Mark as stopped so async callbacks won't interfere
+  stoppedTasks.add(id);
+
+  // Kill any running agent process
+  cleanupAgent(id);
+  clearSession(id);
+
+  // Stop the current actor if it exists
+  if (actor) {
+    actor.stop();
+    actors.delete(id);
+  }
+  taskAutoContinues.delete(id);
+
+  const restoredMachine = workflowMachine.provide({});
+  const newActor = createActor(restoredMachine, {
+    snapshot: {
+      value: stateKeyToValue(targetStateKey),
+      context: {
+        ...existingContext,
+        error: targetStateKey !== "failed" ? null : existingContext.error,
+      },
+      children: {},
+      status: "active",
+      output: undefined,
+      error: undefined,
+    },
+  });
+
+  if (actor) {
+    newActor._description = actor._description;
+    newActor._projectPath = actor._projectPath;
+    newActor._createdAt = actor._createdAt;
+  } else {
+    newActor._description = dbTask.description;
+    newActor._projectPath = dbTask.projectPath;
+    newActor._createdAt = dbTask.createdAt;
+  }
+
+  actors.set(id, newActor);
+  wireActor(id, newActor);
+  newActor.start();
+
+  const newSnap = newActor.getSnapshot();
+  await dbUpdateTask(id, {
+    state: newSnap.value,
+    stateKey: stateKey(newSnap.value),
+    label: stateLabel(newSnap.value),
+    context: newSnap.context,
+  });
+
+  broadcast({ type: "TASK_STATE_FORCED", taskId: id, stateKey: targetStateKey, fromState: previousStateKey });
+  broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
+  broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "forced", currentStep: `State forced to "${targetStateKey}" (was "${previousStateKey}")` } });
 
   res.json(await getTaskSnapshot(id));
 });

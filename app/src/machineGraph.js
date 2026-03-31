@@ -29,7 +29,7 @@ export const MACHINE_NODES = [
     ...PLANNING_CONTAINER,
     children: [
       { id: 'planning.running',          label: 'running',          type: 'atomic', cx: 260, cy: 193, w: 150, h: 34 },
-      { id: 'planning.awaitingApproval', label: 'await approval',   type: 'atomic', cx: 260, cy: 261, w: 168, h: 34 },
+      { id: 'planning.awaitingApproval', label: 'await plan',        type: 'atomic', cx: 260, cy: 261, w: 168, h: 34 },
     ],
   },
 
@@ -50,7 +50,7 @@ export const MACHINE_NODES = [
     id: 'merging', label: 'merging', type: 'compound',
     ...MERGING_CONTAINER,
     children: [
-      { id: 'merging.awaitingApproval', label: 'await approval', type: 'atomic', cx: 1527, cy: 155, w: 130, h: 34 },
+      { id: 'merging.awaitingApproval', label: 'await PR',       type: 'atomic', cx: 1527, cy: 155, w: 130, h: 34 },
       { id: 'merging.creatingPr',       label: 'creating PR',    type: 'atomic', cx: 1662, cy: 155, w: 110, h: 34 },
     ],
   },
