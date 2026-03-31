@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { VisualTestCharacter } from "./VisualTestCharacter.jsx";
 
 function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGithubber, eligibleTaskCount, progress }) {
@@ -136,6 +137,13 @@ export function VisualTestButton({ isRunning, results, onTrigger, onStop, onSend
           onSendToGithubber={onSendToGithubber}
           eligibleTaskCount={eligibleTaskCount}
           progress={progress}
+        />
+      )}
+      {isRunning && (
+        <Loader2
+          className="visual-test-loading-spinner"
+          size={18}
+          style={{ color: '#0d9488' }}
         />
       )}
       <VisualTestCharacter
