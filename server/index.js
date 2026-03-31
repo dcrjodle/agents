@@ -511,8 +511,22 @@ function wireActor(id, actor) {
       if (sk === "reviewing.awaitingApproval") {
         getProjectSettings(actor._projectPath).then((projectSettings) => {
           if (projectSettings.autoApproveReviews === true) {
+            // Always approve, overriding reviewer's verdict
             actor.send({ type: "REVIEW_APPROVED" });
             broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved" });
+          } else if (projectSettings.trustReviewerVerdict === true) {
+            // Trust the reviewer's verdict without manual approval
+            const review = snapshot.context.review;
+            const verdict = review?.verdict || "changes_requested";
+            if (verdict === "approved") {
+              actor.send({ type: "REVIEW_APPROVED" });
+              broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved (reviewer verdict: approved)" });
+            } else {
+              // Send changes back to developer with reviewer feedback
+              const feedback = review?.feedback || review?.markdown || "Changes requested by reviewer";
+              actor.send({ type: "CHANGES_REQUESTED", feedback });
+              broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-rejected (reviewer verdict: changes_requested)" });
+            }
           }
         });
       }
