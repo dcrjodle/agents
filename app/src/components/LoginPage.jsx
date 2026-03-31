@@ -42,6 +42,7 @@ export function LoginPage({ onLogin }) {
           onChange={(e) => setEmail(e.target.value)}
           required
           autoFocus
+          autoComplete="email"
         />
         <input
           type="password"
@@ -49,6 +50,7 @@ export function LoginPage({ onLogin }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          autoComplete="current-password"
         />
         <button type="submit" disabled={loading}>
           {loading ? "Logging in..." : "Login"}

@@ -78,6 +78,7 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           placeholder="describe a task... (/ for commands)"
+          autoComplete="off"
           style={{
             flex: 1,
             padding: "7px 12px",

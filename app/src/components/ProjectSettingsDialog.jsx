@@ -105,6 +105,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             value={projectPath}
             onChange={(e) => setProjectPath(e.target.value)}
             placeholder="/path/to/project"
+            autoComplete="off"
             style={{
               width: "100%",
               boxSizing: "border-box",
@@ -259,6 +260,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             max={10}
             value={maxRetries}
             onChange={(e) => setMaxRetries(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))}
+            autoComplete="off"
             style={{
               width: 48,
               textAlign: "center",

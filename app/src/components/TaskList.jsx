@@ -292,6 +292,7 @@ export function TaskList({
               className="task-row-edit-input"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
+              autoComplete="off"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();

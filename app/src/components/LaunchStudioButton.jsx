@@ -78,6 +78,7 @@ export function LaunchStudioButton({ onLaunch, isRunning }) {
             onKeyDown={handleKeyDown}
             placeholder="Branch name..."
             autoFocus
+            autoComplete="off"
             style={{
               width: "100%",
               padding: "4px 8px",

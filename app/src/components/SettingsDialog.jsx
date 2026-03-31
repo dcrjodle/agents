@@ -116,6 +116,7 @@ export function SettingsDialog({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="name"
+              autoComplete="off"
               style={{
                 flex: 1,
                 fontSize: 11,
@@ -136,6 +137,7 @@ export function SettingsDialog({
               value={newPath}
               onChange={(e) => setNewPath(e.target.value)}
               placeholder="path"
+              autoComplete="off"
               style={{
                 flex: 2,
                 fontSize: 11,
