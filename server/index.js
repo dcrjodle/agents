@@ -803,7 +803,28 @@ app.get("/server-status", async (req, res) => {
 
   // Commands to run
   const statusCmd = "pm2 jlist";
-  const logsCmd = "pm2 logs agents --lines 30 --nostream";
+  const stdoutLogsCmd = "pm2 logs agents --out --lines 30 --nostream 2>/dev/null";
+  const stderrLogsCmd = "pm2 logs agents --err --lines 30 --nostream 2>/dev/null";
+
+  // Helper: strip ANSI escape codes
+  const stripAnsi = (str) => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+  // Helper: parse log lines and detect log levels
+  const parseLogLines = (raw) => {
+    return raw
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => {
+        const text = stripAnsi(line);
+        let level = "info";
+        if (/error/i.test(text)) {
+          level = "error";
+        } else if (/warn/i.test(text)) {
+          level = "warn";
+        }
+        return { text, level };
+      });
+  };
 
   // Script to run on production (with nvm sourcing)
   const buildScript = (cmd) => [
@@ -815,7 +836,7 @@ app.get("/server-status", async (req, res) => {
 
   try {
     const { execFileSync } = await import("child_process");
-    let statusOutput, logsOutput;
+    let statusOutput, stdoutLogsOutput, stderrLogsOutput;
 
     if (isLocal) {
       // SSH to production server
@@ -823,7 +844,11 @@ app.get("/server-status", async (req, res) => {
         encoding: "utf-8",
         timeout: 15000,
       });
-      logsOutput = execFileSync("ssh", [remoteHost, buildScript(logsCmd)], {
+      stdoutLogsOutput = execFileSync("ssh", [remoteHost, buildScript(stdoutLogsCmd)], {
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      stderrLogsOutput = execFileSync("ssh", [remoteHost, buildScript(stderrLogsCmd)], {
         encoding: "utf-8",
         timeout: 15000,
       });
@@ -834,8 +859,13 @@ app.get("/server-status", async (req, res) => {
         encoding: "utf-8",
         timeout: 15000,
       });
-      logsOutput = execFileSync("bash", [], {
-        input: buildScript(logsCmd),
+      stdoutLogsOutput = execFileSync("bash", [], {
+        input: buildScript(stdoutLogsCmd),
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      stderrLogsOutput = execFileSync("bash", [], {
+        input: buildScript(stderrLogsCmd),
         encoding: "utf-8",
         timeout: 15000,
       });
@@ -865,17 +895,20 @@ app.get("/server-status", async (req, res) => {
       pm2Status = statusOutput.includes("online") ? "online" : "unknown";
     }
 
+    const parsedStdoutLines = parseLogLines(stdoutLogsOutput);
+    const parsedStderrLines = parseLogLines(stderrLogsOutput);
+
     res.json({
       status: pm2Status,
       details: pm2Details,
-      logs: logsOutput.trim(),
+      logs: { stdout: parsedStdoutLines, stderr: parsedStderrLines },
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
     res.status(500).json({
       status: "error",
       error: err.message,
-      logs: err.stdout || "",
+      logs: { stdout: [], stderr: [], error: err.message },
       timestamp: new Date().toISOString(),
     });
   }

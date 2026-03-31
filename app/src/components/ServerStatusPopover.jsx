@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerStatus } from "../hooks/useServerStatus.js";
 import "../styles/server-status.css";
 
@@ -41,6 +41,7 @@ function formatTimestamp(isoString) {
 export function ServerStatusPopover({ anchorRect, onClose }) {
   const { data, loading, error, refresh } = useServerStatus(true);
   const popoverRef = useRef(null);
+  const [logFilter, setLogFilter] = useState('all'); // 'all', 'errors', 'stdout', 'stderr'
 
   // Position the popover below the anchor
   const GAP = 8;
@@ -73,6 +74,29 @@ export function ServerStatusPopover({ anchorRect, onClose }) {
   const details = data?.details;
   const logs = data?.logs || "";
   const timestamp = data?.timestamp;
+
+  const getFilteredLogs = () => {
+    if (!logs || typeof logs === 'string') return []; // Handle old format gracefully
+    const { stdout = [], stderr = [] } = logs;
+    let combined = [];
+    if (logFilter === 'stdout') {
+      combined = stdout;
+    } else if (logFilter === 'stderr' || logFilter === 'errors') {
+      combined = stderr;
+    } else {
+      // 'all' - combine and show all, with stderr entries marked
+      combined = [
+        ...stdout.map(l => ({ ...l, source: 'stdout' })),
+        ...stderr.map(l => ({ ...l, source: 'stderr' })),
+      ];
+    }
+    if (logFilter === 'errors') {
+      combined = combined.filter(l => l.level === 'error');
+    }
+    return combined;
+  };
+
+  const filteredLogs = getFilteredLogs();
 
   const popover = (
     <div
@@ -138,8 +162,29 @@ export function ServerStatusPopover({ anchorRect, onClose }) {
           )}
 
           <div className="server-status-logs-title">Recent Logs</div>
+          <div className="server-status-log-filters">
+            {['all', 'stdout', 'stderr', 'errors'].map((filter) => (
+              <button
+                key={filter}
+                className={`server-status-filter-btn ${logFilter === filter ? 'active' : ''}`}
+                onClick={() => setLogFilter(filter)}
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
           <div className="server-status-logs">
-            {logs || "No logs available"}
+            {filteredLogs.length === 0 ? (
+              <div className="server-status-logs-empty">
+                {logs?.error ? `Error: ${logs.error}` : 'No logs available'}
+              </div>
+            ) : (
+              filteredLogs.map((line, i) => (
+                <div key={i} className={`server-status-log-line level-${line.level} ${line.source === 'stderr' ? 'from-stderr' : ''}`}>
+                  {line.text}
+                </div>
+              ))
+            )}
           </div>
 
           {timestamp && (
