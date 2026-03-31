@@ -1,8 +1,42 @@
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Copy, Check } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
+
+function BranchNameSection({ pr }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyBranchName = () => {
+    navigator.clipboard.writeText(pr.branchName);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!pr.branchName) return null;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      <span style={{ fontWeight: 600, fontSize: 13 }}>Branch:</span>
+      <code style={{
+        fontFamily: "monospace",
+        background: "var(--bg-hover)",
+        padding: "2px 6px",
+        borderRadius: 4,
+        fontSize: 13,
+        color: "var(--text)",
+      }}>
+        {pr.branchName}
+      </code>
+      <IconButton
+        icon={copied ? Check : Copy}
+        onClick={copyBranchName}
+        title="Copy branch name"
+        style={{ color: copied ? "var(--dot-done)" : "var(--text-dim)" }}
+      />
+    </div>
+  );
+}
 
 export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
   const contentRef = useRef(null);
@@ -23,10 +57,6 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
 
   // Build markdown content to display
   const markdownLines = [];
-  if (pr.branchName) {
-    markdownLines.push(`**Branch:** \`${pr.branchName}\``);
-    markdownLines.push("");
-  }
   if (pr.diffSummary) {
     markdownLines.push("## Diff Summary");
     markdownLines.push("");
@@ -106,6 +136,7 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
             padding: "16px 18px",
           }}
         >
+          <BranchNameSection pr={pr} />
           <MarkdownContent markdown={markdown} />
         </div>
 
