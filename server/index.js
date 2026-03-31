@@ -1202,6 +1202,92 @@ app.post("/tasks/:id/stop", async (req, res) => {
   res.json(await getTaskSnapshot(id));
 });
 
+app.post("/tasks/:id/force-state", async (req, res) => {
+  const id = req.params.id;
+  const { stateKey: targetStateKey } = req.body;
+
+  const VALID_STATES = ["idle", "planning.running", "planning.awaitingApproval", "branching", "developing", "committing", "testing", "reviewing.running", "reviewing.awaitingApproval", "pushing", "directMerging", "merging.awaitingApproval", "merging.creatingPr", "done", "failed"];
+
+  if (!targetStateKey || !VALID_STATES.includes(targetStateKey)) {
+    return res.status(400).json({ error: `Invalid stateKey "${targetStateKey}". Must be one of: ${VALID_STATES.join(", ")}` });
+  }
+
+  function stateKeyToValue(sk) {
+    if (sk.includes(".")) {
+      const [parent, child] = sk.split(".");
+      return { [parent]: child };
+    }
+    return sk;
+  }
+
+  let actor = actors.get(id);
+  let dbTask = null;
+  if (!actor) {
+    dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+  }
+
+  const previousStateKey = actor ? stateKey(actor.getSnapshot().value) : (dbTask.stateKey || stateKey(dbTask.state));
+  const existingContext = actor ? actor.getSnapshot().context : (dbTask.context || {});
+
+  // Mark as stopped so async callbacks won't interfere
+  stoppedTasks.add(id);
+
+  // Kill any running agent process
+  cleanupAgent(id);
+  clearSession(id);
+
+  // Stop the current actor if it exists
+  if (actor) {
+    actor.stop();
+    actors.delete(id);
+  }
+  taskAutoContinues.delete(id);
+
+  const restoredMachine = workflowMachine.provide({});
+  const newActor = createActor(restoredMachine, {
+    snapshot: {
+      value: stateKeyToValue(targetStateKey),
+      context: {
+        ...existingContext,
+        error: targetStateKey !== "failed" ? null : existingContext.error,
+      },
+      children: {},
+      status: "active",
+      output: undefined,
+      error: undefined,
+    },
+  });
+
+  if (actor) {
+    newActor._description = actor._description;
+    newActor._projectPath = actor._projectPath;
+    newActor._createdAt = actor._createdAt;
+  } else {
+    newActor._description = dbTask.description;
+    newActor._projectPath = dbTask.projectPath;
+    newActor._createdAt = dbTask.createdAt;
+  }
+
+  actors.set(id, newActor);
+  wireActor(id, newActor);
+  newActor.start();
+
+  const newSnap = newActor.getSnapshot();
+  await dbUpdateTask(id, {
+    state: newSnap.value,
+    stateKey: stateKey(newSnap.value),
+    label: stateLabel(newSnap.value),
+    context: newSnap.context,
+  });
+
+  broadcast({ type: "TASK_STATE_FORCED", taskId: id, stateKey: targetStateKey, fromState: previousStateKey });
+  broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
+  broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "forced", currentStep: `State forced to "${targetStateKey}" (was "${previousStateKey}")` } });
+
+  res.json(await getTaskSnapshot(id));
+});
+
 app.post("/tasks/:id/continue", async (req, res) => {
   const id = req.params.id;
 
