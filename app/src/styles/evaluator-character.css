@@ -18,7 +18,8 @@
 .evaluator-hover-menu {
   position: absolute;
   top: 0;
-  right: calc(100% + 12px);
+  right: 100%;
+  margin-right: 12px;
   width: 280px;
   background: var(--bg-elevated, #1e1e2e);
   border: 1px solid var(--border, rgba(255,255,255,0.1));
@@ -27,6 +28,16 @@
   padding: 12px;
   z-index: 201;
   animation: evaluator-fade-in 0.15s ease;
+}
+
+/* Invisible hover bridge to prevent menu from closing when moving cursor from character to menu */
+.evaluator-hover-menu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 16px;
+  height: 100%;
 }
 
 @keyframes evaluator-fade-in {
@@ -167,4 +178,16 @@
 .evaluator-run-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Visual Test Loading Spinner */
+@keyframes visual-test-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.visual-test-loading-spinner {
+  animation: visual-test-spin 1s linear infinite;
+  flex-shrink: 0;
+  margin-right: 8px;
 }
