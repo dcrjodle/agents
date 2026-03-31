@@ -687,35 +687,21 @@ app.post("/config/browse", async (req, res) => {
 app.post("/deploy", async (req, res) => {
   const remoteHost = "joel.bystedt@35.228.54.40";
   const remoteDir = "/home/joel.bystedt/agents";
-  const { execSync } = await import("child_process");
+  const scriptPath = `${remoteDir}/scripts/server-deploy.sh`;
   const { hostname } = await import("os");
   const isLocal = hostname() === "joel-linux-monstrosity";
 
-  const script = [
-    `export NVM_DIR="$HOME/.nvm"`,
-    `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"`,
-    `cd ${remoteDir}`,
-    `git pull origin main`,
-    `npm install --omit=dev`,
-    `cd app && npm install && npm run build`,
-    `cd ${remoteDir}`,
-    `pkill -9 -f "node.*server/index.js" || true`,
-    `sleep 1`,
-    `nohup node server/index.js > /tmp/agents-server.log 2>&1 &`,
-    `echo DEPLOY_OK`,
-  ].join("\n");
-
   try {
-    const args = isLocal
-      ? ["bash"]
-      : ["ssh", "-o", "ConnectTimeout=10", remoteHost, "bash"];
     const { execFileSync } = await import("child_process");
+    const args = isLocal
+      ? ["bash", scriptPath]
+      : ["ssh", "-o", "ConnectTimeout=10", remoteHost, `bash ${scriptPath}`];
+
     const output = execFileSync(args[0], args.slice(1), {
-      input: script,
       encoding: "utf-8",
       timeout: 120000,
     });
-    const success = output.includes("DEPLOY_OK");
+    const success = output.includes("Deploy complete");
     res.json({ success, output: output.trim() });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message, output: err.stdout || "" });
