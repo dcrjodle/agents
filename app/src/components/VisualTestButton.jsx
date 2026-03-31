@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { VisualTestCharacter } from "./VisualTestCharacter.jsx";
 
-function VisualTestHoverMenu({ isRunning, results, onTrigger, onSendToGithubber, eligibleTaskCount, progress }) {
+function VisualTestHoverMenu({ isRunning, results, onTrigger, onStop, onSendToGithubber, eligibleTaskCount, progress }) {
   const hasResults = results && results.results && results.results.length > 0;
   const passedCount = hasResults ? results.results.filter((r) => r.status === "complete").length : 0;
   const totalCount = hasResults ? results.results.length : 0;
@@ -89,20 +89,34 @@ function VisualTestHoverMenu({ isRunning, results, onTrigger, onSendToGithubber,
         </>
       )}
 
-      <div className="evaluator-hover-menu-footer">
-        <button
-          className="evaluator-run-btn"
-          disabled={isRunning || eligibleTaskCount === 0}
-          onClick={onTrigger}
-        >
-          {isRunning ? "testing..." : eligibleTaskCount > 0 ? `run visual tests (${eligibleTaskCount})` : "no tasks ready"}
-        </button>
-      </div>
+      {isRunning && (
+        <div className="evaluator-hover-menu-footer">
+          <button
+            className="evaluator-run-btn"
+            onClick={onStop}
+            style={{ background: "var(--dot-failed, #ef4444)" }}
+          >
+            stop visual test
+          </button>
+        </div>
+      )}
+
+      {!isRunning && (
+        <div className="evaluator-hover-menu-footer">
+          <button
+            className="evaluator-run-btn"
+            disabled={eligibleTaskCount === 0}
+            onClick={onTrigger}
+          >
+            {eligibleTaskCount > 0 ? `run visual tests (${eligibleTaskCount})` : "no tasks ready"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function VisualTestButton({ isRunning, results, onTrigger, onSendToGithubber, eligibleTaskCount, progress }) {
+export function VisualTestButton({ isRunning, results, onTrigger, onStop, onSendToGithubber, eligibleTaskCount, progress }) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -118,6 +132,7 @@ export function VisualTestButton({ isRunning, results, onTrigger, onSendToGithub
           onTrigger={() => {
             if (!isRunning && eligibleTaskCount > 0) onTrigger();
           }}
+          onStop={onStop}
           onSendToGithubber={onSendToGithubber}
           eligibleTaskCount={eligibleTaskCount}
           progress={progress}
