@@ -443,8 +443,12 @@ function wireActor(id, actor) {
 
     const label = stateLabel(snapshot.value);
 
-    // Persist state to db
-    dbUpdateTask(id, { state: snapshot.value, stateKey: sk, label, context: snapshot.context }).catch((err) => {
+    // Skip database updates during rehydration to prevent overwriting persisted state
+    if (actor._rehydrating) return;
+
+    // Persist state and snapshot to db
+    const persistedSnapshot = actor.getPersistedSnapshot();
+    dbUpdateTask(id, { state: snapshot.value, stateKey: sk, label, context: snapshot.context, snapshot: persistedSnapshot }).catch((err) => {
       console.error(`Failed to persist state for ${id}:`, err);
     });
 
@@ -788,8 +792,9 @@ app.post("/tasks", async (req, res) => {
 
   actor.start();
 
-  // Persist initial record
+  // Persist initial record with snapshot for proper rehydration
   const snap = actor.getSnapshot();
+  const persistedSnapshot = actor.getPersistedSnapshot();
   await dbCreateTask({
     id,
     description,
@@ -798,6 +803,7 @@ app.post("/tasks", async (req, res) => {
     stateKey: stateKey(snap.value),
     label: stateLabel(snap.value),
     context: snap.context,
+    snapshot: persistedSnapshot,
     createdAt: actor._createdAt,
   });
 
@@ -1589,74 +1595,102 @@ async function start() {
   // Rehydrate active tasks (non-terminal states) as XState actors
   const dbTasks = await dbGetAllTasks();
   for (const task of dbTasks) {
-    if (task.state === "done" || task.state === "failed") continue;
+    // Use stateKey() to handle both flat string states and compound object states
+    const taskStateKey = stateKey(task.state);
+    if (taskStateKey === "done" || taskStateKey === "failed") continue;
 
     // Handle legacy flat state values
     const sk = typeof task.state === "string" ? task.state : stateKey(task.state);
 
     console.log(`Rehydrating task ${task.id} (state: ${sk})`);
-    const actor = createActor(workflowMachine);
+
+    let actor;
+
+    // Use XState snapshot restoration if available (new format)
+    // Otherwise fall back to event replay for legacy tasks
+    if (task.snapshot) {
+      console.log(`  Using snapshot restoration for task ${task.id}`);
+      actor = createActor(workflowMachine, { snapshot: task.snapshot });
+    } else {
+      console.log(`  Using legacy event replay for task ${task.id}`);
+      actor = createActor(workflowMachine);
+    }
+
     actor._description = task.description;
     actor._projectPath = task.projectPath;
     actor._createdAt = task.createdAt;
+
+    // Set rehydrating flag BEFORE start() to prevent DB writes during initial state emission
+    actor._rehydrating = true;
 
     actors.set(task.id, actor);
     wireActor(task.id, actor);
     actor.start();
 
-    // Idle tasks should remain idle — don't send START
-    if (sk === "idle") {
-      console.log(`Task ${task.id} is idle, keeping in todo state`);
-      continue;
-    }
-
-    // Replay events to get back to the persisted state — suppress side-effects during replay
-    actor._rehydrating = true;
-    actor.send({ type: "START", task: task.description });
-
-    // Helper: build cumulative replay sequences
-    const planReady = { type: "PLAN_READY", plan: task.context?.plan };
-    const planApproved = { type: "PLAN_APPROVED" };
-    const branchReady = { type: "BRANCH_READY", worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName };
-    const codeComplete = { type: "CODE_COMPLETE", files: task.context?.result?.files || [] };
-    const commitComplete = { type: "COMMIT_COMPLETE", files: task.context?.result?.files || [] };
-    const testsPassed = { type: "TESTS_PASSED" };
-    const reviewReady = { type: "REVIEW_READY", review: task.context?.review };
-    const reviewApproved = { type: "REVIEW_APPROVED" };
-    const pushComplete = { type: "PUSH_COMPLETE", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
-    const pushCompleteNoPr = { type: "PUSH_COMPLETE_NO_PR", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
-    const prApproved = { type: "PR_APPROVED" };
-
-    const replayEvents = {
-      "planning.running": [],
-      "planning.awaitingApproval": [planReady],
-      "branching": [planReady, planApproved],
-      "developing": [planReady, planApproved, branchReady],
-      "committing": [planReady, planApproved, branchReady, codeComplete],
-      "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
-      "reviewing.running": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
-      "reviewing.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewReady],
-      // Legacy flat state name for backwards compat
-      "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
-      "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
-      "directMerging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushCompleteNoPr],
-      "merging.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete],
-      "merging.creatingPr": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete, prApproved],
-      // Legacy flat state names for backwards compat
-      "planning": [],
-      "merging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
-      "merging.running": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
-    };
-
-    const events = replayEvents[sk];
-    if (events) {
-      for (const event of events) {
-        actor.send(event);
+    // If we used snapshot restoration, rehydration is already complete
+    if (task.snapshot) {
+      actor._rehydrating = false;
+      // Verify the restored state matches expected
+      const restoredSk = stateKey(actor.getSnapshot().value);
+      if (restoredSk !== sk) {
+        console.warn(`  Warning: Restored state ${restoredSk} differs from expected ${sk}`);
       }
-    }
+    } else {
+      // Legacy path: replay events to get back to the persisted state
 
-    // Replay complete — re-enable side-effects
-    actor._rehydrating = false;
+      // Idle tasks should remain idle — don't send START
+      if (sk === "idle") {
+        console.log(`Task ${task.id} is idle, keeping in todo state`);
+        actor._rehydrating = false;
+        continue;
+      }
+
+      actor.send({ type: "START", task: task.description });
+
+      // Helper: build cumulative replay sequences
+      const planReady = { type: "PLAN_READY", plan: task.context?.plan };
+      const planApproved = { type: "PLAN_APPROVED" };
+      const branchReady = { type: "BRANCH_READY", worktreePath: task.context?.result?.worktreePath, branchName: task.context?.result?.branchName };
+      const codeComplete = { type: "CODE_COMPLETE", files: task.context?.result?.files || [] };
+      const commitComplete = { type: "COMMIT_COMPLETE", files: task.context?.result?.files || [] };
+      const testsPassed = { type: "TESTS_PASSED" };
+      const reviewReady = { type: "REVIEW_READY", review: task.context?.review };
+      const reviewApproved = { type: "REVIEW_APPROVED" };
+      const pushComplete = { type: "PUSH_COMPLETE", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
+      const pushCompleteNoPr = { type: "PUSH_COMPLETE_NO_PR", branchName: task.context?.result?.branchName, diffSummary: task.context?.result?.diffSummary || "" };
+      const prApproved = { type: "PR_APPROVED" };
+
+      const replayEvents = {
+        "planning.running": [],
+        "planning.awaitingApproval": [planReady],
+        "branching": [planReady, planApproved],
+        "developing": [planReady, planApproved, branchReady],
+        "committing": [planReady, planApproved, branchReady, codeComplete],
+        "testing": [planReady, planApproved, branchReady, codeComplete, commitComplete],
+        "reviewing.running": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
+        "reviewing.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewReady],
+        // Legacy flat state name for backwards compat
+        "reviewing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed],
+        "pushing": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
+        "directMerging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushCompleteNoPr],
+        "merging.awaitingApproval": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete],
+        "merging.creatingPr": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved, pushComplete, prApproved],
+        // Legacy flat state names for backwards compat
+        "planning": [],
+        "merging": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
+        "merging.running": [planReady, planApproved, branchReady, codeComplete, commitComplete, testsPassed, reviewApproved],
+      };
+
+      const events = replayEvents[sk];
+      if (events) {
+        for (const event of events) {
+          actor.send(event);
+        }
+      }
+
+      // Replay complete — re-enable side-effects
+      actor._rehydrating = false;
+    }
 
     // For tasks that were mid-flight in planning.running, re-spawn the planner agent
     if (sk === "planning.running" || sk === "planning") {
