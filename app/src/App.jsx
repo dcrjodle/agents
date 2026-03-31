@@ -229,17 +229,43 @@ function AuthenticatedApp({ user, onLogout }) {
     setViewingPrTaskId(taskId);
   }, []);
 
+  // Compute ordered list of pending PR task IDs
+  const pendingPrTaskIds = useMemo(() => Object.keys(pendingPrs).sort(), [pendingPrs]);
+  const currentPrIndex = viewingPrTaskId ? pendingPrTaskIds.indexOf(viewingPrTaskId) : -1;
+
   const handleApprovePr = useCallback(() => {
     if (viewingPrTaskId) {
       approveTask(viewingPrTaskId, "User approved PR");
       clearPendingPr(viewingPrTaskId);
-      setViewingPrTaskId(null);
+      // After approving, advance to next PR or close if none remain
+      const remainingIds = pendingPrTaskIds.filter(id => id !== viewingPrTaskId);
+      if (remainingIds.length > 0) {
+        // Move to next PR (or wrap to first if we were at the end)
+        const nextIndex = currentPrIndex >= remainingIds.length ? 0 : currentPrIndex;
+        setViewingPrTaskId(remainingIds[Math.min(nextIndex, remainingIds.length - 1)]);
+      } else {
+        setViewingPrTaskId(null);
+      }
     }
-  }, [viewingPrTaskId, approveTask, clearPendingPr]);
+  }, [viewingPrTaskId, approveTask, clearPendingPr, pendingPrTaskIds, currentPrIndex]);
 
   const handleClosePr = useCallback(() => {
     setViewingPrTaskId(null);
   }, []);
+
+  const handleNextPr = useCallback(() => {
+    if (pendingPrTaskIds.length > 1 && currentPrIndex !== -1) {
+      const nextIndex = (currentPrIndex + 1) % pendingPrTaskIds.length;
+      setViewingPrTaskId(pendingPrTaskIds[nextIndex]);
+    }
+  }, [pendingPrTaskIds, currentPrIndex]);
+
+  const handlePreviousPr = useCallback(() => {
+    if (pendingPrTaskIds.length > 1 && currentPrIndex !== -1) {
+      const prevIndex = (currentPrIndex - 1 + pendingPrTaskIds.length) % pendingPrTaskIds.length;
+      setViewingPrTaskId(pendingPrTaskIds[prevIndex]);
+    }
+  }, [pendingPrTaskIds, currentPrIndex]);
 
   const handleCloseDetail = useCallback(() => {
     setSelectedTaskId(null);
@@ -691,6 +717,10 @@ function AuthenticatedApp({ user, onLogout }) {
           taskDescription={tasks.find((t) => t.id === viewingPrTaskId)?.description || ""}
           onApprove={handleApprovePr}
           onClose={handleClosePr}
+          pendingPrCount={pendingPrTaskIds.length}
+          currentIndex={currentPrIndex}
+          onNext={handleNextPr}
+          onPrevious={handlePreviousPr}
         />
       )}
 

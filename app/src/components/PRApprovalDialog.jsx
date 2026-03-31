@@ -1,19 +1,23 @@
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
 
-export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
+export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose, pendingPrCount = 1, currentIndex = 0, onNext, onPrevious }) {
   const contentRef = useRef(null);
 
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape") onClose();
+      if (pendingPrCount > 1) {
+        if (e.key === "ArrowLeft") onPrevious?.();
+        if (e.key === "ArrowRight") onNext?.();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, pendingPrCount, onNext, onPrevious]);
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
@@ -94,7 +98,34 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onClose }) {
               {taskDescription}
             </span>
           </div>
-          <IconButton icon={X} onClick={onClose} title="close" style={{ color: "var(--text-dim)" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {pendingPrCount > 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <IconButton
+                  icon={ChevronLeft}
+                  onClick={onPrevious}
+                  title="previous PR (←)"
+                  style={{ color: "var(--text-dim)" }}
+                />
+                <span style={{
+                  fontSize: 11,
+                  color: "var(--text-dim)",
+                  fontWeight: 500,
+                  minWidth: 44,
+                  textAlign: "center",
+                }}>
+                  {currentIndex + 1} of {pendingPrCount}
+                </span>
+                <IconButton
+                  icon={ChevronRight}
+                  onClick={onNext}
+                  title="next PR (→)"
+                  style={{ color: "var(--text-dim)" }}
+                />
+              </div>
+            )}
+            <IconButton icon={X} onClick={onClose} title="close" style={{ color: "var(--text-dim)" }} />
+          </div>
         </div>
 
         {/* PR content */}
