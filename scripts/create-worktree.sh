@@ -44,6 +44,9 @@ WORKTREE_DIR="$PROJECT/.worktrees/$BRANCH_NAME"
 cd "$PROJECT"
 MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
 
+# Fetch latest main so the worktree starts from the newest commit
+git fetch origin "$MAIN_BRANCH" 2>&1 >&2 || echo "[branching] Warning: git fetch failed, using local $MAIN_BRANCH" >&2
+
 # Create the worktree from main
 mkdir -p "$(dirname "$WORKTREE_DIR")"
 
