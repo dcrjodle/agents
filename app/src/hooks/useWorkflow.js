@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const WS_URL = `ws://${window.location.host}/ws`;
-const API_BASE = "/api";
+import { API_BASE, WS_URL } from "../config.js";
 
 /**
  * Normalize XState compound state values to dot-notation strings.
@@ -547,7 +546,21 @@ export function useWorkflow() {
     };
   }, [appendLog, appendError]);
 
-  const createTask = async (description, projectPath, { autoStart = false } = {}) => {
+  const uploadTaskImages = async (taskId, files) => {
+    if (!files || files.length === 0) return [];
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("images", file);
+    }
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/images`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Failed to upload images: ${res.statusText}`);
+    return res.json();
+  };
+
+  const createTask = async (description, projectPath, { autoStart = false, images = [] } = {}) => {
     const body = { description, projectPath };
     if (autoStart) body.autoStart = true;
     const res = await fetch(`${API_BASE}/tasks`, {
@@ -556,7 +569,19 @@ export function useWorkflow() {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Failed to create task: ${res.statusText}`);
-    return res.json();
+    const task = await res.json();
+
+    // Upload images if any
+    if (images.length > 0) {
+      try {
+        await uploadTaskImages(task.id, images);
+      } catch (err) {
+        console.error("Failed to upload images:", err);
+        // Continue even if image upload fails
+      }
+    }
+
+    return task;
   };
 
   const sendEvent = async (taskId, event) => {
@@ -748,7 +773,21 @@ export function useWorkflow() {
     return res.json();
   };
 
-  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, launchIvyStudio, ivyStudioRunningBranches, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, planAction, clearErrors, updateTask };
+  const getTaskImages = async (taskId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/images`);
+    if (!res.ok) throw new Error(`Failed to get task images: ${res.statusText}`);
+    return res.json();
+  };
+
+  const deleteTaskImage = async (taskId, imageId) => {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/images/${imageId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(`Failed to delete image: ${res.statusText}`);
+    return res.json();
+  };
+
+  return { tasks, connected, agentLogs, pendingPlans, pendingReviews, pendingPrs, errors, agentMemory, avatarStates, evaluationResults, evaluatingProjects, triggerEvaluation, visualTestResults, visualTestingProjects, visualTestProgress, triggerVisualTest, launchIvyStudio, ivyStudioRunningBranches, deploy, createTask, startTask, startAllTasks, stopTask, restartTask, continueTask, sendEvent, deleteTask, approveTask, clearPendingPlan, clearPendingReview, clearPendingPr, reviewAction, planAction, clearErrors, updateTask, uploadTaskImages, getTaskImages, deleteTaskImage };
 }
 
 export { stateKey };

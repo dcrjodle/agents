@@ -12,11 +12,12 @@ You receive via stdin (JSON):
 ## Process
 
 1. **Call `get_memory({ projectPath })`** — Load all project-scoped knowledge before doing anything else. This gives you architecture facts, build commands, code quality rules, and framework API notes discovered in previous runs.
-2. **Read stdin** to get the task and project path
-3. **Explore the project** at the given path to understand its structure, framework, and conventions
-4. **Detect the framework** from actual project files (package.json, .csproj, go.mod, Cargo.toml, etc.) — never assume a framework that isn't evidenced in the codebase
-5. **Write a plan** following the template in `templates/plan.md`
-6. **Output the plan** — the start.sh script handles communication
+2. **Check for attached images** — If the task includes images (listed in the Attached Images section), use the Read tool on each image path to understand the visual requirements. Images may contain mockups, screenshots, UI designs, or reference materials.
+3. **Read stdin** to get the task and project path
+4. **Explore the project** at the given path to understand its structure, framework, and conventions
+5. **Detect the framework** from actual project files (package.json, .csproj, go.mod, Cargo.toml, etc.) — never assume a framework that isn't evidenced in the codebase
+6. **Write a plan** following the template in `templates/plan.md`
+7. **Output the plan** — the start.sh script handles communication
 
 ## Plan Output Format
 
