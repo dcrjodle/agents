@@ -770,13 +770,20 @@ app.post("/deploy", async (req, res) => {
     const { execFileSync } = await import("child_process");
 
     if (isLocal) {
-      // Run server-deploy.sh locally (it handles SSH to remote internally)
+      // Pull latest main into local repo first
+      const localDir = join(__dirname_root, "..");
+      const localPull = execFileSync("git", ["pull", "origin", "main"], {
+        cwd: localDir,
+        encoding: "utf-8",
+        timeout: 30000,
+      });
+      // Run server-deploy.sh (it handles SSH to remote: pull, build, pm2 restart)
       const output = execFileSync("bash", [scriptPath], {
         encoding: "utf-8",
         timeout: 120000,
       });
       const success = output.includes("Deploy complete");
-      res.json({ success, output: output.trim() });
+      res.json({ success, output: `Local pull:\n${localPull.trim()}\n\n${output.trim()}` });
     } else {
       // We're on the production server - run deployment commands directly
       const output = execFileSync("bash", [], {
