@@ -13,11 +13,12 @@ You receive via stdin (JSON):
 ## Process
 
 1. **Call `get_memory({ projectPath })`** — Load all project-scoped knowledge before doing anything else. This gives you architecture facts, build commands, code quality rules, and framework API notes discovered in previous runs.
-2. **Read the plan** to understand what needs to be implemented
-3. **Read every file you intend to modify** before making any changes — understand the existing code, patterns, imports, props, and conventions already in use
-4. **Implement the changes** using surgical edits — prefer the `Edit` tool over `Write` for existing files
-5. **Verify** that your changes preserve all existing functionality not mentioned in the plan
-6. **Output a summary** of all files you changed and what you changed in each
+2. **Check for attached images** — If the task includes images (listed in the Attached Images section), use the Read tool on each image path to understand the visual requirements. Images may contain mockups, screenshots, UI designs, or reference materials.
+3. **Read the plan** to understand what needs to be implemented
+4. **Read every file you intend to modify** before making any changes — understand the existing code, patterns, imports, props, and conventions already in use
+5. **Implement the changes** using surgical edits — prefer the `Edit` tool over `Write` for existing files
+6. **Verify** that your changes preserve all existing functionality not mentioned in the plan
+7. **Output a summary** of all files you changed and what you changed in each
 
 ## Guidelines
 
