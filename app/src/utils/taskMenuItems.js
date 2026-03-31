@@ -1,5 +1,6 @@
-import { Play, Pencil, ClipboardList, Check, RotateCcw, X, Square, FileText } from "lucide-react";
+import { Play, Pencil, ClipboardList, Check, RotateCcw, X, Square, FileText, RefreshCw } from "lucide-react";
 import { stateKey } from "../hooks/useWorkflow.js";
+import { STATE_LABELS } from "../constants.js";
 
 /**
  * Build bulk context menu items for a set of selected tasks.
@@ -113,6 +114,7 @@ export function buildTaskMenuItems(task, handlers = {}) {
     pendingReviews,
     pendingPrs,
     onStartEditing,
+    onForceState,
   } = handlers;
 
   const sk = task.stateKey || stateKey(task.state);
@@ -186,6 +188,20 @@ export function buildTaskMenuItems(task, handlers = {}) {
 
   if (items.length > 0) {
     items.push({ separator: true });
+  }
+
+  // "change" — force the task to a specific state
+  if (onForceState) {
+    items.push({
+      label: "change",
+      icon: RefreshCw,
+      submenu: Object.entries(STATE_LABELS).map(([stateKeyVal, label]) => ({
+        label,
+        action: () => onForceState(task.id, stateKeyVal),
+        disabled: sk === stateKeyVal,
+        checked: sk === stateKeyVal,
+      })),
+    });
   }
 
   // "continue" — resume from failure point (only when failedFrom is recorded)
