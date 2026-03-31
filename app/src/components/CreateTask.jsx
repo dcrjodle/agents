@@ -13,7 +13,7 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
       onValueChange(newValue);
     }
   };
-  const { isRecording, isTranscribing, startRecording, stopRecording, error } = useVoiceInput(handleTranscription);
+  const { isRecording, isTranscribing, startRecording, stopRecording, error, isSupported } = useVoiceInput(handleTranscription);
 
   const handleVoiceClick = () => {
     if (isRecording) {
@@ -112,8 +112,8 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
           type="button"
           className={`voice-input-btn${isRecording ? " recording" : ""}${isTranscribing ? " transcribing" : ""}`}
           onClick={handleVoiceClick}
-          disabled={isTranscribing}
-          title={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
+          disabled={isTranscribing || !isSupported}
+          title={!isSupported ? "Voice input requires HTTPS" : isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
         >
           🎤
         </button>
