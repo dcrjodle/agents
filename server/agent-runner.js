@@ -41,6 +41,7 @@ const PROMPT_BUILDERS = {
   githubber: buildGithubberPrompt,
   merger: buildMergerPrompt,
   evaluator: buildEvaluatorPrompt,
+  "file-developer": buildFileDeveloperPrompt,
 };
 
 // --- Auto-discovery: load agent configs from agents/*/agent.json ---
@@ -448,6 +449,39 @@ When you are done, you MUST call the report_result tool with:
 }`;
 }
 
+function buildFileDeveloperPrompt(handoff) {
+  const filePath = handoff.context.filePath || "";
+  const taskDescription = handoff.context.taskDescription || "";
+  const worktreePath = handoff.context.worktreePath || "";
+  const planContext = handoff.context.planContext || "";
+
+  return `You are a file-developer sub-agent. Implement changes for a single file.
+
+## Your Assignment
+
+File: ${filePath}
+Worktree: ${worktreePath}
+
+## Task
+${taskDescription}
+
+## Plan Context
+${planContext}
+
+## Instructions
+
+1. **Read the file first** — If the file exists at \`${filePath}\`, read it completely before making any changes.
+2. **Use Edit for existing files** — Make surgical changes with the Edit tool. Only use Write for new files.
+3. **Preserve existing code** — Keep all imports, functions, props, and handlers that aren't mentioned in the task.
+4. **Follow existing style** — Match the file's conventions (indentation, quotes, naming).
+5. **Single file only** — Do NOT modify any file other than \`${filePath}\`.
+
+When you are done, you MUST call report_result with:
+{"status": "complete", "file": "${filePath}", "changes": "<summary>"}
+or
+{"status": "failed", "file": "${filePath}", "error": "<what went wrong>"}`;
+}
+
 // --- Resume prompt (for developer retries with existing session) ---
 
 function buildResumePrompt(handoff) {
@@ -590,4 +624,54 @@ export function runAgent(role, taskId, handoff, callbacks) {
     gotResult: () => resultReceived,
     markResultReceived: () => { resultReceived = true; },
   };
+}
+
+/**
+ * Spawn a sub-agent and wait for its result.
+ * Used by parent agents (like developer) to delegate work to child agents (like file-developer).
+ *
+ * @param {string} role - The agent role to spawn (e.g., "file-developer")
+ * @param {string} parentTaskId - The parent task ID (used to generate unique sub-task ID)
+ * @param {object} handoff - The handoff object for the sub-agent
+ * @returns {Promise<object>} - Resolves with the sub-agent's result
+ */
+export function spawnSubAgent(role, parentTaskId, handoff) {
+  return new Promise((resolve, reject) => {
+    // Generate unique sub-task ID based on parent task and file path
+    const subTaskId = `${parentTaskId}-sub-${Date.now()}`;
+
+    let result = null;
+    let stderr = "";
+
+    const agent = runAgent(role, subTaskId, handoff, {
+      onStdout: (data) => {
+        // Try to parse result from stdout
+        try {
+          const parsed = JSON.parse(data.trim());
+          if (parsed.status === "complete" || parsed.status === "failed") {
+            result = parsed;
+          }
+        } catch {
+          // Not JSON, ignore
+        }
+      },
+      onStderr: (data) => {
+        stderr += data;
+      },
+      onExit: (code) => {
+        if (result) {
+          resolve(result);
+        } else if (code === 0) {
+          resolve({ status: "complete", message: "Sub-agent completed" });
+        } else {
+          reject(new Error(`Sub-agent exited with code ${code}: ${stderr}`));
+        }
+      },
+    });
+
+    // Store a reference so we can potentially kill it later
+    if (!agent.pid) {
+      reject(new Error(`Failed to spawn sub-agent for role: ${role}`));
+    }
+  });
 }
