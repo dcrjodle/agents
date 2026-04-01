@@ -82,7 +82,7 @@ if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
       BRANCH_NAME="${BRANCH_NAME}-${TASK_ID:0:8}"
       echo "[branching] New branch name: $BRANCH_NAME" >&2
       # Create a fresh branch with the suffixed name
-      if ! git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" "$MAIN_BRANCH" 2>&1 >&2; then
+      if ! git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" "origin/$MAIN_BRANCH" 2>&1 >&2; then
         emit_result "{\"status\":\"failed\",\"error\":\"Failed to create worktree with branch $BRANCH_NAME\"}"
         exit 1
       fi
@@ -97,7 +97,7 @@ if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
   fi
 else
   # Branch doesn't exist — create worktree with new branch (original behavior)
-  if ! git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" "$MAIN_BRANCH" 2>&1 >&2; then
+  if ! git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" "origin/$MAIN_BRANCH" 2>&1 >&2; then
     emit_result "{\"status\":\"failed\",\"error\":\"Failed to create worktree at $WORKTREE_DIR\"}"
     exit 1
   fi
