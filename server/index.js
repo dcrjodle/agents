@@ -146,6 +146,41 @@ const taskAutoContinues = new Map(); // taskId -> number
 const activeEvaluations = new Map(); // projectPath -> evalId
 // Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
 const evaluationCallbacks = new Map();
+const terminalStatePersisted = new Map();
+
+async function persistWithRetry(id, updates, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      await dbUpdateTask(id, updates);
+      console.log(`[terminal-persist] Successfully persisted state "${updates.stateKey}" for task ${id}`);
+      return;
+    } catch (err) {
+      lastError = err;
+      console.error(`[terminal-persist] Attempt ${attempt + 1}/${maxRetries} failed for task ${id}:`, err.message);
+      if (attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 100;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function verifyTerminalState(id, expectedStateKey) {
+  try {
+    const task = await dbGetTask(id);
+    if (task && task.stateKey !== expectedStateKey) {
+      console.warn(`[terminal-persist] State mismatch for task ${id}: expected "${expectedStateKey}", got "${task.stateKey}"`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[terminal-persist] Verification failed for task ${id}:`, err.message);
+    return false;
+  }
+}
+
 // Track in-flight visual tests per projectPath
 // Visual testing moved to frontend Vite plugin (app/vite-visual-test-plugin.js)
 
@@ -322,7 +357,6 @@ async function onStateTransition(taskId, stateValue, context) {
       if (mapper) {
         let event = mapper(result);
 
-        // If push completed, check project settings to decide PR vs direct vs branch-only
         if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
           const projectSettings = await getProjectSettings(actor._projectPath);
           const strategy = projectSettings.mergeStrategy || (projectSettings.createPr === false ? "merge" : "pr");
@@ -335,7 +369,21 @@ async function onStateTransition(taskId, stateValue, context) {
           }
         }
 
-        if (actors.has(taskId)) actors.get(taskId).send(event);
+        if (actors.has(taskId)) {
+          actors.get(taskId).send(event);
+
+          await new Promise(resolve => setImmediate(resolve));
+
+          const persistPromise = terminalStatePersisted.get(taskId);
+          if (persistPromise) {
+            try {
+              await persistPromise;
+              console.log(`[onResult] Terminal state persisted for task ${taskId}`);
+            } catch (err) {
+              console.error(`[onResult] Failed to persist terminal state for task ${taskId}:`, err);
+            }
+          }
+        }
       }
     },
     onExit(code) {
@@ -462,9 +510,23 @@ function wireActor(id, actor) {
 
     // Persist state and snapshot to db
     const persistedSnapshot = actor.getPersistedSnapshot();
-    dbUpdateTask(id, { state: snapshot.value, stateKey: sk, label, context: snapshot.context, snapshot: persistedSnapshot }).catch((err) => {
-      console.error(`Failed to persist state for ${id}:`, err);
-    });
+    const updatePayload = { state: snapshot.value, stateKey: sk, label, context: snapshot.context, snapshot: persistedSnapshot };
+
+    const isTerminalState = sk === "done" || sk === "failed";
+    if (isTerminalState) {
+      const persistPromise = (async () => {
+        await persistWithRetry(id, updatePayload);
+        await verifyTerminalState(id, sk);
+      })();
+      terminalStatePersisted.set(id, persistPromise);
+      persistPromise.catch((err) => {
+        console.error(`[terminal-persist] CRITICAL: Failed to persist terminal state for ${id}:`, err);
+      });
+    } else {
+      dbUpdateTask(id, updatePayload).catch((err) => {
+        console.error(`Failed to persist state for ${id}:`, err);
+      });
+    }
 
     broadcast({
       type: "STATE_UPDATE",
@@ -1109,6 +1171,7 @@ app.post("/tasks/:id/restart", async (req, res) => {
     clearSession(id);
     existingActor.stop();
     actors.delete(id);
+    terminalStatePersisted.delete(id);
   } else {
     // Task is in a terminal state (done/failed) — no live actor, load from db
     const dbTask = await dbGetTask(id);
@@ -1199,6 +1262,7 @@ app.post("/tasks/:id/stop", async (req, res) => {
   actor.stop();
   actors.delete(id);
   taskAutoContinues.delete(id);
+  terminalStatePersisted.delete(id);
 
   const restoredMachine = workflowMachine.provide({});
   const newActor = createActor(restoredMachine, {
@@ -1278,6 +1342,7 @@ app.post("/tasks/:id/force-state", async (req, res) => {
     actors.delete(id);
   }
   taskAutoContinues.delete(id);
+  terminalStatePersisted.delete(id);
 
   const restoredMachine = workflowMachine.provide({});
   const newActor = createActor(restoredMachine, {
@@ -1398,6 +1463,7 @@ app.delete("/tasks/:id", async (req, res) => {
     actors.delete(req.params.id);
   }
   taskAutoContinues.delete(req.params.id);
+  terminalStatePersisted.delete(req.params.id);
   await clearTaskLogs(req.params.id);
   await dbDeleteTask(req.params.id);
   broadcast({ type: "TASK_DELETED", taskId: req.params.id });
@@ -1487,22 +1553,33 @@ app.post("/internal/agent-result", async (req, res) => {
   // Map result to XState event and advance state machine
   const mapper = mapperKey ? RESULT_TO_EVENT[mapperKey] : null;
   if (mapper && actor) {
-    (async () => {
-      let event = mapper(resultPayload);
+    let event = mapper(resultPayload);
 
-      // If push completed, check project settings to decide PR vs direct vs branch-only
-      if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
-        const projectSettings = await getProjectSettings(actor._projectPath);
-        const strategy = projectSettings.mergeStrategy || (projectSettings.createPr === false ? "merge" : "pr");
-        if (strategy === "merge") {
-          event = { ...event, type: "PUSH_COMPLETE_NO_PR" };
-        } else if (strategy === "branch") {
-          event = { ...event, type: "PUSH_COMPLETE_BRANCH_ONLY" };
+    if (mapperKey === "script:pushing" && event.type === "PUSH_COMPLETE") {
+      const projectSettings = await getProjectSettings(actor._projectPath);
+      const strategy = projectSettings.mergeStrategy || (projectSettings.createPr === false ? "merge" : "pr");
+      if (strategy === "merge") {
+        event = { ...event, type: "PUSH_COMPLETE_NO_PR" };
+      } else if (strategy === "branch") {
+        event = { ...event, type: "PUSH_COMPLETE_BRANCH_ONLY" };
+      }
+    }
+
+    if (actors.has(taskId)) {
+      actors.get(taskId).send(event);
+
+      await new Promise(resolve => setImmediate(resolve));
+
+      const persistPromise = terminalStatePersisted.get(taskId);
+      if (persistPromise) {
+        try {
+          await persistPromise;
+          console.log(`[agent-result] Terminal state persisted for task ${taskId}`);
+        } catch (err) {
+          console.error(`[agent-result] Failed to persist terminal state for task ${taskId}:`, err);
         }
       }
-
-      if (actors.has(taskId)) actors.get(taskId).send(event);
-    })();
+    }
   }
 
   res.json({ ok: true });

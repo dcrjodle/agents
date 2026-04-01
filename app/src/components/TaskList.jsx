@@ -5,7 +5,7 @@ import { useContextMenu, useLongPress } from "../hooks/useContextMenu.js";
 import { STATE_LABELS, STATE_PRIORITY } from "../constants.js";
 import { StatusIcon } from "./StatusIcon.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
-import { buildTaskMenuItems, buildBulkTaskMenuItems } from "../utils/taskMenuItems.js";
+import { buildTaskMenuItems, buildBulkTaskMenuItems, buildDoneGroupMenuItems } from "../utils/taskMenuItems.js";
 import "../styles/task-list.css";
 
 function VisualTestIndicator({ result }) {
@@ -133,6 +133,13 @@ export function TaskList({
   // Long-press ref — stores which task is being pressed so the single hook can act on it
   const longPressTaskRef = useRef(null);
   const longPressIsEditing = useRef(false);
+  const longPressDoneGroupRef = useRef(null);
+  const longPressDoneGroupHandlers = useLongPress((pos) => {
+    const doneTasks = longPressDoneGroupRef.current;
+    if (!doneTasks) return;
+    const fakeEvent = { clientX: pos.clientX, clientY: pos.clientY, preventDefault: () => {} };
+    openContextMenu(fakeEvent, { _doneGroup: true, tasks: doneTasks });
+  }, 500);
   const longPressHandlers = useLongPress((pos) => {
     const task = longPressTaskRef.current;
     if (!task || longPressIsEditing.current) return;
@@ -440,7 +447,19 @@ export function TaskList({
           open={!doneCollapsed}
           onToggle={handleToggle}
         >
-          <summary className="task-list-done-summary">
+          <summary
+            className="task-list-done-summary"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              openContextMenu(e, { _doneGroup: true, tasks: doneTasks });
+            }}
+            onTouchStart={(e) => {
+              longPressDoneGroupRef.current = doneTasks;
+              longPressDoneGroupHandlers.onTouchStart(e);
+            }}
+            onTouchMove={longPressDoneGroupHandlers.onTouchMove}
+            onTouchEnd={longPressDoneGroupHandlers.onTouchEnd}
+          >
             <span
               className="task-list-done-triangle"
               style={{
@@ -466,7 +485,9 @@ export function TaskList({
           x={contextMenu.x}
           y={contextMenu.y}
           items={
-            contextMenu.target?._bulk
+            contextMenu.target?._doneGroup
+              ? buildDoneGroupMenuItems(contextMenu.target.tasks, { onDelete })
+              : contextMenu.target?._bulk
               ? buildBulkTaskMenuItems(contextMenu.target.tasks, {
                   onStart,
                   onStop,

@@ -232,3 +232,20 @@ export function buildTaskMenuItems(task, handlers = {}) {
 
   return items;
 }
+
+export function buildDoneGroupMenuItems(tasks, handlers = {}) {
+  const { onDelete } = handlers;
+
+  const items = [];
+
+  if (onDelete) {
+    items.push({
+      label: "delete all",
+      icon: X,
+      danger: true,
+      action: () => tasks.forEach((t) => onDelete(t.id)),
+    });
+  }
+
+  return items;
+}
