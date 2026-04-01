@@ -40,6 +40,11 @@ echo "[pushing] Pushing $BRANCH_NAME from $WORKTREE_PATH" >&2
 
 cd "$WORKTREE_PATH"
 
+# Fetch the latest state of the remote branch so --force-with-lease has
+# an up-to-date reference. Without this, stale tracking info causes
+# "stale info" rejections.
+git fetch origin "$BRANCH_NAME" 2>/dev/null || true
+
 # Push the task branch. Use --force-with-lease so it succeeds even if the remote
 # branch diverged (e.g. from merge commits added during a previous merger run).
 # This is safe: task branches are agent-owned, --force-with-lease still rejects

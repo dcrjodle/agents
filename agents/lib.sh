@@ -131,3 +131,42 @@ json_escape() {
 json_escape_str() {
   node -e "console.log(JSON.stringify(process.argv[1]))" "$1"
 }
+
+# Convert a task description into a valid git branch name slug
+# Usage: generate_branch_slug "Fix login button color"  →  "fix-login-button-color"
+generate_branch_slug() {
+  local input="$1"
+  [ -z "$input" ] && echo "" && return 0
+
+  # Convert to lowercase, replace spaces and underscores with hyphens
+  local slug
+  slug=$(echo "$input" | tr '[:upper:]' '[:lower:]' | tr ' _' '-')
+
+  # Remove all characters that are not alphanumeric or hyphens (including non-ASCII)
+  slug=$(echo "$slug" | LC_ALL=C sed 's/[^a-z0-9-]//g')
+
+  # Collapse multiple consecutive hyphens into a single hyphen
+  slug=$(echo "$slug" | sed 's/-\+/-/g')
+
+  # Trim leading and trailing hyphens
+  slug=$(echo "$slug" | sed 's/^-\+//;s/-\+$//')
+
+  # Return empty if slug is now empty
+  [ -z "$slug" ] && echo "" && return 0
+
+  # Truncate to max 50 characters, avoiding cutting in the middle of a word
+  if [ ${#slug} -gt 50 ]; then
+    local truncated="${slug:0:50}"
+    # Remove the last partial word (everything from the last hyphen onward)
+    local trimmed="${truncated%-*}"
+    if [ -n "$trimmed" ]; then
+      slug="$trimmed"
+    else
+      slug="$truncated"
+    fi
+    # Trim any trailing hyphens
+    slug=$(echo "$slug" | sed 's/-\+$//')
+  fi
+
+  echo "$slug"
+}

@@ -4,6 +4,8 @@ import { API_BASE } from "../config.js";
 
 const MAX_RECORDING_MS = 60_000;
 
+const isSupported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+
 export function useVoiceInput(onTranscription) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -28,6 +30,11 @@ export function useVoiceInput(onTranscription) {
   const startRecording = useCallback(async () => {
     setError(null);
     audioChunksRef.current = [];
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError("Microphone requires a secure connection (HTTPS). Please access this page via HTTPS or localhost.");
+      return;
+    }
 
     let stream;
     try {
@@ -129,5 +136,5 @@ export function useVoiceInput(onTranscription) {
     };
   }, []);
 
-  return { isRecording, isTranscribing, startRecording, stopRecording, error };
+  return { isRecording, isTranscribing, startRecording, stopRecording, error, isSupported };
 }
