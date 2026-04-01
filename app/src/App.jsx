@@ -376,6 +376,22 @@ function AuthenticatedApp({ user, onLogout }) {
     }
   }, [selectedProject, handleProjectSettingsUpdated]);
 
+  const handleForceState = useCallback(async (taskId, stateKey) => {
+    try {
+      const res = await fetch(`${API_BASE}/tasks/${taskId}/force-state`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stateKey }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("Failed to force state:", data.error);
+      }
+    } catch (err) {
+      console.error("Failed to force state:", err);
+    }
+  }, []);
+
   const filteredTasks = selectedProject
     ? tasks.filter((t) => t.projectPath === selectedProject.path)
     : tasks;
@@ -682,6 +698,7 @@ function AuthenticatedApp({ user, onLogout }) {
             pendingReviews={pendingReviews}
             pendingPrs={pendingPrs}
             visualTestResults={visualTestResults}
+            onForceState={handleForceState}
           />
         </div>
 

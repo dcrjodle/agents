@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Play, Settings, X } from "lucide-react";
 import { TabTaskPopover } from "./TabTaskPopover.jsx";
 import { Button } from "./Button.jsx";
 import { ContextMenu } from "./ContextMenu.jsx";
 import { useContextMenu } from "../hooks/useContextMenu.js";
+import { MobileTabDropdown } from "./MobileTabDropdown.jsx";
 
 export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onContinue, onViewPlan, onApprove, onSelectTask, onRemoveProject }) {
   const [dragIndex, setDragIndex] = useState(null);
@@ -14,6 +15,13 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
   const hoverTimerRef = useRef(null);
   const leaveTimerRef = useRef(null);
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenu();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const handleDragStart = (e, index) => {
     setDragIndex(index);
@@ -84,6 +92,10 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
       setHoveredProject(null);
     }, 150);
   };
+
+  if (isMobile) {
+    return <MobileTabDropdown projects={projects} selected={selected} onSelect={onSelect} />;
+  }
 
   return (
     <div style={{

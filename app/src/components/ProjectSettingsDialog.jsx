@@ -43,8 +43,6 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [projectPath, setProjectPath] = useState(project.path);
   const [mergeStrategy, setMergeStrategy] = useState(settings.mergeStrategy || (settings.createPr === false ? "merge" : "pr"));
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
-  const [autoApproveReviews, setAutoApproveReviews] = useState(settings.autoApproveReviews === true);
-  const [trustReviewerVerdict, setTrustReviewerVerdict] = useState(settings.trustReviewerVerdict === true);
   const [autoApprovePr, setAutoApprovePr] = useState(settings.autoApprovePr !== false);
   const [skipTesting, setSkipTesting] = useState(settings.skipTesting === true);
   const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
@@ -95,7 +93,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: trimmedPath || project.path, settings: { mergeStrategy, autoApprovePr, autoApprovePlans, autoApproveReviews, trustReviewerVerdict, skipTesting, agentMode, maxRetries } }),
+        body: JSON.stringify({ path: trimmedPath || project.path, settings: { mergeStrategy, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -282,51 +280,6 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
                 {skipTesting ? "on" : "off"}
               </Button>
             </label>
-
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "8px 0",
-                borderBottom: "1px solid var(--border-light)",
-                cursor: "pointer",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 12, color: "var(--text)" }}>auto-approve reviews</div>
-                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-                  {autoApproveReviews ? "always approves, overriding the reviewer's verdict" : "reviews require manual approval before pushing"}
-                </div>
-              </div>
-              <Button variant="toggle" active={autoApproveReviews} size="sm" onClick={() => setAutoApproveReviews((v) => !v)}>
-                {autoApproveReviews ? "on" : "off"}
-              </Button>
-            </label>
-
-            {!autoApproveReviews && (
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 0",
-                  paddingLeft: 16,
-                  borderBottom: "1px solid var(--border-light)",
-                  cursor: "pointer",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text)" }}>trust reviewer verdict</div>
-                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-                    {trustReviewerVerdict ? "auto-proceed based on verdict (approved → push, rejected → revise)" : "always wait for manual review approval"}
-                  </div>
-                </div>
-                <Button variant="toggle" active={trustReviewerVerdict} size="sm" onClick={() => setTrustReviewerVerdict((v) => !v)}>
-                  {trustReviewerVerdict ? "on" : "off"}
-                </Button>
-              </label>
-            )}
           </SettingsSection>
 
           {/* Agent Runtime Section */}

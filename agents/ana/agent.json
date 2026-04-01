@@ -1,0 +1,7 @@
+{
+  "runtime": "sdk",
+  "model": "claude-sonnet-4-20250514",
+  "tools": ["Bash", "Read", "Glob", "Grep"],
+  "cwd": "projectPath",
+  "mcpTools": "tools.js"
+}
