@@ -519,28 +519,19 @@ function wireActor(id, actor) {
         });
       }
 
-      // Auto-approve code review if setting is enabled
+      // Trust reviewer's verdict automatically when entering awaitingApproval in reviewing
       if (sk === "reviewing.awaitingApproval") {
-        getProjectSettings(actor._projectPath).then((projectSettings) => {
-          if (projectSettings.autoApproveReviews === true) {
-            // Always approve, overriding reviewer's verdict
-            actor.send({ type: "REVIEW_APPROVED" });
-            broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved" });
-          } else if (projectSettings.trustReviewerVerdict === true) {
-            // Trust the reviewer's verdict without manual approval
-            const review = snapshot.context.review;
-            const verdict = review?.verdict || "changes_requested";
-            if (verdict === "approved") {
-              actor.send({ type: "REVIEW_APPROVED" });
-              broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved (reviewer verdict: approved)" });
-            } else {
-              // Send changes back to developer with reviewer feedback
-              const feedback = review?.feedback || review?.markdown || "Changes requested by reviewer";
-              actor.send({ type: "CHANGES_REQUESTED", feedback });
-              broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-rejected (reviewer verdict: changes_requested)" });
-            }
-          }
-        });
+        const review = snapshot.context.review;
+        const verdict = review?.verdict || "changes_requested";
+        if (verdict === "approved") {
+          actor.send({ type: "REVIEW_APPROVED" });
+          broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Auto-approved (reviewer verdict: approved)" });
+        } else {
+          // Send changes back to developer with reviewer feedback
+          const feedback = review?.feedback || review?.markdown || "Changes requested by reviewer";
+          actor.send({ type: "CHANGES_REQUESTED", feedback });
+          broadcast({ type: "APPROVAL", taskId: id, approval: "review", message: "Changes requested (reviewer verdict: changes_requested)" });
+        }
       }
     }
 
@@ -803,7 +794,28 @@ app.get("/server-status", async (req, res) => {
 
   // Commands to run
   const statusCmd = "pm2 jlist";
-  const logsCmd = "pm2 logs agents --lines 30 --nostream";
+  const stdoutLogsCmd = "pm2 logs agents --out --lines 30 --nostream 2>/dev/null";
+  const stderrLogsCmd = "pm2 logs agents --err --lines 30 --nostream 2>/dev/null";
+
+  // Helper: strip ANSI escape codes
+  const stripAnsi = (str) => str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+  // Helper: parse log lines and detect log levels
+  const parseLogLines = (raw) => {
+    return raw
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => {
+        const text = stripAnsi(line);
+        let level = "info";
+        if (/error/i.test(text)) {
+          level = "error";
+        } else if (/warn/i.test(text)) {
+          level = "warn";
+        }
+        return { text, level };
+      });
+  };
 
   // Script to run on production (with nvm sourcing)
   const buildScript = (cmd) => [
@@ -815,7 +827,7 @@ app.get("/server-status", async (req, res) => {
 
   try {
     const { execFileSync } = await import("child_process");
-    let statusOutput, logsOutput;
+    let statusOutput, stdoutLogsOutput, stderrLogsOutput;
 
     if (isLocal) {
       // SSH to production server
@@ -823,7 +835,11 @@ app.get("/server-status", async (req, res) => {
         encoding: "utf-8",
         timeout: 15000,
       });
-      logsOutput = execFileSync("ssh", [remoteHost, buildScript(logsCmd)], {
+      stdoutLogsOutput = execFileSync("ssh", [remoteHost, buildScript(stdoutLogsCmd)], {
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      stderrLogsOutput = execFileSync("ssh", [remoteHost, buildScript(stderrLogsCmd)], {
         encoding: "utf-8",
         timeout: 15000,
       });
@@ -834,8 +850,13 @@ app.get("/server-status", async (req, res) => {
         encoding: "utf-8",
         timeout: 15000,
       });
-      logsOutput = execFileSync("bash", [], {
-        input: buildScript(logsCmd),
+      stdoutLogsOutput = execFileSync("bash", [], {
+        input: buildScript(stdoutLogsCmd),
+        encoding: "utf-8",
+        timeout: 15000,
+      });
+      stderrLogsOutput = execFileSync("bash", [], {
+        input: buildScript(stderrLogsCmd),
         encoding: "utf-8",
         timeout: 15000,
       });
@@ -865,17 +886,20 @@ app.get("/server-status", async (req, res) => {
       pm2Status = statusOutput.includes("online") ? "online" : "unknown";
     }
 
+    const parsedStdoutLines = parseLogLines(stdoutLogsOutput);
+    const parsedStderrLines = parseLogLines(stderrLogsOutput);
+
     res.json({
       status: pm2Status,
       details: pm2Details,
-      logs: logsOutput.trim(),
+      logs: { stdout: parsedStdoutLines, stderr: parsedStderrLines },
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
     res.status(500).json({
       status: "error",
       error: err.message,
-      logs: err.stdout || "",
+      logs: { stdout: [], stderr: [], error: err.message },
       timestamp: new Date().toISOString(),
     });
   }
@@ -1198,6 +1222,92 @@ app.post("/tasks/:id/stop", async (req, res) => {
 
   broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "stopped", currentStep: `Stopped by user (was ${sk})` } });
   broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
+
+  res.json(await getTaskSnapshot(id));
+});
+
+app.post("/tasks/:id/force-state", async (req, res) => {
+  const id = req.params.id;
+  const { stateKey: targetStateKey } = req.body;
+
+  const VALID_STATES = ["idle", "planning.running", "planning.awaitingApproval", "branching", "developing", "committing", "testing", "reviewing.running", "reviewing.awaitingApproval", "pushing", "directMerging", "merging.awaitingApproval", "merging.creatingPr", "done", "failed"];
+
+  if (!targetStateKey || !VALID_STATES.includes(targetStateKey)) {
+    return res.status(400).json({ error: `Invalid stateKey "${targetStateKey}". Must be one of: ${VALID_STATES.join(", ")}` });
+  }
+
+  function stateKeyToValue(sk) {
+    if (sk.includes(".")) {
+      const [parent, child] = sk.split(".");
+      return { [parent]: child };
+    }
+    return sk;
+  }
+
+  let actor = actors.get(id);
+  let dbTask = null;
+  if (!actor) {
+    dbTask = await dbGetTask(id);
+    if (!dbTask) return res.status(404).json({ error: "task not found" });
+  }
+
+  const previousStateKey = actor ? stateKey(actor.getSnapshot().value) : (dbTask.stateKey || stateKey(dbTask.state));
+  const existingContext = actor ? actor.getSnapshot().context : (dbTask.context || {});
+
+  // Mark as stopped so async callbacks won't interfere
+  stoppedTasks.add(id);
+
+  // Kill any running agent process
+  cleanupAgent(id);
+  clearSession(id);
+
+  // Stop the current actor if it exists
+  if (actor) {
+    actor.stop();
+    actors.delete(id);
+  }
+  taskAutoContinues.delete(id);
+
+  const restoredMachine = workflowMachine.provide({});
+  const newActor = createActor(restoredMachine, {
+    snapshot: {
+      value: stateKeyToValue(targetStateKey),
+      context: {
+        ...existingContext,
+        error: targetStateKey !== "failed" ? null : existingContext.error,
+      },
+      children: {},
+      status: "active",
+      output: undefined,
+      error: undefined,
+    },
+  });
+
+  if (actor) {
+    newActor._description = actor._description;
+    newActor._projectPath = actor._projectPath;
+    newActor._createdAt = actor._createdAt;
+  } else {
+    newActor._description = dbTask.description;
+    newActor._projectPath = dbTask.projectPath;
+    newActor._createdAt = dbTask.createdAt;
+  }
+
+  actors.set(id, newActor);
+  wireActor(id, newActor);
+  newActor.start();
+
+  const newSnap = newActor.getSnapshot();
+  await dbUpdateTask(id, {
+    state: newSnap.value,
+    stateKey: stateKey(newSnap.value),
+    label: stateLabel(newSnap.value),
+    context: newSnap.context,
+  });
+
+  broadcast({ type: "TASK_STATE_FORCED", taskId: id, stateKey: targetStateKey, fromState: previousStateKey });
+  broadcast({ type: "STATE_UPDATE", taskId: id, state: newSnap.value, stateKey: stateKey(newSnap.value), label: stateLabel(newSnap.value), context: newSnap.context });
+  broadcastAndLog({ type: "AGENT_STATUS", taskId: id, agent: "system", status: { state: "forced", currentStep: `State forced to "${targetStateKey}" (was "${previousStateKey}")` } });
 
   res.json(await getTaskSnapshot(id));
 });
@@ -1561,6 +1671,80 @@ app.post("/evaluate", async (req, res) => {
 
   activeEvaluations.set(projectPath, evalId);
   res.status(202).json({ evalId });
+});
+
+// --- Ana Chat ---
+
+// Track active Ana chat sessions
+const activeAnaChats = new Map(); // chatId -> { projectPath, agentHandle }
+const anaChatCallbacks = new Map(); // chatId -> { onResult }
+
+app.post("/ana/chat", async (req, res) => {
+  const { message, context = {} } = req.body;
+  const { projectPath, selectedTaskId } = context;
+
+  if (!message) return res.status(400).json({ error: "message required" });
+  if (!projectPath) return res.status(400).json({ error: "projectPath required in context" });
+
+  const chatId = `ana-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Gather recent errors if a task is selected
+  let recentErrors = [];
+  if (selectedTaskId) {
+    const taskLogs = await getTaskLogs(selectedTaskId);
+    recentErrors = taskLogs
+      .filter((e) => e.type === "error")
+      .slice(-5)
+      .map((e) => ({ agent: e.agent, error: e.error || e.data }));
+  }
+
+  const handoff = {
+    instruction: message,
+    projectPath,
+    context: {
+      userMessage: message,
+      selectedTaskId,
+      recentErrors,
+    },
+  };
+
+  // Register result callback
+  anaChatCallbacks.set(chatId, {
+    onResult(result) {
+      broadcast({ type: "ANA_MESSAGE", chatId, result });
+      activeAnaChats.delete(chatId);
+      anaChatCallbacks.delete(chatId);
+    },
+  });
+
+  const agentHandle = runAgent("ana", chatId, handoff, {
+    onStdout(data) {
+      broadcast({ type: "ANA_STREAM", chatId, data });
+    },
+    onStderr(data) {
+      broadcast({ type: "ANA_STREAM", chatId, data });
+    },
+    onExit(code) {
+      if (code !== 0 && anaChatCallbacks.has(chatId)) {
+        broadcast({ type: "ANA_ERROR", chatId, error: "Ana agent exited unexpectedly" });
+      }
+      activeAnaChats.delete(chatId);
+      anaChatCallbacks.delete(chatId);
+    },
+  });
+
+  activeAnaChats.set(chatId, { projectPath, agentHandle });
+  res.status(202).json({ chatId });
+});
+
+// Internal endpoint for Ana agent results
+app.post("/internal/ana-result", (req, res) => {
+  const { chatId, result } = req.body;
+  const cb = anaChatCallbacks.get(chatId);
+  if (cb) {
+    cb.onResult(result);
+  }
+  res.json({ ok: true });
 });
 
 // --- WebSocket ---

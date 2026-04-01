@@ -235,3 +235,70 @@
   font-size: 11px;
   text-align: center;
 }
+
+/* Log filter buttons */
+.server-status-log-filters {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.server-status-filter-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 3px 8px;
+  text-transform: capitalize;
+  transition: all 0.15s;
+}
+
+.server-status-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text, #e0e0e0);
+}
+
+.server-status-filter-btn.active {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: #60a5fa;
+  color: #60a5fa;
+}
+
+/* Log line styling */
+.server-status-log-line {
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.server-status-log-line:last-child {
+  border-bottom: none;
+}
+
+.server-status-log-line.level-error {
+  color: #f87171;
+}
+
+.server-status-log-line.level-warn {
+  color: #fbbf24;
+}
+
+.server-status-log-line.level-info {
+  color: var(--text-secondary, #aaa);
+}
+
+.server-status-log-line.from-stderr {
+  opacity: 0.9;
+  border-left: 2px solid #f87171;
+  padding-left: 6px;
+  margin-left: -4px;
+}
+
+/* Empty logs state */
+.server-status-logs-empty {
+  color: var(--text-muted, #666);
+  font-style: italic;
+  text-align: center;
+  padding: 20px 10px;
+}
