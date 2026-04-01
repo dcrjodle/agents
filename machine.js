@@ -236,13 +236,23 @@ export const workflowMachine = setup({
                 review: ({ event }) => event.review,
               }),
             },
-            REVIEW_FAILED: {
-              target: "#workflow.failed",
-              actions: assign({
-                error: ({ event }) => event.error,
-                failedFrom: () => "reviewing.running",
-              }),
-            },
+            REVIEW_FAILED: [
+              {
+                target: "#workflow.developing",
+                guard: "underRetryLimit",
+                actions: assign({
+                  error: ({ event }) => event.error,
+                  retries: ({ context }) => context.retries + 1,
+                }),
+              },
+              {
+                target: "#workflow.failed",
+                actions: assign({
+                  error: ({ event }) => event.error || "Max retries exceeded (review failures)",
+                  failedFrom: () => "reviewing.running",
+                }),
+              },
+            ],
           },
         },
         awaitingApproval: {
