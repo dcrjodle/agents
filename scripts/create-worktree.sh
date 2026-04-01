@@ -12,9 +12,13 @@ PROJECT=$(json_field "$HANDOFF" "projectPath")
 EXISTING_WORKTREE=$(json_field "$HANDOFF" "context.result.worktreePath" "")
 EXISTING_BRANCH=$(json_field "$HANDOFF" "context.result.branchName" "")
 INSTRUCTION=$(json_field "$HANDOFF" "instruction" "")
+SUGGESTED_BRANCH=$(json_field "$HANDOFF" "suggestedBranchName" "")
 
-# Generate descriptive branch slug from instruction
-BRANCH_SLUG=$(generate_branch_slug "$INSTRUCTION")
+if [ -n "$SUGGESTED_BRANCH" ] && [ "$SUGGESTED_BRANCH" != "undefined" ]; then
+  BRANCH_SLUG="$SUGGESTED_BRANCH"
+else
+  BRANCH_SLUG=$(generate_branch_slug "$INSTRUCTION")
+fi
 
 if [ -z "$PROJECT" ] || [ "$PROJECT" = "undefined" ]; then
   emit_result '{"status":"failed","error":"No project path provided"}'

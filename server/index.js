@@ -34,6 +34,7 @@ import {
   clearTaskLogs,
 } from "./db.js";
 import { addMemoryEntry, getMemory, getMemoryByProject, getAllMemory, getAllMemoryByProject } from "./memory-db.js";
+import { generateBranchName } from "./branch-name-generator.js";
 import OpenAI from "openai";
 import multer from "multer";
 
@@ -367,6 +368,17 @@ async function onStateTransition(taskId, stateValue, context) {
   // Read agentMode from project settings (defaults to "sdk")
   const projectSettings = await getProjectSettings(actor._projectPath);
   const agentMode = projectSettings.agentMode || "sdk";
+
+  if (sk === "branching" && projectSettings.useAiBranchNames !== false) {
+    try {
+      const suggestedBranchName = await generateBranchName(actor._description);
+      if (suggestedBranchName) {
+        handoff.suggestedBranchName = suggestedBranchName;
+      }
+    } catch (err) {
+      console.error("[branching] AI branch name generation failed, using fallback:", err.message);
+    }
+  }
 
   // Pass baseline evaluation score to the reviewer so it can check for regressions
   if (sk === "reviewing.running") {
