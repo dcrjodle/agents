@@ -1,0 +1,98 @@
+/* ============================================================
+   Mobile Tab Dropdown — bottom-sheet style
+   ============================================================ */
+
+.mobile-tab-dropdown {
+  display: flex;
+  align-items: center;
+}
+
+.mobile-tab-dropdown__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+.mobile-tab-dropdown__trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.mobile-tab-dropdown__label {
+  font-weight: 600;
+}
+
+.mobile-tab-dropdown__chevron {
+  transition: transform 0.2s;
+}
+
+.mobile-tab-dropdown__chevron--open {
+  transform: rotate(180deg);
+}
+
+.mobile-tab-dropdown__sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+  padding: 8px 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  z-index: 1001;
+  font-family: var(--font-mono);
+  animation: mobile-tab-sheet-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes mobile-tab-sheet-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.mobile-tab-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  letter-spacing: 0.02em;
+  transition: background 0.1s;
+  box-sizing: border-box;
+}
+
+.mobile-tab-dropdown__item:hover {
+  background: var(--bg-hover);
+}
+
+.mobile-tab-dropdown__item--active {
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+}
+
+.mobile-tab-dropdown__item--active:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-surface));
+}
