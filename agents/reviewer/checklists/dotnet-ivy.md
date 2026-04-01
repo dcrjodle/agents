@@ -25,6 +25,7 @@
 - [ ] No unnecessary complexity or over-engineering
 - [ ] Consistent naming conventions
 - [ ] No dead code or commented-out blocks
+- [ ] No comments in code (inline or block comments)
 
 ## Testing
 - [ ] xUnit tests with [Fact] and [Theory] attributes

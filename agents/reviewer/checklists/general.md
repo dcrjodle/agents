@@ -19,6 +19,7 @@
 - [ ] Consistent naming conventions
 - [ ] No dead code or commented-out blocks
 - [ ] Dependencies are justified
+- [ ] No comments in code (inline or block comments)
 
 ## Maintainability
 - [ ] Changes are minimal and focused

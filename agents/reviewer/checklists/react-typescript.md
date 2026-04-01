@@ -32,6 +32,7 @@
 - [ ] No unnecessary complexity or over-engineering
 - [ ] Consistent naming conventions
 - [ ] No dead code or commented-out blocks
+- [ ] No comments in code (inline or block comments)
 
 ## Testing
 - [ ] Vitest tests with describe/it blocks

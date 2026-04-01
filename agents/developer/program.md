@@ -73,6 +73,7 @@ You delegate file changes to `file-developer` sub-agents using the `spawn_file_a
 - Handle errors at system boundaries
 - Never introduce security vulnerabilities
 - Do NOT run any git commands (no git add, commit, push, branch, etc.) — git operations are handled by separate scripts
+- **No code comments** — Do not add any comments to code (inline // or block /* */). Write self-documenting code with clear naming instead.
 
 ## Common Mistakes to Avoid
 
@@ -81,6 +82,7 @@ You delegate file changes to `file-developer` sub-agents using the `spawn_file_a
 - **DO NOT** switch from CSS classes to inline styles (or vice versa) unless the plan says to
 - **DO NOT** remove event handlers (onClick, onContextMenu, etc.) that exist in the current code
 - **DO NOT** add new props or remove existing props from a component's signature unless the plan requires it
+- **DO NOT** add comments to code — no inline comments, block comments, JSDoc, or any other form of code comments
 
 ## Memory
 

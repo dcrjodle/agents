@@ -89,6 +89,7 @@ Include their findings in your review.
 - Always use the framework-specific checklist when one matches
 - If changes are requested, be specific about what needs to change
 - Approve if the code meets the checklist even if you'd write it differently
+- **No comments allowed** — Flag any code comments as issues requiring changes. This includes single-line comments (`//`), block comments (`/* */`), JSDoc, TSDoc, and any other form of inline or documentation comments in code files.
 
 ## Memory
 
