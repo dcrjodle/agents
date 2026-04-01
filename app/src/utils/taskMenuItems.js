@@ -233,14 +233,6 @@ export function buildTaskMenuItems(task, handlers = {}) {
   return items;
 }
 
-/**
- * Build context menu items for the done group section.
- *
- * @param {Array} tasks - Array of done task objects
- * @param {object} handlers - Handler functions:
- *   - onDelete(taskId) — delete a task
- * @returns {Array} Menu items
- */
 export function buildDoneGroupMenuItems(tasks, handlers = {}) {
   const { onDelete } = handlers;
 
