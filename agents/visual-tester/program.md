@@ -21,6 +21,47 @@ Ivy Studio is a custom visual development tool. Key testing considerations:
 - The dev server port is dynamically assigned starting from 4100
 - Clean up temporary branches after testing completes
 
+## Build Error Detection and Auto-Fix
+
+When running ivy-studio, .NET build errors may occur during startup or hot-reload. The agent should detect these errors and attempt to fix them automatically before reporting failure.
+
+### Detection Workflow
+
+1. Build output is captured to `~/ivy-studio-build.log`
+2. Monitor the log file for `"error CS"` patterns:
+   ```bash
+   grep -E "error CS[0-9]+" ~/ivy-studio-build.log
+   ```
+3. Parse error messages to identify:
+   - File paths (e.g., `src/Components/MyComponent.razor`)
+   - Line numbers (e.g., `(42,15)`)
+   - Error codes (e.g., `CS0103`)
+
+### Fix Workflow
+
+1. Kill the running ivy-studio process
+2. Read the affected source file to understand the context
+3. Apply the fix using Write or Bash
+4. Restart ivy-studio and monitor for new errors
+5. Maximum **3 retry attempts** before giving up and reporting the error
+
+### Common .NET Build Errors
+
+| Error Code | Description | Fix |
+|---|---|---|
+| `CS0103` | Name not found | Add `using` directive or declare the variable |
+| `CS1061` | Method/property not found | Check spelling — may have been renamed |
+| `CS0246` | Type/namespace not found | Add `using` directive |
+| `CS0029` | Type conversion error | Add explicit cast or use the correct type |
+| `CS0161` | Not all paths return a value | Add a `return` statement to all code paths |
+| `CS7036` | Missing required argument | Supply the required method argument |
+
+### Cleanup
+
+Before finishing (whether successful or not):
+- Always kill any running `dotnet watch` processes
+- Remove temporary log files: `rm -f ~/ivy-studio-build.log`
+
 ## Memory
 
 You have access to a persistent, **project-scoped** memory database.
