@@ -14,9 +14,34 @@
   margin: 0 2px;
 }
 
-/* Hide toolbar on mobile */
+/* Ana character wrapper - positioned relative for chat panel dropdown */
+.ana-character-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Mobile: Show toolbar but hide most items except Ana */
 @media (max-width: 768px) {
   .project-toolbar {
+    display: flex;
+  }
+
+  /* Hide non-Ana toolbar items on mobile */
+  .project-toolbar > .evaluator-character,
+  .project-toolbar > .visual-test-button,
+  .project-toolbar > .launch-studio-button,
+  .project-toolbar > .project-toolbar-separator {
+    display: none;
+  }
+
+  /* Keep Ana visible */
+  .project-toolbar > .ana-character-wrapper {
+    display: inline-flex;
+  }
+
+  /* Hide separator before Ana on mobile */
+  .project-toolbar-separator--hide-mobile {
     display: none;
   }
 }
