@@ -7,10 +7,14 @@ import { Button } from "./Button.jsx";
 function BranchNameSection({ pr }) {
   const [copied, setCopied] = useState(false);
 
-  const copyBranchName = () => {
-    navigator.clipboard.writeText(pr.branchName);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyBranchName = async () => {
+    try {
+      await navigator.clipboard.writeText(pr.branchName);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      // Silently fail if clipboard access is denied
+    }
   };
 
   if (!pr.branchName) return null;
