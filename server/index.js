@@ -383,7 +383,6 @@ async function onStateTransition(taskId, stateValue, context) {
   // Pass baseline evaluation score to the reviewer so it can check for regressions
   if (sk === "reviewing.running") {
     handoff.context.lastEvaluation = projectSettings.lastEvaluation || null;
-    // Pass review context (includes userComments if this is a re-run)
     handoff.context.review = context.review || null;
   }
 

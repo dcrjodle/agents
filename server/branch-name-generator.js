@@ -1,25 +1,5 @@
 import OpenAI from "openai";
 
-function generateSlugFallback(instruction) {
-  if (!instruction) return "";
-
-  let slug = instruction.toLowerCase().replace(/[ _]/g, "-");
-  slug = slug.replace(/[^a-z0-9-]/g, "");
-  slug = slug.replace(/-+/g, "-");
-  slug = slug.replace(/^-+|-+$/g, "");
-
-  if (!slug) return "";
-
-  if (slug.length > 50) {
-    const truncated = slug.substring(0, 50);
-    const trimmed = truncated.substring(0, truncated.lastIndexOf("-"));
-    slug = trimmed || truncated;
-    slug = slug.replace(/-+$/, "");
-  }
-
-  return slug;
-}
-
 function sanitizeBranchName(name) {
   if (!name) return "";
 
@@ -45,7 +25,7 @@ export async function generateBranchName(instruction) {
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return generateSlugFallback(instruction);
+    return sanitizeBranchName(instruction);
   }
 
   try {
@@ -78,13 +58,13 @@ Rules:
     const generatedName = response.choices?.[0]?.message?.content?.trim();
 
     if (!generatedName) {
-      return generateSlugFallback(instruction);
+      return sanitizeBranchName(instruction);
     }
 
     const sanitized = sanitizeBranchName(generatedName);
-    return sanitized || generateSlugFallback(instruction);
+    return sanitized || sanitizeBranchName(instruction);
   } catch (error) {
     console.error("[branch-name-generator] OpenAI API error, using fallback:", error.message);
-    return generateSlugFallback(instruction);
+    return sanitizeBranchName(instruction);
   }
 }
