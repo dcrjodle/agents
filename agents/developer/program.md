@@ -100,6 +100,29 @@ You have access to a persistent, **project-scoped** memory database.
 - Keep entries concise (one sentence).
 - Do **not** store generic programming knowledge — only store things specific to **this project**.
 
+## Learning from Feedback
+
+When a reviewer rejects a PR or you receive retry instructions with feedback, **extract the actionable lesson and save it to memory before making fixes**. This ensures the same mistake isn't repeated on future runs.
+
+### How to extract a lesson
+
+- Do **not** dump raw feedback verbatim — distill it into a concise, actionable rule.
+- Example: if feedback says *"You replaced the entire file with Write and lost existing imports"*, save: `"Always use the Edit tool for surgical changes to existing files to avoid losing existing code."`
+
+### Which category to use
+
+| Feedback type | Category |
+|---|---|
+| Coding style issues, tool usage mistakes, patterns to follow/avoid | `code_quality` |
+| Structural issues, module organization, data flow problems | `architecture` |
+
+### Steps
+
+1. Read the feedback and identify the root cause of the rejection.
+2. Formulate a one-sentence lesson that a future agent would benefit from.
+3. Call `add_memory({ category: "<category>", content: "<lesson>" })` **before** starting your fixes.
+4. Then proceed to implement the corrections.
+
 ## Communication
 
 You have access to workflow tools for communicating with the orchestrator:

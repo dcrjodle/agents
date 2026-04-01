@@ -1,10 +1,13 @@
 import { useState, useRef } from "react";
+import { Maximize2 } from "lucide-react";
 import { Button } from "./Button.jsx";
+import { ExpandedInputDialog } from "./ExpandedInputDialog.jsx";
 import { useVoiceInput } from "../hooks/useVoiceInput.js";
 import "../styles/create-task.css";
 
 export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, onValueChange }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showExpandedDialog, setShowExpandedDialog] = useState(false);
   const inputRef = useRef(null);
 
   const handleTranscription = (text) => {
@@ -13,7 +16,7 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
       onValueChange(newValue);
     }
   };
-  const { isRecording, isTranscribing, startRecording, stopRecording, error } = useVoiceInput(handleTranscription);
+  const { isRecording, isTranscribing, startRecording, stopRecording, error, isSupported } = useVoiceInput(handleTranscription);
 
   const handleVoiceClick = () => {
     if (isRecording) {
@@ -110,10 +113,18 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
         />
         <button
           type="button"
+          className="expand-input-btn"
+          onClick={() => setShowExpandedDialog(true)}
+          title="Expand input"
+        >
+          <Maximize2 size={14} />
+        </button>
+        <button
+          type="button"
           className={`voice-input-btn${isRecording ? " recording" : ""}${isTranscribing ? " transcribing" : ""}`}
           onClick={handleVoiceClick}
-          disabled={isTranscribing}
-          title={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
+          disabled={isTranscribing || !isSupported}
+          title={!isSupported ? "Voice input requires HTTPS" : isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Voice input"}
         >
           🎤
         </button>
@@ -146,6 +157,24 @@ export function CreateTask({ onCreate, onCreateAndStart, commands = [], value, o
             </div>
           ))}
         </div>
+      )}
+
+      {showExpandedDialog && (
+        <ExpandedInputDialog
+          value={value}
+          onChange={onValueChange}
+          onClose={() => {
+            setShowExpandedDialog(false);
+            inputRef.current?.focus();
+          }}
+          onSubmit={async () => {
+            if (value.trim()) {
+              await onCreate(value.trim());
+              onValueChange("");
+              setShowExpandedDialog(false);
+            }
+          }}
+        />
       )}
     </div>
   );

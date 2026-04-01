@@ -36,27 +36,79 @@ You have access to bash and file tools. You are running in the Ivy repo director
 
 For each task you receive:
 1. The application is already checked out on the correct branch
-2. Run the ivy-studio-local.sh script in the background to start the application (it starts dotnet watch on Ivy.Studio.Dev and Ivy.Agent.Server)
-3. Wait for the application to be ready (check that the port is responding)
-4. Write a small Playwright test script that:
+2. Run the ivy-studio-local.sh script in the background, redirecting its output to a log file so you can monitor it:
+   \`\`\`bash
+   ~/scripts/ivy-studio-local.sh > ~/ivy-studio-build.log 2>&1 &
+   IVY_PID=$!
+   echo "ivy-studio PID: $IVY_PID"
+   \`\`\`
+3. Monitor the log file for build errors. Poll the log file every 5–10 seconds:
+   \`\`\`bash
+   tail -n 50 ~/ivy-studio-build.log
+   \`\`\`
+   Or search for error patterns:
+   \`\`\`bash
+   grep -E "error CS[0-9]+" ~/ivy-studio-build.log
+   \`\`\`
+4. If build errors are detected, stop the ivy-studio process, analyze and fix the errors (see "Build Error Detection and Fixing" below), then restart and retry. Keep track of retry attempts (maximum 3).
+5. Once the build succeeds and the application is ready (check that the port is responding), proceed to testing.
+6. Write a small Playwright test script that:
    - Launches a browser
    - Navigates to the running application
    - Takes screenshots of key views/pages
    - Captures any visual issues or interesting states
-5. Run the Playwright test script with Node.js
-6. Kill the ivy-studio processes when done
-7. Write a markdown report to the specified output path with:
+7. Run the Playwright test script with Node.js
+8. Kill all ivy-studio processes and clean up temporary log files when done
+9. Write a markdown report to the specified output path with:
    - Task description and branch name
    - Screenshots (as relative image references)
    - Any visual observations or issues found
+   - Any build errors encountered and how they were fixed (or why they could not be fixed)
    - Pass/fail assessment
+
+## Build Error Detection and Fixing
+
+When monitoring the build log, look for lines matching \`error CS\` followed by an error code. These are .NET compiler errors.
+
+**Detection:**
+\`\`\`bash
+grep -E "error CS[0-9]+" ~/ivy-studio-build.log | tail -20
+\`\`\`
+
+**Fix workflow (up to 3 attempts):**
+1. Kill the running ivy-studio process: \`kill $IVY_PID\` (or \`pkill -f "dotnet.*watch"\`)
+2. Read the error lines from the log to identify the file path, line number, and error code
+3. Read the affected source file with the Read tool
+4. Apply the necessary fix using the Write or Edit approach (Bash with targeted replacement, or Write the corrected file)
+5. Restart ivy-studio with output redirected to the log file (overwrite or append)
+6. Monitor the new build output for errors
+7. If fixed, proceed with testing; if not fixed after 3 attempts, record the error details and mark the test as failed
+
+**Retry tracking example:**
+\`\`\`bash
+BUILD_ATTEMPTS=0
+MAX_ATTEMPTS=3
+# Before each start, increment: BUILD_ATTEMPTS=$((BUILD_ATTEMPTS + 1))
+# Check: if [ $BUILD_ATTEMPTS -ge $MAX_ATTEMPTS ]; then echo "Max retries reached"; fi
+\`\`\`
+
+## Common .NET Build Error Patterns
+
+- **CS0103** – Name does not exist in the current context. Usually a missing \`using\` directive or undeclared variable. Fix: add the appropriate \`using\` statement at the top of the file or declare the missing variable.
+- **CS1061** – Type does not contain a definition for a method or property. Fix: check for typos in the member name; the method/property may have been renamed or removed.
+- **CS0246** – Type or namespace not found. Fix: add the missing \`using\` directive or add a project/package reference.
+- **CS0029** – Cannot implicitly convert type. Fix: add an explicit cast or use the correct type/conversion method.
+- **CS0161** – Not all code paths return a value. Fix: ensure every branch of the method returns a value, or add a final \`return\` or \`throw\` statement.
+- **CS0019** – Operator cannot be applied to the given operand types. Fix: check the types involved; cast or convert one operand to make them compatible.
+- **CS0117** – Type does not contain a definition. Fix: verify the member name is correct and belongs to the specified type; check for missing \`using\` directives.
+- **CS7036** – No argument corresponds to required parameter. Fix: provide all required arguments in the method call, or add a default parameter value in the method signature.
 
 ## Important notes
 - The ivy-studio-local.sh script is at: ${SCRIPT_PATH}
 - Save screenshots to the output directory provided in the prompt
 - Playwright is available as a dependency (import from "playwright")
 - The studio runs with dotnet watch — wait for it to be fully ready before screenshotting
-- Kill all background processes before finishing
+- Always kill all background processes (ivy-studio, dotnet watch) and remove ~/ivy-studio-build.log before finishing
 - Be thorough but efficient — focus on the most important visual aspects
 `;
 
