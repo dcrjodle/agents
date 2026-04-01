@@ -661,6 +661,8 @@ function AuthenticatedApp({ user, onLogout }) {
             eligibleTaskCount={tasks.filter((t) => t.projectPath === selectedProject.path && (t.stateKey || stateKey(t.state)) === "merging.awaitingApproval").length}
             onLaunchStudio={launchIvyStudio}
             ivyStudioIsRunning={ivyStudioRunningBranches.size > 0}
+            projectPath={selectedProject.path}
+            selectedTaskId={selectedTaskId}
           />
         </div>
       ) : (
