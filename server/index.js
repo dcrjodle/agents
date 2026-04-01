@@ -145,7 +145,6 @@ const taskAutoContinues = new Map(); // taskId -> number
 const activeEvaluations = new Map(); // projectPath -> evalId
 // Callbacks for in-flight evaluations: evalId -> { onResult, projectPath }
 const evaluationCallbacks = new Map();
-// Track terminal state persistence promises: taskId -> Promise<void>
 const terminalStatePersisted = new Map();
 
 async function persistWithRetry(id, updates, maxRetries = 3) {
