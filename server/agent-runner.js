@@ -248,6 +248,7 @@ RETRY INSTRUCTIONS:
 3. Use the Edit tool to make ONLY the fixes requested — do not rewrite files
 4. If the reviewer says something is missing (e.g. an import, prop, or function), add it back surgically
 5. Do NOT claim 'no changes needed' unless you have verified every issue is resolved by reading the files
+6. LEARN FROM THIS FEEDBACK: Before fixing the issues, call \`add_memory\` to save the lesson for future tasks. Extract a concise, actionable rule (e.g., 'Always use Edit instead of Write for existing files'). Use \`code_quality\` category for style/pattern issues or \`architecture\` for structural issues.
 `;
   }
 
