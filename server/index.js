@@ -434,7 +434,6 @@ async function onStateTransition(taskId, stateValue, context) {
     handoff.context.review = context.review || null;
   }
 
-  // Pass prDraft setting to the githubber so it knows whether to create draft PRs
   if (sk === "merging.creatingPr") {
     handoff.context.prDraft = projectSettings.prDraft || false;
   }
