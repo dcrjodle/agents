@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync, existsSync, readFileSync } from "fs";
+import { mkdirSync, existsSync, readFileSync, readdirSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
@@ -181,7 +181,6 @@ When referencing screenshots in the markdown, use relative paths (just the filen
     // Find any screenshots the agent created
     const screenshots = [];
     if (existsSync(taskOutputDir)) {
-      const { readdirSync } = await import("fs");
       for (const file of readdirSync(taskOutputDir)) {
         if (file.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
           screenshots.push(`/visual-tests/${taskId}/${file}`);
@@ -196,6 +195,7 @@ When referencing screenshots in the markdown, use relative paths (just the filen
       branchName,
       status: reportExists ? "complete" : "failed",
       markdownUrl: reportExists ? `/visual-tests/${taskId}/report.md` : null,
+      screenshotUrl: screenshots[0] || null,
       screenshots,
       error: reportExists ? null : "Agent did not generate a report",
     };
@@ -217,21 +217,24 @@ async function runVisualTests(tasks, onProgress, onComplete) {
   activeAbortController = abortController;
   const results = [];
 
-  for (const task of tasks) {
-    if (!activeTest || abortController.signal.aborted) break;
+  try {
+    for (const task of tasks) {
+      if (abortController.signal.aborted) break;
 
-    onProgress({
-      taskId: task.taskId,
-      step: "starting",
-      message: `Starting visual test for ${task.branchName} (${results.length + 1}/${tasks.length})...`,
-    });
+      onProgress({
+        taskId: task.taskId,
+        step: "starting",
+        message: `Starting visual test for ${task.branchName} (${results.length + 1}/${tasks.length})...`,
+      });
 
-    const result = await testSingleTask(task, abortController, onProgress);
-    results.push(result);
+      const result = await testSingleTask(task, abortController, onProgress);
+      results.push(result);
+    }
+  } finally {
+    activeTest = null;
+    activeAbortController = null;
   }
 
-  activeTest = null;
-  activeAbortController = null;
   onComplete(results);
 }
 
@@ -315,7 +318,10 @@ export default function visualTestPlugin() {
       // Cancel running test
       server.middlewares.use("/visual-test/cancel", (req, res, next) => {
         if (req.method !== "POST") return next();
-        if (activeAbortController) activeAbortController.abort();
+        if (activeAbortController) {
+          activeAbortController.abort();
+          activeAbortController = null;
+        }
         activeTest = null;
         broadcast({ type: "VISUAL_TEST_CANCELLED" });
         res.writeHead(200, { "Content-Type": "application/json" });
