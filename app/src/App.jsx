@@ -554,6 +554,22 @@ function AuthenticatedApp({ user, onLogout }) {
   const viewingTask = viewingPlanTaskId ? tasks.find((t) => t.id === viewingPlanTaskId) : null;
   const viewingPlan = viewingPlanTaskId ? pendingPlans[viewingPlanTaskId] : null;
 
+  const approvalCounts = useMemo(() => {
+    const awaitingStates = new Set([
+      "planning.awaitingApproval",
+      "reviewing.awaitingApproval",
+      "merging.awaitingApproval",
+    ]);
+    const counts = {};
+    for (const t of tasks) {
+      const key = t.stateKey || stateKey(t.state);
+      if (awaitingStates.has(key)) {
+        counts[t.projectPath] = (counts[t.projectPath] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [tasks]);
+
   return (
     <div className="app-root">
       {/* Header */}
@@ -645,6 +661,7 @@ function AuthenticatedApp({ user, onLogout }) {
               onApprove={approveTask}
               onSelectTask={setSelectedTaskId}
               onRemoveProject={handleRemoveProject}
+              approvalCounts={approvalCounts}
             />
           </div>
           <ProjectToolbar

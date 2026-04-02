@@ -6,7 +6,7 @@ import { ContextMenu } from "./ContextMenu.jsx";
 import { useContextMenu } from "../hooks/useContextMenu.js";
 import { MobileTabDropdown } from "./MobileTabDropdown.jsx";
 
-export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onContinue, onViewPlan, onApprove, onSelectTask, onRemoveProject }) {
+export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSettings, onStartAll, idleCount, tasks = [], pendingPlans = {}, onStart, onRestart, onContinue, onViewPlan, onApprove, onSelectTask, onRemoveProject, approvalCounts = {} }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const dragNode = useRef(null);
@@ -162,6 +162,21 @@ export function ProjectTabs({ projects, selected, onSelect, onReorder, onOpenSet
               }}
             >
               {project.name}
+              {approvalCounts[project.path] > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    background: "rgba(245, 158, 11, 0.15)",
+                    color: "#f59e0b",
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    marginLeft: 2,
+                  }}
+                >
+                  {approvalCounts[project.path]}
+                </span>
+              )}
               {isActive && onOpenSettings && (
                 <span
                   role="button"
