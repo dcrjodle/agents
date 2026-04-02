@@ -50,8 +50,8 @@ else
   echo "[committing] Committed: $COMMIT_MSG" >&2
 fi
 
-# Get authoritative file list (all changes since main)
-FILES_CHANGED=$(git diff --name-only "$MAIN_BRANCH"...HEAD 2>/dev/null | node -e "
+# Get authoritative file list (all changes since main, using remote ref for accuracy)
+FILES_CHANGED=$(git diff --name-only "origin/$MAIN_BRANCH"...HEAD 2>/dev/null | node -e "
 const lines = require('fs').readFileSync('/dev/stdin','utf8').trim().split('\n').filter(Boolean);
 console.log(JSON.stringify(lines));
 " 2>/dev/null || echo "[]")

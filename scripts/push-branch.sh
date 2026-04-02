@@ -62,15 +62,18 @@ emit_status "Getting diff summary"
 
 MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
 
+# Fetch latest main so diff is accurate against the current remote state
+git fetch origin "$MAIN_BRANCH" 2>/dev/null || true
+
 DIFF_SUMMARY="=== Branch Info ===
 Current branch: $(git branch --show-current)
 Base branch: $MAIN_BRANCH
 
 === Files Changed ===
-$(git diff --stat "$MAIN_BRANCH"...HEAD 2>/dev/null || git diff --stat HEAD~1)
+$(git diff --stat "origin/$MAIN_BRANCH"...HEAD 2>/dev/null || git diff --stat HEAD~1)
 
 === Commit Log ===
-$(git log --oneline "$MAIN_BRANCH"..HEAD 2>/dev/null || git log --oneline -5)"
+$(git log --oneline "origin/$MAIN_BRANCH"..HEAD 2>/dev/null || git log --oneline -5)"
 
 echo "$DIFF_SUMMARY" >&2
 

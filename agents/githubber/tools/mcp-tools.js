@@ -42,15 +42,18 @@ export const tools = [
           { cwd: worktreePath, encoding: "utf-8" }
         ).trim();
 
+        // Fetch latest main so diff is accurate against current remote state
+        try { execSync(`git fetch origin "${mainBranch}"`, { cwd: worktreePath, encoding: "utf-8" }); } catch {}
+
         const branch = execSync("git branch --show-current", { cwd: worktreePath, encoding: "utf-8" }).trim();
 
         const stat = execSync(
-          `git diff --stat "${mainBranch}"...HEAD 2>/dev/null || git diff --stat HEAD~1`,
+          `git diff --stat "origin/${mainBranch}"...HEAD 2>/dev/null || git diff --stat HEAD~1`,
           { cwd: worktreePath, encoding: "utf-8" }
         ).trim();
 
         const log = execSync(
-          `git log --oneline "${mainBranch}"..HEAD 2>/dev/null || git log --oneline -5`,
+          `git log --oneline "origin/${mainBranch}"..HEAD 2>/dev/null || git log --oneline -5`,
           { cwd: worktreePath, encoding: "utf-8" }
         ).trim();
 

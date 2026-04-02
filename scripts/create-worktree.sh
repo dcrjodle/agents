@@ -100,7 +100,7 @@ if git rev-parse --verify "$BRANCH_NAME" >/dev/null 2>&1; then
     fi
   fi
 else
-  # Branch doesn't exist — create worktree with new branch (original behavior)
+  # Branch doesn't exist — create worktree with new branch from latest remote main
   if ! git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" "origin/$MAIN_BRANCH" 2>&1 >&2; then
     emit_result "{\"status\":\"failed\",\"error\":\"Failed to create worktree at $WORKTREE_DIR\"}"
     exit 1
