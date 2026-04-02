@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, MessageSquarePlus, Copy, Check } from "lu
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
+import "../styles/dialog.css";
 
 function BranchNameSection({ pr }) {
   const [copied, setCopied] = useState(false);
@@ -222,14 +223,7 @@ export function PRApprovalDialog({ pr, taskDescription, onApprove, onRequestChan
         </div>
 
         {/* Actions */}
-        <div style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 8,
-          padding: "10px 18px",
-          borderTop: "1px solid var(--border-light)",
-          flexShrink: 0,
-        }}>
+        <div className="dialog-footer">
           <Button
             variant="secondary"
             size="md"

@@ -3,6 +3,7 @@ import { X, MessageSquarePlus } from "lucide-react";
 import { MarkdownContent } from "./MarkdownContent.jsx";
 import { IconButton } from "./IconButton.jsx";
 import { Button } from "./Button.jsx";
+import "../styles/dialog.css";
 
 export function PlanDialog({ plan, taskDescription, onApprove, onReject, onRevise, onClose, onApproveAll, pendingPlanCount }) {
   const contentRef = useRef(null);
@@ -152,14 +153,7 @@ export function PlanDialog({ plan, taskDescription, onApprove, onReject, onRevis
         </div>
 
         {/* Actions */}
-        <div style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          gap: 8,
-          padding: "10px 18px",
-          borderTop: "1px solid var(--border-light)",
-          flexShrink: 0,
-        }}>
+        <div className="dialog-footer">
           <Button
             variant="secondary"
             size="md"
