@@ -10,11 +10,13 @@ export const tools = [
       worktreePath: z.string().describe("Absolute path to the git worktree"),
       title: z.string().describe("PR title (under 70 characters)"),
       body: z.string().describe("PR body in markdown"),
+      draft: z.boolean().optional().describe("Create PR as draft (default: false)"),
     },
-    handler: async ({ worktreePath, title, body }) => {
+    handler: async ({ worktreePath, title, body, draft }) => {
       try {
+        const draftFlag = draft ? " --draft" : "";
         const prUrl = execSync(
-          `gh pr create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}"`,
+          `gh pr create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}"${draftFlag}`,
           { cwd: worktreePath, encoding: "utf-8", maxBuffer: 1024 * 1024 }
         ).trim();
         return {

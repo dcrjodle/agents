@@ -44,6 +44,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
   const [mergeStrategy, setMergeStrategy] = useState(settings.mergeStrategy || (settings.createPr === false ? "merge" : "pr"));
   const [autoApprovePlans, setAutoApprovePlans] = useState(settings.autoApprovePlans === true);
   const [autoApprovePr, setAutoApprovePr] = useState(settings.autoApprovePr !== false);
+  const [prDraft, setPrDraft] = useState(settings.prDraft === true);
   const [skipTesting, setSkipTesting] = useState(settings.skipTesting === true);
   const [agentMode, setAgentMode] = useState(settings.agentMode || "sdk");
   const [maxRetries, setMaxRetries] = useState(settings.maxRetries ?? 5);
@@ -93,7 +94,7 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
       const res = await fetch(`${API_BASE}/config/projects/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: trimmedPath || project.path, settings: { mergeStrategy, autoApprovePr, autoApprovePlans, skipTesting, agentMode, maxRetries } }),
+        body: JSON.stringify({ path: trimmedPath || project.path, settings: { mergeStrategy, autoApprovePr, prDraft, autoApprovePlans, skipTesting, agentMode, maxRetries } }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -202,27 +203,50 @@ export function ProjectSettingsDialog({ project, onClose, onUpdated }) {
             </div>
 
             {mergeStrategy === "pr" && (
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 0",
-                  paddingLeft: 16,
-                  borderBottom: "1px solid var(--border-light)",
-                  cursor: "pointer",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text)" }}>skip PR creation approval step</div>
-                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
-                    {autoApprovePr ? "PR is created automatically without waiting for approval" : "pause before creating PR so you can review the diff"}
+              <>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 0",
+                    paddingLeft: 16,
+                    borderBottom: "1px solid var(--border-light)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--text)" }}>skip PR creation approval step</div>
+                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
+                      {autoApprovePr ? "PR is created automatically without waiting for approval" : "pause before creating PR so you can review the diff"}
+                    </div>
                   </div>
-                </div>
-                <Button variant="toggle" active={autoApprovePr} size="sm" onClick={() => setAutoApprovePr((v) => !v)}>
-                  {autoApprovePr ? "on" : "off"}
-                </Button>
-              </label>
+                  <Button variant="toggle" active={autoApprovePr} size="sm" onClick={() => setAutoApprovePr((v) => !v)}>
+                    {autoApprovePr ? "on" : "off"}
+                  </Button>
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 0",
+                    paddingLeft: 16,
+                    borderBottom: "1px solid var(--border-light)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--text)" }}>create PRs as drafts</div>
+                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
+                      {prDraft ? "PRs are created as drafts for further review" : "PRs are created as ready for review"}
+                    </div>
+                  </div>
+                  <Button variant="toggle" active={prDraft} size="sm" onClick={() => setPrDraft((v) => !v)}>
+                    {prDraft ? "on" : "off"}
+                  </Button>
+                </label>
+              </>
             )}
           </SettingsSection>
 

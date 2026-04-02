@@ -378,6 +378,11 @@ or
 function buildGithubberPrompt(handoff) {
   const worktreePath = handoff.context.result?.worktreePath || "";
   const branchName = handoff.context.result?.branchName || "";
+  const prDraft = handoff.context.prDraft || false;
+
+  const draftInstructions = prDraft
+    ? `3. Use the create_pr tool with \`draft: true\` to create the PR as a draft`
+    : `3. Use the create_pr tool to create the PR`;
 
   return `Create a pull request for the following task.
 
@@ -390,7 +395,7 @@ Steps:
 2. Generate a concise PR title (under 70 characters) and a markdown body with:
    - A brief summary of changes (2-3 bullet points)
    - A test plan section
-3. Use the create_pr tool to create the PR
+${draftInstructions}
 
 When you are done, you MUST call the report_result tool with:
 {"status": "complete", "prUrl": "<the PR URL>", "branchName": "${branchName}", "prTitle": "<the PR title>"}

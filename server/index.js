@@ -434,6 +434,11 @@ async function onStateTransition(taskId, stateValue, context) {
     handoff.context.review = context.review || null;
   }
 
+  // Pass prDraft setting to the githubber so it knows whether to create draft PRs
+  if (sk === "merging.creatingPr") {
+    handoff.context.prDraft = projectSettings.prDraft || false;
+  }
+
   // Spawn script or agent
   const handle = isScript
     ? spawnScript(sk, taskId, handoff, callbacks)
@@ -2109,6 +2114,7 @@ async function start() {
           result: { branchName, worktreePath: projectPath },
           error: null,
           retries: 0,
+          prDraft: projectSettings.prDraft || false,
         },
       };
 
