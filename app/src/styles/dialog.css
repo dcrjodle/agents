@@ -1,11 +1,3 @@
-/* ============================================================
-   dialog.css — shared dialog styles
-   Used by PRApprovalDialog, PlanDialog, and other modal dialogs
-   ============================================================ */
-
-/* ----------------------------------------------------------
-   Dialog footer — action buttons at bottom of dialog
-   ---------------------------------------------------------- */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
@@ -15,9 +7,6 @@
   flex-shrink: 0;
 }
 
-/* ----------------------------------------------------------
-   Mobile responsiveness — viewports ≤ 768 px
-   ---------------------------------------------------------- */
 @media (max-width: 768px) {
   .dialog-footer {
     flex-direction: column-reverse;
